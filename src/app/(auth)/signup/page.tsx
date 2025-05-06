@@ -6,42 +6,56 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useAuth } from '@/contexts/AuthContext';
+import { auth, googleProvider } from '@/lib/firebase/config';
+import { createUserWithEmailAndPassword, signInWithPopup, sendEmailVerification } from 'firebase/auth';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signInWithEmail, signInWithGoogle } = useAuth();
   const router = useRouter();
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      await signInWithEmail(email, password);
-      router.push('/dashboard');
+      // Create the user
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Send email verification
+      await sendEmailVerification(userCredential.user);
+      
+      // Redirect to verification notification page
+      router.push('/email-verification?email=' + encodeURIComponent(email));
     } catch (error: any) {
-      setError(error.message || 'Failed to sign in');
-      console.error('Login error:', error);
+      setError(error.message || 'Failed to create account');
+      console.error('Signup error:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignup = async () => {
     setError('');
     setIsLoading(true);
 
     try {
-      await signInWithGoogle();
+      await signInWithPopup(auth, googleProvider);
       router.push('/dashboard');
     } catch (error: any) {
-      setError(error.message || 'Failed to sign in with Google');
-      console.error('Google login error:', error);
+      setError(error.message || 'Failed to sign up with Google');
+      console.error('Google signup error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -51,9 +65,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Log in to DocsAI</CardTitle>
+          <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
           <CardDescription>
-            Enter your email and password to access your account
+            Enter your details to create your DocsAI account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -62,7 +76,7 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">Email</label>
               <Input 
@@ -75,17 +89,22 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium">Password</label>
-                <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
-                  Forgot password?
-                </Link>
-              </div>
+              <label htmlFor="password" className="text-sm font-medium">Password</label>
               <Input 
                 id="password" 
-                type="password" 
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</label>
+              <Input 
+                id="confirmPassword" 
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
               />
             </div>
@@ -94,7 +113,7 @@ export default function LoginPage() {
               className="w-full bg-blue-600 hover:bg-blue-700"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Creating account...' : 'Sign Up'}
             </Button>
           </form>
           
@@ -111,7 +130,7 @@ export default function LoginPage() {
             <Button 
               variant="outline" 
               className="w-full"
-              onClick={handleGoogleLogin}
+              onClick={handleGoogleSignup}
               disabled={isLoading}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -122,14 +141,13 @@ export default function LoginPage() {
               </svg>
               Google
             </Button>
-            {/* We're only implementing Google auth for now */}
           </div>
         </CardContent>
         <CardFooter className="flex justify-center">
           <div className="text-sm text-gray-600">
-            Don't have an account?{" "}
-            <Link href="/signup" className="text-blue-600 hover:text-blue-800 font-medium">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="text-blue-600 hover:text-blue-800 font-medium">
+              Sign in
             </Link>
           </div>
         </CardFooter>

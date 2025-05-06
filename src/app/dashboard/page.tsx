@@ -1,8 +1,13 @@
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import UserDropdown from "@/components/dashboard/UserDropdown";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Dashboard Header */}
@@ -56,11 +61,7 @@ export default function DashboardPage() {
                   Upload Documents
                 </Button>
               </div>
-              <div className="ml-4 relative">
-                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-xs font-medium">US</span>
-                </div>
-              </div>
+              <UserDropdown />
             </div>
           </div>
         </div>

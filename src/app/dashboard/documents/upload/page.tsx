@@ -1,6 +1,9 @@
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
+import UserDropdown from "@/components/dashboard/UserDropdown";
 
 export default function DocumentUploadPage() {
   return (
@@ -47,11 +50,7 @@ export default function DocumentUploadPage() {
               </nav>
             </div>
             <div className="flex items-center">
-              <div className="ml-4 relative">
-                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-xs font-medium">US</span>
-                </div>
-              </div>
+              <UserDropdown />
             </div>
           </div>
         </div>
