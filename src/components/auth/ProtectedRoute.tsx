@@ -16,6 +16,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Check for dev mode verification bypass
+    const devEmailVerified = process.env.NODE_ENV === 'development' && 
+      (localStorage.getItem('devEmailVerified') === 'true' || 
+       (user && localStorage.getItem(`user_${user.uid}_verified`) === 'true'));
+    
     if (!loading && !user && pathname !== '/login' && pathname !== '/signup' && !pathname.startsWith('/auth/') && pathname !== '/email-verification') {
       router.push('/login');
     }
@@ -46,8 +51,14 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Check for dev mode verification bypass
+  const devEmailVerified = process.env.NODE_ENV === 'development' && 
+    (typeof window !== 'undefined' && 
+     (localStorage.getItem('devEmailVerified') === 'true' || 
+      (user && localStorage.getItem(`user_${user.uid}_verified`) === 'true')));
+
   // Require email verification
-  if (user && !user.emailVerified && pathname !== '/email-verification') {
+  if (user && !user.emailVerified && !devEmailVerified && pathname !== '/email-verification') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-md">

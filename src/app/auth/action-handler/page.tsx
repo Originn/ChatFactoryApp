@@ -6,7 +6,11 @@ import {
   verifyPasswordResetCode, 
   confirmPasswordReset,
   applyActionCode,
-  checkActionCode
+  checkActionCode,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  signInWithEmailAndPassword,
+  signOut
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
@@ -25,13 +29,40 @@ export default function AuthActionHandler() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [devBypass, setDevBypass] = useState(false);
 
   // Get oobCode (out-of-band code) from URL
   const oobCode = searchParams.get('oobCode') || '';
   const mode = searchParams.get('mode') || '';
   const apiKey = searchParams.get('apiKey') || '';
+  const continueUrl = searchParams.get('continueUrl') || '';
+
+  // Single execution flag to prevent duplicate calls
+  const [actionPerformed, setActionPerformed] = useState(false);
+
+  // Handle development environment verification bypass
+  const handleDevBypass = () => {
+    // In development, we'll simulate a successful verification
+    if (process.env.NODE_ENV === 'development') {
+      setDevBypass(true);
+      setSuccess('Development mode: Email verification simulated successfully!');
+      setActionType('verifyEmail');
+      setIsLoading(false);
+      
+      // Store mock user verification in localStorage
+      localStorage.setItem('devEmailVerified', 'true');
+      
+      // If there's a current user, we'll update the local cache for them
+      if (auth.currentUser) {
+        localStorage.setItem(`user_${auth.currentUser.uid}_verified`, 'true');
+      }
+    }
+  };
 
   useEffect(() => {
+    // Prevent double execution
+    if (actionPerformed) return;
+    
     const handleAction = async () => {
       if (!oobCode) {
         console.error('No oobCode found in URL');
@@ -46,24 +77,31 @@ export default function AuthActionHandler() {
         apiKeyPartial: apiKey ? `${apiKey.slice(0, 5)}...` : 'none',
         envApiKeyPartial: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 
           `${process.env.NEXT_PUBLIC_FIREBASE_API_KEY.slice(0, 5)}...` : 'none',
-        actionUrl: window.location.href.split('?')[0]
+        actionUrl: window.location.href.split('?')[0],
+        continueUrl: continueUrl,
+        isDevelopment: process.env.NODE_ENV === 'development'
       };
       setDebugInfo(debug);
       console.log('Debug info:', debug);
+      
+      // Mark that we've performed the action to prevent duplicate processing
+      setActionPerformed(true);
 
-      try {
-        // First check the action code before applying it
+      try {        
+        // Check if we should bypass verification in development
+        if (process.env.NODE_ENV === 'development' && mode === 'verifyEmail') {
+          handleDevBypass();
+          return;
+        }
+        
+        // Try to sign out first to clear any existing session
         try {
-          console.log('Checking action code first');
-          const actionInfo = await checkActionCode(auth, oobCode);
-          console.log('Action code check result:', actionInfo.operation);
-        } catch (checkError) {
-          console.error('Action code check failed:', checkError);
-          // Continue anyway as some versions of Firebase don't require this step
+          await signOut(auth);
+          console.log('Signed out existing user for clean verification state');
+        } catch (signOutError) {
+          console.log('No user to sign out or error signing out:', signOutError);
         }
 
-        console.log('Processing action:', mode);
-        
         if (mode === 'resetPassword') {
           console.log('Processing password reset');
           // Verify the password reset code
@@ -71,30 +109,44 @@ export default function AuthActionHandler() {
           console.log('Password reset code verified for:', email);
           setEmail(email);
           setActionType('resetPassword');
+          
         } else if (mode === 'verifyEmail') {
           console.log('Processing email verification');
           
-          // Handle email verification - this is the key part
-          console.log('Applying action code directly');
-          await applyActionCode(auth, oobCode);
-          console.log('Email verification successful');
-          
-          setSuccess('Your email has been verified successfully!');
-          setActionType('verifyEmail');
-          
-          // Force refresh the user's token to update emailVerified property
-          if (auth.currentUser) {
-            console.log('Refreshing user token');
-            await auth.currentUser.reload();
+          try {
+            // Handle email verification directly without trying checkActionCode first
+            await applyActionCode(auth, oobCode);
+            console.log('Email verification successful');
+            
+            setSuccess('Your email has been verified successfully!');
+            setActionType('verifyEmail');
+          } catch (verifyError) {
+            console.error('Initial verification failed:', verifyError);
+            
+            // If we're in development, allow bypass even if verification fails
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Using development bypass after verification failure');
+              handleDevBypass();
+              return;
+            } else {
+              throw verifyError; // Re-throw in production
+            }
           }
         } else {
           console.error('Invalid mode:', mode);
           setError(`Invalid action type: ${mode || 'none'}. Please try again.`);
         }
       } catch (error: any) {
-        console.error('Action handler detailed error:', error);
+        console.error('Action handler error:', error);
         console.error('Error code:', error.code);
         console.error('Error message:', error.message);
+        
+        // In development mode, allow verification bypass even on error
+        if (process.env.NODE_ENV === 'development' && mode === 'verifyEmail') {
+          console.log('Using development bypass after error');
+          handleDevBypass();
+          return;
+        }
         
         // Provide more specific error messages
         if (error.code === 'auth/invalid-action-code') {
@@ -109,12 +161,14 @@ export default function AuthActionHandler() {
           setError(`Error: ${error.message || 'An unknown error occurred'}`);
         }
       } finally {
-        setIsLoading(false);
+        if (!devBypass) {
+          setIsLoading(false);
+        }
       }
     };
 
     handleAction();
-  }, [oobCode, mode, apiKey]);
+  }, [oobCode, mode, apiKey, actionPerformed, continueUrl, devBypass]);
 
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,7 +211,7 @@ export default function AuthActionHandler() {
   }
 
   // Display error
-  if (error) {
+  if (error && !devBypass) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-md">
@@ -180,10 +234,26 @@ export default function AuthActionHandler() {
             ) : null}
             
             {process.env.NODE_ENV === 'development' && (
-              <div className="mt-4 p-3 bg-gray-100 rounded text-xs font-mono overflow-auto">
-                <p className="font-bold mb-1">Debug Info:</p>
-                <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-              </div>
+              <>
+                <div className="mt-4 p-3 bg-gray-100 rounded text-xs font-mono overflow-auto">
+                  <p className="font-bold mb-1">Debug Info:</p>
+                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+                </div>
+                
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded">
+                  <p className="text-sm font-medium text-amber-800">Development Mode Options</p>
+                  <p className="text-xs text-amber-700 mt-1 mb-3">
+                    In development, you can bypass email verification to continue working on your app.
+                  </p>
+                  <Button 
+                    onClick={handleDevBypass} 
+                    variant="outline" 
+                    className="w-full border-amber-300 text-amber-800 hover:bg-amber-100"
+                  >
+                    Bypass Verification (Dev Only)
+                  </Button>
+                </div>
+              </>
             )}
           </CardContent>
           <CardFooter>
@@ -197,7 +267,7 @@ export default function AuthActionHandler() {
   }
 
   // Display email verification success
-  if (actionType === 'verifyEmail' && success) {
+  if ((actionType === 'verifyEmail' && success) || devBypass) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-md">
@@ -210,11 +280,19 @@ export default function AuthActionHandler() {
               <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <p className="text-green-700">{success}</p>
+              <p className="text-green-700">{success || "Email verification successful!"}</p>
             </div>
             <p className="mt-4 text-sm text-gray-600">
               You can now enjoy full access to your DocsAI account. Return to login to continue to your dashboard.
             </p>
+            
+            {devBypass && (
+              <div className="mt-4 p-3 bg-amber-50 rounded border border-amber-200">
+                <p className="text-xs text-amber-800">
+                  <strong>Development Mode:</strong> Verification has been simulated. This bypass works only in development.
+                </p>
+              </div>
+            )}
           </CardContent>
           <CardFooter>
             <Button onClick={() => router.push('/login')} className="w-full bg-green-600 hover:bg-green-700">
