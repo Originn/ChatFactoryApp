@@ -26,22 +26,10 @@ export default function DashboardPage() {
                   Dashboard
                 </Link>
                 <Link
-                  href="/dashboard/documents"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Documents
-                </Link>
-                <Link
                   href="/dashboard/chatbots"
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chatbots
-                </Link>
-                <Link
-                  href="/dashboard/analytics"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Analytics
                 </Link>
                 <Link
                   href="/dashboard/settings"
@@ -54,11 +42,12 @@ export default function DashboardPage() {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <Button
-                  as={Link}
-                  href="/dashboard/documents/upload"
+                  asChild
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  Upload Documents
+                  <Link href="/dashboard/chatbots/new">
+                    Create New Chatbot
+                  </Link>
                 </Button>
               </div>
               <UserDropdown />
@@ -200,8 +189,10 @@ export default function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-1">Create New Chatbot</h3>
                 <p className="text-sm text-gray-500 mb-4">Set up a new AI assistant for your documentation.</p>
-                <Button as={Link} href="/dashboard/chatbots/new" variant="outline" className="mt-auto">
-                  Get Started
+                <Button asChild variant="outline" className="mt-auto">
+                  <Link href="/dashboard/chatbots/new">
+                    Get Started
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
@@ -213,10 +204,12 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-1">Upload Documents</h3>
-                <p className="text-sm text-gray-500 mb-4">Add new documentation files to your knowledge base.</p>
-                <Button as={Link} href="/dashboard/documents/upload" variant="outline" className="mt-auto">
-                  Upload Files
+                <h3 className="text-lg font-medium text-gray-900 mb-1">View Your Chatbots</h3>
+                <p className="text-sm text-gray-500 mb-4">Manage your existing chatbots and their documents.</p>
+                <Button asChild variant="outline" className="mt-auto">
+                  <Link href="/dashboard/chatbots">
+                    View Chatbots
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

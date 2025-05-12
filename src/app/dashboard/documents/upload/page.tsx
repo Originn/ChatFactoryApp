@@ -24,22 +24,10 @@ export default function DocumentUploadPage() {
                   Dashboard
                 </Link>
                 <Link
-                  href="/dashboard/documents"
+                  href="/dashboard/chatbots"
                   className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
-                  Documents
-                </Link>
-                <Link
-                  href="/dashboard/chatbots"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
                   Chatbots
-                </Link>
-                <Link
-                  href="/dashboard/analytics"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Analytics
                 </Link>
                 <Link
                   href="/dashboard/settings"
