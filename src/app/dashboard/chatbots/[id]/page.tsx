@@ -8,7 +8,7 @@ import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
 import { useParams, useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase/config";
-import { doc, getDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 // Define the Chatbot type
 interface Chatbot {
@@ -21,6 +21,8 @@ interface Chatbot {
   updatedAt: any;
   userId: string;
   documents?: any[];
+  deployedUrl?: string;
+  deploymentId?: string;
   aiConfig?: {
     embeddingModel: string;
     llmModel: string;
@@ -55,6 +57,24 @@ export default function ChatbotDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deploymentError, setDeploymentError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  
+  // Check for chatbot creation success message
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const wasCreated = localStorage.getItem('chatbotCreated');
+      const chatbotName = localStorage.getItem('chatbotName');
+      
+      if (wasCreated === 'true' && chatbotName) {
+        setSuccessMessage(`Chatbot "${chatbotName}" was created successfully!`);
+        // Clear the message from storage so it doesn't appear again on refresh
+        localStorage.removeItem('chatbotCreated');
+        localStorage.removeItem('chatbotName');
+      }
+    }
+  }, []);
   
   // Fetch chatbot data
   useEffect(() => {
@@ -113,6 +133,65 @@ export default function ChatbotDetailPage() {
       console.error("Error deleting chatbot:", err);
       setError(`Failed to delete chatbot: ${err.message}`);
       setIsDeleting(false);
+    }
+  };
+
+  // Handle deploy chatbot - Using the Vercel API
+  const handleDeployChatbot = async () => {
+    if (!chatbot) return;
+    
+    setIsDeploying(true);
+    setDeploymentError(null);
+    
+    try {
+      // Call our API route that handles Vercel deployment
+      const response = await fetch('/api/vercel-deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatbotId: chatbot.id,
+          chatbotName: chatbot.name
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to deploy chatbot');
+      }
+      
+      // Update the chatbot directly in Firestore with deployment info
+      const chatbotRef = doc(db, "chatbots", chatbot.id);
+      await updateDoc(chatbotRef, {
+        status: 'active',
+        deployedUrl: data.url,
+        vercelProjectId: data.projectName,
+        vercelDeploymentId: data.deploymentId,
+        deploymentTimestamp: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Update local state
+      setChatbot({
+        ...chatbot,
+        status: 'active',
+        deployedUrl: data.url,
+      });
+      
+      setSuccessMessage(`Chatbot "${chatbot.name}" was deployed successfully! It's now available at: ${data.url}`);
+      
+      // Refresh the page after 2 seconds to show updated status
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (err: any) {
+      console.error("Error deploying chatbot:", err);
+      setDeploymentError(err.message || 'Failed to deploy chatbot. Please try again.');
+    } finally {
+      setIsDeploying(false);
     }
   };
 
@@ -218,8 +297,27 @@ export default function ChatbotDetailPage() {
                       Manage Documents
                     </Link>
                   </Button>
+                  <Button
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={handleDeployChatbot}
+                    disabled={isDeploying || chatbot.status === 'active'}
+                  >
+                    {isDeploying ? 'Deploying...' : chatbot.status === 'active' ? 'Deployed' : 'Deploy Chatbot'}
+                  </Button>
                 </div>
               </div>
+
+              {successMessage && (
+                <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded mb-6">
+                  {successMessage}
+                </div>
+              )}
+              
+              {deploymentError && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-6">
+                  {deploymentError}
+                </div>
+              )}
 
               {/* Tabs Navigation */}
               <div className="border-b border-gray-200 mb-6">
@@ -286,6 +384,18 @@ export default function ChatbotDetailPage() {
                             {chatbot.status}
                           </div>
                         </div>
+                        {chatbot.deployedUrl && (
+                          <div className="mt-2 text-xs text-gray-500">
+                            <a 
+                              href={chatbot.deployedUrl.startsWith('http') ? chatbot.deployedUrl : `https://${chatbot.deployedUrl}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              {chatbot.deployedUrl}
+                            </a>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                     

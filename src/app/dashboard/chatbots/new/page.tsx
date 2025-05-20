@@ -103,6 +103,10 @@ export default function NewChatbotPage() {
       // Save to Firestore
       await setDoc(newChatbotRef, chatbotData);
       
+      // Show success message using local storage (will be displayed on the next page)
+      localStorage.setItem('chatbotCreated', 'true');
+      localStorage.setItem('chatbotName', formData.name.trim());
+      
       // Redirect to the new chatbot's page
       router.push(`/dashboard/chatbots/${newChatbotRef.id}`);
     } catch (err: any) {
