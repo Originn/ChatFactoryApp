@@ -7,9 +7,13 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useRouter } from 'next/navigation';
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase/config";
+import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function NewChatbotPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     // Basic Info
     name: '',
@@ -46,18 +50,61 @@ export default function NewChatbotPage() {
     setError('');
     setLoading(true);
 
+    if (!user) {
+      setError('You must be logged in to create a chatbot');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      setError('Chatbot name is required');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // In a real app, this would be an API call to create a new chatbot
-      console.log('Creating chatbot with data:', formData);
+      // Generate a new document ID
+      const chatbotsCollectionRef = collection(db, 'chatbots');
+      const newChatbotRef = doc(chatbotsCollectionRef);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Prepare data for Firestore
+      const chatbotData = {
+        id: newChatbotRef.id,
+        userId: user.uid,
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        domain: formData.domain.trim(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        status: 'draft',
+        documents: [],
+        aiConfig: {
+          embeddingModel: formData.embeddingModel,
+          llmModel: formData.llmModel,
+          temperature: parseFloat(formData.temperature),
+          contextWindow: parseInt(formData.contextWindow),
+        },
+        behavior: {
+          persona: formData.persona,
+          responseLength: formData.responseLength,
+          systemPrompt: formData.systemPrompt,
+        },
+        appearance: {
+          primaryColor: formData.primaryColor,
+          bubbleStyle: formData.bubbleStyle,
+        },
+        stats: {
+          queries: 0,
+          successRate: 0,
+          lastUpdated: serverTimestamp(),
+        }
+      };
       
-      // Mock successful creation - in a real app, this would use the ID returned from the API
-      const newChatbotId = Date.now().toString();
+      // Save to Firestore
+      await setDoc(newChatbotRef, chatbotData);
       
       // Redirect to the new chatbot's page
-      router.push(`/dashboard/chatbots/${newChatbotId}`);
+      router.push(`/dashboard/chatbots/${newChatbotRef.id}`);
     } catch (err: any) {
       console.error('Error creating chatbot:', err);
       setError(err.message || 'Failed to create chatbot. Please try again.');
