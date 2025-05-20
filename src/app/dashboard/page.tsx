@@ -1,13 +1,98 @@
 'use client';
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase/config";
+import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
+
+// Define the Chatbot type
+interface Chatbot {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  createdAt: any;
+  updatedAt: any;
+  documents?: any[];
+  stats?: {
+    queries: number;
+    successRate: number;
+  };
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [chatbots, setChatbots] = useState<Chatbot[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalChatbots: 0,
+    totalDocuments: 0,
+    totalQueries: 0,
+    successRate: 0
+  });
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        // Fetch chatbots (limited to 5 most recent)
+        const chatbotsQuery = query(
+          collection(db, "chatbots"),
+          where("userId", "==", user.uid),
+          orderBy("createdAt", "desc"),
+          limit(5)
+        );
+        
+        const chatbotsSnapshot = await getDocs(chatbotsQuery);
+        const chatbotsList: Chatbot[] = [];
+        let totalDocs = 0;
+        let totalQueries = 0;
+        let successRateSum = 0;
+        let successRateCount = 0;
+        
+        chatbotsSnapshot.forEach((doc) => {
+          const data = doc.data() as Omit<Chatbot, 'id'>;
+          chatbotsList.push({
+            id: doc.id,
+            ...data
+          });
+          
+          // Accumulate stats
+          totalDocs += (data.documents?.length || 0);
+          totalQueries += (data.stats?.queries || 0);
+          
+          if (data.stats?.successRate !== undefined) {
+            successRateSum += data.stats.successRate;
+            successRateCount++;
+          }
+        });
+        
+        setChatbots(chatbotsList);
+        
+        // Update stats
+        setStats({
+          totalChatbots: chatbotsSnapshot.size,
+          totalDocuments: totalDocs,
+          totalQueries: totalQueries,
+          successRate: successRateCount ? Math.round(successRateSum / successRateCount) : 0
+        });
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    fetchData();
+  }, [user]);
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Dashboard Header */}
@@ -68,8 +153,8 @@ export default function DashboardPage() {
                 <CardTitle className="text-sm font-medium text-gray-500">Total Chatbots</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">1</div>
-                <p className="text-xs text-gray-500 mt-1">+0% from last month</p>
+                <div className="text-3xl font-bold">{stats.totalChatbots}</div>
+                <p className="text-xs text-gray-500 mt-1">Your AI assistants</p>
               </CardContent>
             </Card>
             
@@ -78,8 +163,8 @@ export default function DashboardPage() {
                 <CardTitle className="text-sm font-medium text-gray-500">Total Documents</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">5</div>
-                <p className="text-xs text-green-500 mt-1">+25% from last month</p>
+                <div className="text-3xl font-bold">{stats.totalDocuments}</div>
+                <p className="text-xs text-gray-500 mt-1">Added to chatbots</p>
               </CardContent>
             </Card>
             
@@ -88,8 +173,8 @@ export default function DashboardPage() {
                 <CardTitle className="text-sm font-medium text-gray-500">User Queries</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">124</div>
-                <p className="text-xs text-green-500 mt-1">+18% from last month</p>
+                <div className="text-3xl font-bold">{stats.totalQueries}</div>
+                <p className="text-xs text-gray-500 mt-1">Questions answered</p>
               </CardContent>
             </Card>
             
@@ -98,14 +183,44 @@ export default function DashboardPage() {
                 <CardTitle className="text-sm font-medium text-gray-500">Success Rate</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">93%</div>
-                <p className="text-xs text-green-500 mt-1">+5% from last month</p>
+                <div className="text-3xl font-bold">{stats.successRate}%</div>
+                <p className="text-xs text-gray-500 mt-1">Average across chatbots</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Active Chatbots */}
           <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-4">Your Chatbots</h2>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-40">
+              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : chatbots.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
+                  <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={1} 
+                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" 
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No chatbots yet</h3>
+                <p className="text-sm text-gray-500 mb-4">Get started by creating your first chatbot</p>
+                <Button 
+                  asChild
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Link href="/dashboard/chatbots/new">
+                    Create Your First Chatbot
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -133,49 +248,66 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    <tr>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-blue-600 font-bold">P</span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">Product Documentation Assistant</div>
-                            <div className="text-sm text-gray-500">docs-assistant.yourdomain.com</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        5
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        124
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        May 4, 2025
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link href="/dashboard/chatbots/1" className="text-blue-600 hover:text-blue-900 mr-4">
-                          View
-                        </Link>
-                        <Link href="/dashboard/chatbots/1/edit" className="text-blue-600 hover:text-blue-900 mr-4">
-                          Edit
-                        </Link>
-                        <button className="text-red-600 hover:text-red-900">
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
+                    {chatbots.map((chatbot) => {
+                      // Format the date if available
+                      const lastUpdated = chatbot.updatedAt ? 
+                        new Date(chatbot.updatedAt.seconds * 1000).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        }) : 'N/A';
+                        
+                      return (
+                        <tr key={chatbot.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-blue-600 font-bold">{chatbot.name.charAt(0)}</span>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{chatbot.name}</div>
+                                <div className="text-sm text-gray-500">{chatbot.description || 'No description'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              chatbot.status === 'active' 
+                                ? 'bg-green-100 text-green-800'
+                                : chatbot.status === 'draft'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {chatbot.status === 'active' ? 'Active' : 
+                               chatbot.status === 'draft' ? 'Draft' : chatbot.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {chatbot.documents?.length || 0}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {chatbot.stats?.queries || 0}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {lastUpdated}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <Link href={`/dashboard/chatbots/${chatbot.id}`} className="text-blue-600 hover:text-blue-900 mr-4">
+                              View
+                            </Link>
+                            <Link href={`/dashboard/chatbots/${chatbot.id}/edit`} className="text-blue-600 hover:text-blue-900 mr-4">
+                              Edit
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* Quick Actions */}
           <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-4">Quick Actions</h2>
@@ -204,11 +336,11 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-1">View Your Chatbots</h3>
-                <p className="text-sm text-gray-500 mb-4">Manage your existing chatbots and their documents.</p>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Upload Documents</h3>
+                <p className="text-sm text-gray-500 mb-4">Add new documentation files to your knowledge base.</p>
                 <Button asChild variant="outline" className="mt-auto">
-                  <Link href="/dashboard/chatbots">
-                    View Chatbots
+                  <Link href="/dashboard/documents/upload">
+                    Upload Files
                   </Link>
                 </Button>
               </CardContent>
