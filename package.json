@@ -39,5 +39,10 @@
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "inflight": "npm:@isaacs/inflight@^1.0.6",
+    "glob": "^10.0.0",
+    "rimraf": "^5.0.0"
   }
 }
