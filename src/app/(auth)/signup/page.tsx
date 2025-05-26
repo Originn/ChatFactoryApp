@@ -5,57 +5,108 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
-import { auth, googleProvider } from '@/lib/firebase/config';
-import { createUserWithEmailAndPassword, signInWithPopup, sendEmailVerification } from 'firebase/auth';
+import { useAuth } from '@/contexts/AuthContext';
+
+// Password strength checker
+const checkPasswordStrength = (password: string) => {
+  let score = 0;
+  const feedback = [];
+
+  if (password.length >= 8) score++;
+  else feedback.push('At least 8 characters');
+
+  if (/[a-z]/.test(password)) score++;
+  else feedback.push('Lowercase letter');
+
+  if (/[A-Z]/.test(password)) score++;
+  else feedback.push('Uppercase letter');
+
+  if (/[0-9]/.test(password)) score++;
+  else feedback.push('Number');
+
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  else feedback.push('Special character');
+
+  const strength = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'][score];
+  const color = ['text-red-600', 'text-orange-600', 'text-yellow-600', 'text-blue-600', 'text-green-600'][score];
+
+  return { strength, color, score, feedback };
+};
 
 export default function SignupPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formData, setFormData] = useState({
+    displayName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    agreeToTerms: false
+  });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { signUpWithEmail } = useAuth();
   const router = useRouter();
+
+  const passwordStrength = checkPasswordStrength(formData.password);
+
+  const handleChange = (field: string, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setError('');
+  };
+
+  const validateForm = () => {
+    if (!formData.displayName.trim()) {
+      setError('Full name is required');
+      return false;
+    }
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return false;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+    if (passwordStrength.score < 3) {
+      setError('Password is too weak. Please include: ' + passwordStrength.feedback.join(', '));
+      return false;
+    }
+    if (!formData.agreeToTerms) {
+      setError('You must agree to the Terms of Service');
+      return false;
+    }
+    return true;
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) return;
+    
     setError('');
     setIsLoading(true);
 
-    // Validate passwords match
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      // Create the user
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await signUpWithEmail({
+        email: formData.email,
+        password: formData.password,
+        displayName: formData.displayName,
+        agreeToTerms: formData.agreeToTerms
+      });
       
-      // Send email verification
-      await sendEmailVerification(userCredential.user);
-      
-      // Redirect to verification notification page
-      router.push('/email-verification?email=' + encodeURIComponent(email));
+      router.push('/email-verification?email=' + encodeURIComponent(formData.email));
     } catch (error: any) {
-      setError(error.message || 'Failed to create account');
       console.error('Signup error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGoogleSignup = async () => {
-    setError('');
-    setIsLoading(true);
-
-    try {
-      await signInWithPopup(auth, googleProvider);
-      router.push('/dashboard');
-    } catch (error: any) {
-      setError(error.message || 'Failed to sign up with Google');
-      console.error('Google signup error:', error);
+      if (error.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists');
+      } else if (error.code === 'auth/weak-password') {
+        setError('Password is too weak');
+      } else if (error.code === 'auth/invalid-email') {
+        setError('Invalid email address');
+      } else {
+        setError(error.message || 'Failed to create account');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -68,9 +119,6 @@ export default function SignupPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <Link href="/" className="text-xl font-bold">Chat Factory</Link>
           <nav>
-            <Link href="/">
-              <Button variant="ghost" className="text-white hover:bg-gray-800">Home</Button>
-            </Link>
             <Link href="/login">
               <Button variant="ghost" className="text-white hover:bg-gray-800">Login</Button>
             </Link>
@@ -82,9 +130,9 @@ export default function SignupPage() {
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md shadow-lg border-blue-100">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-gray-900">Create an account</CardTitle>
+            <CardTitle className="text-2xl font-bold text-gray-900">Create your account</CardTitle>
             <CardDescription>
-              Enter your details to create your Chat Factory account
+              Enter your details to get started with Chat Factory
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -95,70 +143,96 @@ export default function SignupPage() {
             )}
             <form onSubmit={handleSignup} className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">Email</label>
+                <label htmlFor="displayName" className="text-sm font-medium">Full Name *</label>
+                <Input 
+                  id="displayName" 
+                  type="text" 
+                  placeholder="Enter your full name" 
+                  value={formData.displayName}
+                  onChange={(e) => handleChange('displayName', e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium">Email *</label>
                 <Input 
                   id="email" 
                   type="email" 
                   placeholder="name@example.com" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.email}
+                  onChange={(e) => handleChange('email', e.target.value)}
                   required
                 />
               </div>
+              
               <div className="space-y-2">
-                <label htmlFor="password" className="text-sm font-medium">Password</label>
+                <label htmlFor="password" className="text-sm font-medium">Password *</label>
                 <Input 
                   id="password" 
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Create a strong password"
+                  value={formData.password}
+                  onChange={(e) => handleChange('password', e.target.value)}
                   required
                 />
+                {formData.password && (
+                  <div className="text-xs space-y-1">
+                    <div className={`font-medium ${passwordStrength.color}`}>
+                      Strength: {passwordStrength.strength}
+                    </div>
+                    {passwordStrength.feedback.length > 0 && (
+                      <div className="text-gray-600">
+                        Missing: {passwordStrength.feedback.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+              
               <div className="space-y-2">
-                <label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</label>
+                <label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password *</label>
                 <Input 
                   id="confirmPassword" 
                   type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => handleChange('confirmPassword', e.target.value)}
                   required
                 />
+                {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                  <div className="text-xs text-red-600">
+                    Passwords do not match
+                  </div>
+                )}
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="terms"
+                  checked={formData.agreeToTerms}
+                  onCheckedChange={(checked) => handleChange('agreeToTerms', checked as boolean)}
+                />
+                <label htmlFor="terms" className="text-sm text-gray-600">
+                  I agree to the{" "}
+                  <Link href="/terms" className="text-blue-600 hover:text-blue-800">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="text-blue-600 hover:text-blue-800">
+                    Privacy Policy
+                  </Link>
+                </label>
+              </div>
+              
               <Button 
                 type="submit" 
                 className="w-full bg-blue-600 hover:bg-blue-700"
-                disabled={isLoading}
+                disabled={isLoading || !formData.agreeToTerms}
               >
-                {isLoading ? 'Creating account...' : 'Sign Up'}
+                {isLoading ? 'Creating account...' : 'Create Account'}
               </Button>
             </form>
-            
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={handleGoogleSignup}
-                disabled={isLoading}
-              >
-                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-                Google
-              </Button>
-            </div>
           </CardContent>
           <CardFooter className="flex justify-center">
             <div className="text-sm text-gray-600">

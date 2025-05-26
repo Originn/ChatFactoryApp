@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isValidUserData() {
+      return request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt']) && 
+             request.resource.data.uid == request.auth.uid &&
+             request.resource.data.email == request.auth.token.email;
+    }
+    
+    function isValidUserUpdate() {
+      let allowedFields = ['displayName', 'updatedAt', 'preferences', 'metadata'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+    
+    function withinRateLimit() {
+      return true; // Simplified rate limiting
+    }
+
+    // Users collection - user profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUserData() && withinRateLimit();
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUserUpdate() && withinRateLimit();
+      allow delete: if isAuthenticated() && isOwner(userId) && withinRateLimit();
+    }
+
+    // Chatbots collection - user's chatbots
+    match /chatbots/{chatbotId} {
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid && withinRateLimit();
+      allow update: if isAuthenticated() && resource.data.ownerId == request.auth.uid && 
+                   request.resource.data.ownerId == request.auth.uid && withinRateLimit();
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid && withinRateLimit();
+    }
+
+    // Analytics collections (for Phase 2)
+    match /analyticsEvents/{eventId} {
+      allow read, write: if false; // Only server-side access
+    }
+    
+    match /dailyAggregates/{date} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only server-side access
+    }
+    
+    match /userSessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false; // Immutable once created
+    }
+    
+    match /chatbotAnalytics/{chatbotId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only server-side access
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
