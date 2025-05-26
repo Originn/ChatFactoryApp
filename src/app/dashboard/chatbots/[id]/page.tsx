@@ -23,6 +23,8 @@ interface Chatbot {
   documents?: any[];
   deployedUrl?: string;
   deploymentId?: string;
+  vercelProjectId?: string;
+  vercelDeploymentId?: string;
   aiConfig?: {
     embeddingModel: string;
     llmModel: string;
@@ -127,7 +129,48 @@ export default function ChatbotDetailPage() {
     setIsDeleting(true);
     
     try {
+      // Get Vercel project info from the chatbot data
+      const vercelProjectId = chatbot.vercelProjectId;
+      const vercelProjectName = vercelProjectId || (chatbot.name ? 
+        chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
+      
+      // Delete from Vercel if we have project info
+      if (vercelProjectId || vercelProjectName) {
+        try {
+          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
+          const vercelDeleteResponse = await fetch('/api/vercel-delete', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              projectId: vercelProjectId,
+              projectName: vercelProjectName,
+            }),
+          });
+          
+          const vercelResult = await vercelDeleteResponse.json();
+          
+          if (vercelResult.success) {
+            console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
+          } else {
+            console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
+            // Continue with Firestore deletion even if Vercel deletion fails
+          }
+        } catch (vercelError) {
+          console.error('❌ Error deleting from Vercel:', vercelError);
+          // Continue with Firestore deletion even if Vercel deletion fails
+        }
+      } else {
+        console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
+      }
+      
+      // Delete from Firestore
       await deleteDoc(doc(db, "chatbots", chatbot.id));
+      
+      console.log('✅ Chatbot deleted successfully from both Vercel and Firestore');
+      
+      // Redirect to chatbots list
       router.push("/dashboard/chatbots");
     } catch (err: any) {
       console.error("Error deleting chatbot:", err);

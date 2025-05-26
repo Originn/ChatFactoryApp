@@ -101,7 +101,7 @@ export default function DashboardPage() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center font-bold text-xl">
-                DocsAI
+                Chat Factory
               </div>
               <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link

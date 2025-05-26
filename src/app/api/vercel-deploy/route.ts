@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Repository information
 const REPO_OWNER = 'Originn';
-const REPO_NAME = 'docsai-chatbot-template';
+const REPO_NAME = 'ChatFactoryTemplate';  // Your chatbot template repository
 const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 
 export async function POST(request: NextRequest) {
@@ -79,12 +79,85 @@ export async function POST(request: NextRequest) {
       console.log(`Project created with repoId: ${repoId}`);
     }
 
-    // 2. Create deployment
-    let deploymentResponse;
+    // 2. Set environment variables on the project
     const envVars = {
       CHATBOT_ID: chatbotId,
-      NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`
+      NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
+      // Firebase client configuration
+      NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+      // Firebase Admin SDK (Server-side)
+      FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
+      FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
+      FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY,
+      // API Keys
+      NEXT_PUBLIC_MISTRAL_API_KEY: process.env.NEXT_PUBLIC_MISTRAL_API_KEY,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY
     };
+    
+    // Filter out undefined values
+    const filteredEnvVars = Object.fromEntries(
+      Object.entries(envVars).filter(([key, value]) => value !== undefined)
+    );
+    
+    // Debug: Log what environment variables we're setting
+    console.log('Setting environment variables on Vercel project:');
+    console.log('Keys:', Object.keys(filteredEnvVars));
+    console.log('Total variables to set:', Object.keys(filteredEnvVars).length);
+    console.log('Firebase API Key available:', !!filteredEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY);
+    
+    // Set environment variables on the project
+    console.log('Setting environment variables on project:', projectName);
+    let successCount = 0;
+    let skipCount = 0;
+    
+    for (const [key, value] of Object.entries(filteredEnvVars)) {
+      try {
+        const envResponse = await fetch(`https://api.vercel.com/v9/projects/${projectName}/env`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            key: key,
+            value: value,
+            type: 'encrypted',
+            target: ['production', 'preview', 'development']
+          })
+        });
+        
+        if (!envResponse.ok) {
+          const envError = await envResponse.json();
+          // Only log error if it's not a "already exists" error
+          if (envError.error?.code === 'ENV_ALREADY_EXISTS') {
+            console.log(`⚠️  Environment variable already exists: ${key}`);
+            skipCount++;
+          } else {
+            console.error(`❌ Failed to set env var ${key}:`, envError);
+          }
+        } else {
+          console.log(`✅ Set environment variable: ${key}`);
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`❌ Error setting env var ${key}:`, error);
+      }
+    }
+    
+    console.log(`📊 Environment variables summary: ${successCount} set, ${skipCount} already existed`);
+    
+    // Wait a moment for env vars to propagate
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // 3. Create deployment
+    // 3. Create deployment
+    let deploymentResponse;
     
     // Create deployment payload based on whether we have repoId
     if (repoId) {
@@ -105,13 +178,13 @@ export async function POST(request: NextRequest) {
             repo: REPO,
             ref: 'main',
             repoId
-          },
-          env: envVars
+          }
+          // Environment variables are now set on the project, not in deployment
         })
       });
     } else {
       console.log('Using file-based deployment (no repoId available)');
-      deploymentResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, envVars);
+      deploymentResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName);
     }
 
     // Handle deployment response
@@ -122,7 +195,7 @@ export async function POST(request: NextRequest) {
       // If GitHub integration failed, fall back to file-based deployment
       if (repoId) {
         console.log('Falling back to file-based deployment');
-        const fallbackResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, envVars);
+        const fallbackResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName);
         
         if (!fallbackResponse.ok) {
           const fallbackError = await fallbackResponse.json();
@@ -141,6 +214,9 @@ export async function POST(request: NextRequest) {
     }
 
     const deploymentData = await deploymentResponse.json();
+    console.log('✅ Deployment created successfully:', deploymentData.id);
+    console.log('🔗 Deployment URL:', deploymentData.url);
+    
     return createSuccessResponse(deploymentData, projectName);
   } catch (error: any) {
     console.error('Deployment error:', error);
@@ -151,7 +227,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function for file-based deployment
-async function createFileBasedDeployment(token: string, projectName: string, env: any) {
+async function createFileBasedDeployment(token: string, projectName: string) {
   return fetch('https://api.vercel.com/v13/deployments', {
     method: 'POST',
     headers: {
@@ -162,8 +238,8 @@ async function createFileBasedDeployment(token: string, projectName: string, env
       name: projectName,
       project: projectName,
       target: 'production',
-      files: [],
-      env
+      files: []
+      // Environment variables are set on the project, not in deployment
     })
   });
 }

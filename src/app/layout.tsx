@@ -6,7 +6,7 @@ import { AuthProvider } from '@/components/providers/AuthProvider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'DocsAI - Turn Documentation Into AI Support',
+  title: 'Chat Factory - Turn Documentation Into AI Support',
   description: 'Transform your product documentation into an intelligent AI chatbot that answers user questions instantly.',
 }
 

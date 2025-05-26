@@ -1,6 +1,6 @@
-# DocsAI Chatbot - Documentation-Powered AI Assistants
+# Chat Factory - Documentation-Powered AI Assistants
 
-DocsAI is a SaaS platform that transforms documentation into intelligent AI chatbots. It allows businesses to upload their documentation and automatically create AI assistants that can answer user questions based on the content.
+Chat Factory is a SaaS platform that transforms documentation into intelligent AI chatbots. It allows businesses to upload their documentation and automatically create AI assistants that can answer user questions based on the content.
 
 ## Features
 

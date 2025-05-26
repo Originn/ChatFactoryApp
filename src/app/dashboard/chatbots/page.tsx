@@ -16,6 +16,7 @@ interface Chatbot {
   description: string;
   status: string;
   createdAt: any; // Using 'any' for Firestore Timestamp
+  vercelProjectId?: string;
   stats?: {
     queries: number;
     successRate: number;
@@ -74,11 +75,64 @@ export default function ChatbotsPage() {
     setDeletingId(id);
     
     try {
+      // First, get the chatbot data to retrieve Vercel project info
+      const chatbotDoc = await getDocs(query(
+        collection(db, "chatbots"), 
+        where("__name__", "==", id)
+      ));
+      
+      let vercelProjectId = null;
+      let vercelProjectName = null;
+      
+      if (!chatbotDoc.empty) {
+        const chatbotData = chatbotDoc.docs[0].data();
+        vercelProjectId = chatbotData.vercelProjectId;
+        // Fallback to project name if no projectId stored
+        if (!vercelProjectId && chatbotData.name) {
+          vercelProjectName = (chatbotData.name || `chatbot-${id}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '-');
+        }
+      }
+      
+      // Delete from Vercel if we have project info
+      if (vercelProjectId || vercelProjectName) {
+        try {
+          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
+          const vercelDeleteResponse = await fetch('/api/vercel-delete', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              projectId: vercelProjectId,
+              projectName: vercelProjectName,
+            }),
+          });
+          
+          const vercelResult = await vercelDeleteResponse.json();
+          
+          if (vercelResult.success) {
+            console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
+          } else {
+            console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
+            // Continue with Firestore deletion even if Vercel deletion fails
+          }
+        } catch (vercelError) {
+          console.error('❌ Error deleting from Vercel:', vercelError);
+          // Continue with Firestore deletion even if Vercel deletion fails
+        }
+      } else {
+        console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
+      }
+      
       // Delete the document from Firestore
       await deleteDoc(doc(db, "chatbots", id));
       
       // Update local state
       setChatbots(chatbots.filter(chatbot => chatbot.id !== id));
+      
+      console.log('✅ Chatbot deleted successfully from both Vercel and Firestore');
     } catch (err: any) {
       console.error("Error deleting chatbot:", err);
       setError(`Failed to delete chatbot: ${err.message}`);

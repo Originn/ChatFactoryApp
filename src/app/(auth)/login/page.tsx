@@ -52,7 +52,7 @@ export default function LoginPage() {
       {/* Header */}
       <header className="bg-gray-900 text-white py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">DocsAI</Link>
+          <Link href="/" className="text-xl font-bold">Chat Factory</Link>
           <nav>
             <Link href="/">
               <Button variant="ghost" className="text-white hover:bg-gray-800">Home</Button>
@@ -65,7 +65,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md shadow-lg border-blue-100">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-gray-900">Log in to DocsAI</CardTitle>
+            <CardTitle className="text-2xl font-bold text-gray-900">Log in to Chat Factory</CardTitle>
             <CardDescription>
               Enter your email and password to access your account
             </CardDescription>

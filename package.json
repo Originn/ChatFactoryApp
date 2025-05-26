@@ -1,5 +1,5 @@
 {
-  "name": "docsai-chatbot-app",
+  "name": "chatfactory-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.2",
+    "@vercel/sdk": "^1.7.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^11.6.1",
+    "firebase-admin": "^12.1.1",
     "framer-motion": "^12.10.0",
     "lucide-react": "^0.507.0",
     "next": "^14.1.0",

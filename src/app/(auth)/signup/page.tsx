@@ -66,7 +66,7 @@ export default function SignupPage() {
       {/* Header */}
       <header className="bg-gray-900 text-white py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">DocsAI</Link>
+          <Link href="/" className="text-xl font-bold">Chat Factory</Link>
           <nav>
             <Link href="/">
               <Button variant="ghost" className="text-white hover:bg-gray-800">Home</Button>
@@ -84,7 +84,7 @@ export default function SignupPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-gray-900">Create an account</CardTitle>
             <CardDescription>
-              Enter your details to create your DocsAI account
+              Enter your details to create your Chat Factory account
             </CardDescription>
           </CardHeader>
           <CardContent>
