@@ -5,6 +5,8 @@ import {
   User, 
   signInWithEmailAndPassword, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -54,6 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Utility function to detect mobile devices
+  const isMobileDevice = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           window.innerWidth <= 768;
+  };
+
   // Load user profile when user changes
   const loadUserProfile = async (user: User | null) => {
     if (user) {
@@ -82,6 +90,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
+    // Handle redirect result for mobile Google sign-in
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result && result.user) {
+          // Handle the redirect result (create profile if needed)
+          await handleGoogleAuthResult(result.user);
+        }
+      } catch (error) {
+        console.error('Redirect result error:', error);
+      }
+    };
+
+    handleRedirectResult();
     return () => unsubscribe();
   }, []);
 
@@ -118,27 +140,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.user;
   };
 
-  // Sign in with Google
-  const signInWithGoogle = async (): Promise<User> => {
-    const result = await signInWithPopup(auth, googleProvider);
-    
-    // Check if user profile exists, create if not (with error handling)
+  // Helper function to handle Google auth result
+  const handleGoogleAuthResult = async (user: User) => {
     try {
-      const existingProfile = await UserService.getUserProfile(result.user.uid);
+      const existingProfile = await UserService.getUserProfile(user.uid);
       if (!existingProfile) {
-        await UserService.createUserProfile(result.user.uid, {
-          email: result.user.email || '',
-          displayName: result.user.displayName || '',
-          emailVerified: result.user.emailVerified
+        await UserService.createUserProfile(user.uid, {
+          email: user.email || '',
+          displayName: user.displayName || '',
+          emailVerified: user.emailVerified
         });
       }
     } catch (error) {
       console.warn('Could not create user profile in Firestore:', error);
-      // Continue with login even if profile creation fails
-      // This allows Google OAuth to work even with restrictive Firestore rules
     }
-    
-    return result.user;
+  };
+
+  // Sign in with Google (mobile-aware)
+  const signInWithGoogle = async (): Promise<User> => {
+    try {
+      if (isMobileDevice()) {
+        // Use redirect for mobile devices
+        await signInWithRedirect(auth, googleProvider);
+        // The actual sign-in will be handled by the redirect result in useEffect
+        // We return a promise that will resolve when the redirect completes
+        return new Promise((resolve, reject) => {
+          const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+              unsubscribe();
+              resolve(user);
+            }
+          });
+          
+          // Set a timeout to prevent hanging
+          setTimeout(() => {
+            unsubscribe();
+            reject(new Error('Sign-in timeout'));
+          }, 10000);
+        });
+      } else {
+        // Use popup for desktop
+        const result = await signInWithPopup(auth, googleProvider);
+        await handleGoogleAuthResult(result.user);
+        return result.user;
+      }
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      throw error;
+    }
   };
 
   // Sign out
