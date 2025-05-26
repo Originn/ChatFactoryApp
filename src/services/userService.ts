@@ -40,13 +40,26 @@ export class UserService {
         chatbotsCreated: 0,
         totalQueries: 0,
         monthlyQueries: 0,
-        lastResetAt: now
+        lastResetAt: now,
+        // New deployment fields
+        deploymentsCreated: 0,
+        activeDeployments: 0,
+        monthlyDeployments: 0
       },
       preferences: {
         theme: 'system',
         notifications: true,
         emailNotifications: true,
         marketingEmails: false
+      },
+      // Deployment preferences
+      deploymentPreferences: {
+        preferredRegion: 'us-east-1',
+        notifications: {
+          deploymentSuccess: true,
+          usageLimits: true,
+          monthlyReports: false
+        }
       },
       metadata: {
         loginCount: 0
@@ -135,7 +148,7 @@ export class UserService {
    */
   static async incrementUsage(
     uid: string, 
-    increment: { chatbots?: number; queries?: number }
+    increment: { chatbots?: number; queries?: number; deployments?: number }
   ): Promise<void> {
     const userRef = doc(db, this.COLLECTION, uid);
     const userProfile = await this.getUserProfile(uid);
@@ -153,6 +166,16 @@ export class UserService {
           userProfile.usage.totalQueries + increment.queries;
         updates['usage.monthlyQueries'] = 
           userProfile.usage.monthlyQueries + increment.queries;
+      }
+
+      if (increment.deployments) {
+        updates['usage.deploymentsCreated'] = 
+          (userProfile.usage.deploymentsCreated || 0) + increment.deployments;
+        updates['usage.activeDeployments'] = 
+          (userProfile.usage.activeDeployments || 0) + increment.deployments;
+        updates['usage.monthlyDeployments'] = 
+          (userProfile.usage.monthlyDeployments || 0) + increment.deployments;
+        updates['usage.lastDeploymentAt'] = Timestamp.now();
       }
       
       await updateDoc(userRef, updates);

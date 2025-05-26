@@ -1,0 +1,386 @@
+// src/services/deploymentService.ts
+import { 
+  collection, 
+  doc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy, 
+  limit,
+  Timestamp,
+  getDoc,
+  increment
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { DeploymentRecord, QueryUsageRecord, PLAN_LIMITS } from '@/types/deployment';
+import { UpdatedUserProfile } from '@/types/deployment';
+import { UserService } from './userService';
+import { ChatbotConfig } from '@/types/chatbot';
+
+interface DeploymentOptions {
+  chatbot: ChatbotConfig;
+  user: UpdatedUserProfile;
+  customDomain?: string;
+}
+
+interface DeploymentResult {
+  success: boolean;
+  deploymentId?: string;
+  deploymentUrl?: string;
+  error?: string;
+  limitations?: string[];
+}
+
+class DeploymentService {
+  private static readonly DEPLOYMENTS_COLLECTION = 'deployments';
+  private static readonly QUERY_USAGE_COLLECTION = 'queryUsage';
+  private static readonly USAGE_STATS_COLLECTION = 'deploymentUsageStats';
+
+  /**
+   * Check if user can deploy based on their plan and usage
+   */
+  static async canUserDeploy(user: UpdatedUserProfile): Promise<{
+    canDeploy: boolean;
+    reason?: string;
+    limitations: string[];
+  }> {
+    const planLimits = PLAN_LIMITS[user.subscription.plan];
+    const limitations: string[] = [];
+
+    // Check chatbot limit
+    if (planLimits.maxChatbots !== -1 && user.usage.chatbotsCreated >= planLimits.maxChatbots) {
+      return {
+        canDeploy: false,
+        reason: `${user.subscription.plan} plan allows maximum ${planLimits.maxChatbots} chatbots. You have ${user.usage.chatbotsCreated}.`,
+        limitations: ['Upgrade to increase chatbot limit']
+      };
+    }
+
+    // Check monthly deployment limit
+    const deploymentCount = await this.getMonthlyDeploymentCount(user.uid);
+    if (planLimits.monthlyDeployments !== -1 && deploymentCount >= planLimits.monthlyDeployments) {
+      return {
+        canDeploy: false,
+        reason: `${user.subscription.plan} plan allows ${planLimits.monthlyDeployments} deployments per month. You've used ${deploymentCount}.`,
+        limitations: ['Upgrade for more deployments']
+      };
+    }
+
+    // Add plan limitations
+    if (user.subscription.plan === 'free') {
+      limitations.push(
+        'Vercel subdomain only (no custom domain)',
+        '"Powered by ChatFactory" branding included',
+        `${planLimits.monthlyQueries} queries per month limit`,
+        `Analytics limited to ${planLimits.analyticsRetention} days`
+      );
+    }
+
+    return { canDeploy: true, limitations };
+  }
+
+  /**
+   * Deploy chatbot to Vercel
+   */
+  static async deployToVercel(options: DeploymentOptions): Promise<DeploymentResult> {
+    const { chatbot, user, customDomain } = options;
+    
+    try {
+      // Check deployment eligibility
+      const eligibility = await this.canUserDeploy(user);
+      if (!eligibility.canDeploy) {
+        return {
+          success: false,
+          error: eligibility.reason,
+          limitations: eligibility.limitations
+        };
+      }
+
+      // Generate subdomain
+      const subdomain = this.generateSubdomain(chatbot.name);
+      const deploymentUrl = customDomain || `${subdomain}.vercel.app`;
+
+      // Create deployment record
+      const deploymentRecord: Omit<DeploymentRecord, 'id'> = {
+        chatbotId: chatbot.id,
+        userId: user.uid,
+        status: 'deploying',
+        subdomain,
+        deploymentUrl,
+        customDomain,
+        
+        branding: {
+          show: PLAN_LIMITS[user.subscription.plan].branding,
+          text: 'Powered by ChatFactory',
+          link: 'https://chatfactory.ai'
+        },
+        
+        planLimitations: {
+          monthlyQueryLimit: PLAN_LIMITS[user.subscription.plan].monthlyQueries,
+          analyticsRetention: PLAN_LIMITS[user.subscription.plan].analyticsRetention,
+          customDomain: PLAN_LIMITS[user.subscription.plan].customDomain,
+          branding: PLAN_LIMITS[user.subscription.plan].branding
+        },
+        
+        usage: {
+          totalQueries: 0,
+          monthlyQueries: 0,
+          lastResetAt: Timestamp.now()
+        },
+        
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        
+        environmentVariables: this.prepareEnvironmentVariables(chatbot, user)
+      };
+
+      // Save deployment record
+      const deploymentRef = await addDoc(
+        collection(db, this.DEPLOYMENTS_COLLECTION), 
+        deploymentRecord
+      );
+
+      // Simulate Vercel deployment (replace with actual Vercel API call)
+      const deploymentSuccess = await this.simulateVercelDeployment(deploymentRecord);
+      
+      if (deploymentSuccess) {
+        // Update deployment status
+        await updateDoc(deploymentRef, {
+          status: 'deployed',
+          deployedAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        });
+
+        // Update user usage statistics
+        await this.updateUserDeploymentUsage(user.uid);
+
+        return {
+          success: true,
+          deploymentId: deploymentRef.id,
+          deploymentUrl,
+          limitations: eligibility.limitations
+        };
+      } else {
+        // Mark deployment as failed
+        await updateDoc(deploymentRef, {
+          status: 'failed',
+          lastError: {
+            message: 'Deployment failed',
+            code: 'DEPLOYMENT_ERROR',
+            timestamp: Timestamp.now()
+          },
+          updatedAt: Timestamp.now()
+        });
+
+        return {
+          success: false,
+          error: 'Deployment to Vercel failed',
+          limitations: []
+        };
+      }
+
+    } catch (error) {
+      console.error('Deployment failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Deployment failed',
+        limitations: []
+      };
+    }
+  }
+
+  /**
+   * Get user's deployments
+   */
+  static async getUserDeployments(userId: string): Promise<DeploymentRecord[]> {
+    const deploymentsRef = collection(db, this.DEPLOYMENTS_COLLECTION);
+    const q = query(
+      deploymentsRef,
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as DeploymentRecord));
+  }
+
+  /**
+   * Get deployment by ID
+   */
+  static async getDeployment(deploymentId: string): Promise<DeploymentRecord | null> {
+    const deploymentRef = doc(db, this.DEPLOYMENTS_COLLECTION, deploymentId);
+    const deploymentSnap = await getDoc(deploymentRef);
+    
+    if (deploymentSnap.exists()) {
+      return {
+        id: deploymentSnap.id,
+        ...deploymentSnap.data()
+      } as DeploymentRecord;
+    }
+    return null;
+  }
+
+  /**
+   * Delete deployment
+   */
+  static async deleteDeployment(deploymentId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const deploymentRef = doc(db, this.DEPLOYMENTS_COLLECTION, deploymentId);
+      
+      // Mark as deleted instead of actually deleting (for audit trail)
+      await updateDoc(deploymentRef, {
+        status: 'deleted',
+        updatedAt: Timestamp.now()
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete deployment:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to delete deployment'
+      };
+    }
+  }
+
+  /**
+   * Track query usage
+   */
+  static async trackQueryUsage(
+    deploymentId: string,
+    query: string,
+    response: string,
+    metadata: {
+      responseTime: number;
+      tokensUsed: number;
+      sessionId?: string;
+      userAgent?: string;
+      ipAddress?: string;
+    }
+  ): Promise<void> {
+    try {
+      // Get deployment details
+      const deployment = await this.getDeployment(deploymentId);
+      if (!deployment) {
+        throw new Error('Deployment not found');
+      }
+
+      // Check if query should be counted against limits
+      const shouldCount = deployment.planLimitations.monthlyQueryLimit !== -1 && 
+                         deployment.usage.monthlyQueries < deployment.planLimitations.monthlyQueryLimit;
+
+      // Create usage record
+      const usageRecord: Omit<QueryUsageRecord, 'id'> = {
+        deploymentId,
+        chatbotId: deployment.chatbotId,
+        userId: deployment.userId,
+        query,
+        response,
+        timestamp: Timestamp.now(),
+        responseTime: metadata.responseTime,
+        tokensUsed: metadata.tokensUsed,
+        sessionId: metadata.sessionId,
+        userAgent: metadata.userAgent,
+        ipAddress: metadata.ipAddress,
+        planType: deployment.planLimitations.monthlyQueryLimit === -1 ? 'enterprise' : 
+                 deployment.planLimitations.monthlyQueryLimit > 100 ? 'pro' : 'free',
+        counted: shouldCount
+      };
+
+      // Save usage record
+      await addDoc(collection(db, this.QUERY_USAGE_COLLECTION), usageRecord);
+
+      // Update deployment usage counters
+      if (shouldCount) {
+        const deploymentRef = doc(db, this.DEPLOYMENTS_COLLECTION, deploymentId);
+        await updateDoc(deploymentRef, {
+          'usage.totalQueries': increment(1),
+          'usage.monthlyQueries': increment(1),
+          'usage.lastQueryAt': Timestamp.now(),
+          updatedAt: Timestamp.now()
+        });
+      }
+
+    } catch (error) {
+      console.error('Failed to track query usage:', error);
+    }
+  }
+
+  /**
+   * Private helper methods
+   */
+  private static generateSubdomain(chatbotName: string): string {
+    return chatbotName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 30); // Vercel subdomain limit
+  }
+
+  private static async getMonthlyDeploymentCount(userId: string): Promise<number> {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const deploymentsRef = collection(db, this.DEPLOYMENTS_COLLECTION);
+    const q = query(
+      deploymentsRef,
+      where('userId', '==', userId),
+      where('createdAt', '>=', Timestamp.fromDate(startOfMonth))
+    );
+    
+    const snapshot = await getDocs(q);
+    return snapshot.size;
+  }
+
+  private static prepareEnvironmentVariables(
+    chatbot: ChatbotConfig, 
+    user: UpdatedUserProfile
+  ): Record<string, string> {
+    return {
+      CHATBOT_ID: chatbot.id,
+      CHATBOT_CONFIG: JSON.stringify(chatbot),
+      PLAN_TYPE: user.subscription.plan,
+      MONTHLY_QUERY_LIMIT: PLAN_LIMITS[user.subscription.plan].monthlyQueries.toString(),
+      ANALYTICS_RETENTION: PLAN_LIMITS[user.subscription.plan].analyticsRetention.toString(),
+      BRANDING_ENABLED: PLAN_LIMITS[user.subscription.plan].branding.toString(),
+      FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+      DEPLOYMENT_WEBHOOK_URL: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/deployment`
+    };
+  }
+
+  private static async simulateVercelDeployment(
+    deployment: Omit<DeploymentRecord, 'id'>
+  ): Promise<boolean> {
+    // Simulate deployment time
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Simulate 95% success rate
+    return Math.random() > 0.05;
+  }
+
+  private static async updateUserDeploymentUsage(userId: string): Promise<void> {
+    // Update user's deployment usage stats
+    await UserService.incrementUsage(userId, { chatbots: 1 });
+    
+    // Update deployment-specific usage
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      'usage.deploymentsCreated': increment(1),
+      'usage.activeDeployments': increment(1),
+      'usage.monthlyDeployments': increment(1),
+      'usage.lastDeploymentAt': Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+  }
+}
+
+export { DeploymentService };
+export type { DeploymentOptions, DeploymentResult };
