@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   verifyPasswordResetCode, 
@@ -17,7 +17,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-export default function AuthActionHandler() {
+function AuthActionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -392,5 +392,17 @@ export default function AuthActionHandler() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function AuthActionHandler() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    }>
+      <AuthActionContent />
+    </Suspense>
   );
 }

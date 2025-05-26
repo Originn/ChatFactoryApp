@@ -4,11 +4,11 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { auth } from '@/lib/firebase/config';
 import { sendEmailVerification } from 'firebase/auth';
 
-export default function EmailVerificationPage() {
+function EmailVerificationContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get('email') || '';
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -98,5 +98,17 @@ export default function EmailVerificationPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function EmailVerificationPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    }>
+      <EmailVerificationContent />
+    </Suspense>
   );
 }

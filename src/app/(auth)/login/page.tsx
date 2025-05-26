@@ -22,7 +22,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await signInWithEmail(email, password);
+      await signInWithEmail({ email, password });
       router.push('/dashboard');
     } catch (error: any) {
       setError(error.message || 'Failed to sign in');

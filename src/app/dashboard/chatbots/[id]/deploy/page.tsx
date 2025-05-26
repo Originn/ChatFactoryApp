@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,13 +32,7 @@ export default function DeploymentPage({ params }: DeploymentPageProps) {
   const [deploymentStatus, setDeploymentStatus] = useState<'none' | 'deploying' | 'deployed' | 'failed'>('none');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      loadChatbotAndDeployment();
-    }
-  }, [params.id, user]);
-
-  const loadChatbotAndDeployment = async () => {
+  const loadChatbotAndDeployment = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -93,7 +87,13 @@ export default function DeploymentPage({ params }: DeploymentPageProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id, user?.uid]);
+
+  useEffect(() => {
+    if (user) {
+      loadChatbotAndDeployment();
+    }
+  }, [user, loadChatbotAndDeployment]);
 
   const handleDeploy = async () => {
     if (!chatbot || !userProfile) return;

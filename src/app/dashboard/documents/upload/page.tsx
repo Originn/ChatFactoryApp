@@ -49,13 +49,11 @@ export default function DocumentUploadPage() {
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-semibold text-gray-900">Upload Documents</h1>
-            <Button
-              as={Link}
-              href="/dashboard/documents"
-              variant="outline"
-            >
-              Back to Documents
-            </Button>
+            <Link href="/dashboard/documents">
+              <Button variant="outline">
+                Back to Documents
+              </Button>
+            </Link>
           </div>
 
           <div className="mb-8">

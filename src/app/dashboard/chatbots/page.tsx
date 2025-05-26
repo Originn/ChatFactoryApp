@@ -197,13 +197,11 @@ export default function ChatbotsPage() {
             </div>
             <div className="flex items-center">
               <div className="flex-shrink-0 mr-4">
-                <Button
-                  as={Link}
-                  href="/dashboard/chatbots/new"
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Create New Chatbot
-                </Button>
+                <Link href="/dashboard/chatbots/new">
+                  <Button className="bg-blue-600 hover:bg-blue-700">
+                    Create New Chatbot
+                  </Button>
+                </Link>
               </div>
               <UserDropdown />
             </div>

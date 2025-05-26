@@ -17,12 +17,29 @@ export interface UserProfile {
     totalQueries: number;
     monthlyQueries: number;
     lastResetAt: Timestamp;
+    
+    // New deployment-specific fields
+    deploymentsCreated?: number;
+    activeDeployments?: number;
+    monthlyDeployments?: number;
+    lastDeploymentAt?: Timestamp;
   };
   preferences: {
     theme: 'light' | 'dark' | 'system';
     notifications: boolean;
     emailNotifications: boolean;
     marketingEmails: boolean;
+  };
+  
+  // Deployment preferences (optional for backward compatibility)
+  deploymentPreferences?: {
+    defaultSubdomain?: string;
+    preferredRegion: string;
+    notifications: {
+      deploymentSuccess: boolean;
+      usageLimits: boolean;
+      monthlyReports: boolean;
+    };
   };
   metadata: {
     lastLoginAt?: Timestamp;

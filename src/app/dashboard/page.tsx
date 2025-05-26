@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
+import { BillingAccessGuide } from "@/components/dashboard/BillingAccessGuide";
 import { useAuth } from "@/contexts/AuthContext";
 import { UsageOverviewCard, UsageAnalyticsChart } from "@/components/deployment/UsageDashboards";
 import { UsageWarningBanner } from "@/components/deployment/UsageBanners";
