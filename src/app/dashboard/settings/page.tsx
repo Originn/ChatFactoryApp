@@ -20,7 +20,8 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
-  TrendingUp
+  TrendingUp,
+  ArrowLeft
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -116,23 +117,13 @@ export default function SettingsPage() {
   }
 
   // Calculate usage statistics
-  const isFree = userProfile?.subscription.plan === 'free';
-  const currentPlan = userProfile?.subscription.plan || 'free'; // Default to free if undefined
+  const isFree = !userProfile?.subscription?.plan || userProfile.subscription.plan === 'free';
+  const currentPlan = userProfile?.subscription?.plan || 'free'; // Default to free if undefined
   const monthlyQueries = userProfile?.usage.monthlyQueries || 0;
   const monthlyLimit = isFree ? 100 : (userProfile?.subscription.plan === 'pro' ? 2000 : -1);
   const usagePercentage = monthlyLimit > 0 ? (monthlyQueries / monthlyLimit) * 100 : 0;
   const chatbotsUsed = userProfile?.usage.chatbotsCreated || 0;
   const chatbotLimit = isFree ? 2 : -1;
-
-  // Debug logging for development
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Settings Debug:', {
-      userProfile: userProfile,
-      currentPlan: currentPlan,
-      isFree: isFree,
-      subscriptionPlan: userProfile?.subscription.plan
-    });
-  }
 
   // Helper function to get plan display name
   const getPlanDisplayName = () => {
@@ -197,9 +188,17 @@ export default function SettingsPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Account Settings</h1>
-          <p className="text-gray-600 mt-1">Manage your account and usage</p>
+        <div className="flex items-center space-x-4">
+          <Link href="/dashboard">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold">Account Settings</h1>
+            <p className="text-gray-600 mt-1">Manage your account and usage</p>
+          </div>
         </div>
         {isFree && (
           <Button 
@@ -505,6 +504,7 @@ export default function SettingsPage() {
                     {isFree ? 'Upgrade Your Plan' : 'Change Plan'}
                   </h3>
                   <div className="space-y-3">
+                    {/* Only show Pro plan for free users */}
                     {isFree && (
                       <div className="p-4 border-2 border-purple-200 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50">
                         <div className="flex items-center justify-between mb-2">
@@ -531,27 +531,66 @@ export default function SettingsPage() {
                       </div>
                     )}
                     
-                    <div className="p-4 border rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">Enterprise Plan</h4>
-                        <span className="text-lg font-bold">$99/month</span>
+                    {/* Only show Enterprise plan for Pro users */}
+                    {currentPlan === 'pro' && (
+                      <div className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium">Enterprise Plan</h4>
+                          <span className="text-lg font-bold">$99/month</span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-3">
+                          For large organizations
+                        </p>
+                        <ul className="space-y-1 text-xs text-gray-700 mb-4">
+                          <li>• Everything in Pro</li>
+                          <li>• Unlimited queries</li>
+                          <li>• White-label solutions</li>
+                          <li>• 24/7 priority support</li>
+                        </ul>
+                        <Link href="/dashboard/settings/billing">
+                          <Button variant="outline" className="w-full">
+                            <Globe className="h-4 w-4 mr-2" />
+                            Contact Sales
+                          </Button>
+                        </Link>
                       </div>
-                      <p className="text-sm text-gray-600 mb-3">
-                        For large organizations
-                      </p>
-                      <ul className="space-y-1 text-xs text-gray-700 mb-4">
-                        <li>• Everything in Pro</li>
-                        <li>• Unlimited queries</li>
-                        <li>• White-label solutions</li>
-                        <li>• 24/7 priority support</li>
-                      </ul>
-                      <Link href="/dashboard/settings/billing">
-                        <Button variant="outline" className="w-full">
-                          <Globe className="h-4 w-4 mr-2" />
-                          {userProfile?.subscription.plan === 'enterprise' ? 'Current Plan' : 'Contact Sales'}
-                        </Button>
-                      </Link>
-                    </div>
+                    )}
+
+                    {/* For free users, show Enterprise as a small secondary option */}
+                    {isFree && (
+                      <div className="border-t pt-4">
+                        <div className="text-xs text-gray-500 text-center mb-2">
+                          Need even more? 
+                        </div>
+                        <div className="p-3 border rounded-lg bg-gray-50">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">Enterprise Plan</span>
+                            <span className="text-sm font-semibold">$99/month</span>
+                          </div>
+                          <p className="text-xs text-gray-600 mb-2">
+                            Unlimited everything + white-label solutions
+                          </p>
+                          <Link href="/dashboard/settings/billing">
+                            <Button variant="outline" size="sm" className="w-full text-xs">
+                              Learn More
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show current plan status for Enterprise users */}
+                    {currentPlan === 'enterprise' && (
+                      <div className="p-4 border-2 border-green-200 rounded-lg bg-green-50">
+                        <div className="text-center">
+                          <CheckCircle className="h-8 w-8 mx-auto text-green-600 mb-2" />
+                          <h4 className="font-medium text-green-800">You're on Enterprise!</h4>
+                          <p className="text-sm text-green-700 mt-1">
+                            You have access to all features and premium support.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
