@@ -209,7 +209,7 @@ export default function NewChatbotPage() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center font-bold text-xl">
-                DocsAI
+                Chat Factory
               </div>
               <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link
@@ -362,7 +362,7 @@ export default function NewChatbotPage() {
                         className="rounded-r-none"
                       />
                       <span className="inline-flex items-center rounded-r-md border border-l-0 border-slate-200 bg-gray-50 px-3 text-gray-500 sm:text-sm">
-                        .docsai.yourdomain.com
+                        .chatfactory.yourdomain.com
                       </span>
                     </div>
                     <p className="text-xs text-gray-500">
