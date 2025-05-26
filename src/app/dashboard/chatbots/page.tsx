@@ -8,6 +8,7 @@ import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc } from "firebase/firestore";
+import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 
 // Define the Chatbot type for TypeScript
 interface Chatbot {
@@ -17,6 +18,7 @@ interface Chatbot {
   status: string;
   createdAt: any; // Using 'any' for Firestore Timestamp
   vercelProjectId?: string;
+  logoUrl?: string;
   stats?: {
     queries: number;
     successRate: number;
@@ -75,7 +77,7 @@ export default function ChatbotsPage() {
     setDeletingId(id);
     
     try {
-      // First, get the chatbot data to retrieve Vercel project info
+      // First, get the chatbot data to retrieve Vercel project info and user info
       const chatbotDoc = await getDocs(query(
         collection(db, "chatbots"), 
         where("__name__", "==", id)
@@ -83,10 +85,13 @@ export default function ChatbotsPage() {
       
       let vercelProjectId = null;
       let vercelProjectName = null;
+      let chatbotUserId = null;
       
       if (!chatbotDoc.empty) {
         const chatbotData = chatbotDoc.docs[0].data();
         vercelProjectId = chatbotData.vercelProjectId;
+        chatbotUserId = chatbotData.userId;
+        
         // Fallback to project name if no projectId stored
         if (!vercelProjectId && chatbotData.name) {
           vercelProjectName = (chatbotData.name || `chatbot-${id}`)
@@ -126,13 +131,27 @@ export default function ChatbotsPage() {
         console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
       }
       
+      // Delete entire chatbot folder from Firebase Storage (includes logos and any other files)
+      if (chatbotUserId) {
+        try {
+          console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
+          await deleteChatbotFolder(chatbotUserId, id);
+          console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
+        } catch (storageError) {
+          console.error('❌ Error deleting chatbot folder:', storageError);
+          // Continue with deletion even if storage deletion fails
+        }
+      } else {
+        console.log('ℹ️ No user ID found, skipping storage deletion');
+      }
+      
       // Delete the document from Firestore
       await deleteDoc(doc(db, "chatbots", id));
       
       // Update local state
       setChatbots(chatbots.filter(chatbot => chatbot.id !== id));
       
-      console.log('✅ Chatbot deleted successfully from both Vercel and Firestore');
+      console.log('✅ Chatbot deleted successfully from Vercel, Storage, and Firestore');
     } catch (err: any) {
       console.error("Error deleting chatbot:", err);
       setError(`Failed to delete chatbot: ${err.message}`);
@@ -264,8 +283,16 @@ export default function ChatbotsPage() {
                           <tr key={chatbot.id}>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
-                                <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <span className="text-blue-600 font-bold">{chatbot.name.slice(0, 1)}</span>
+                                <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
+                                  {chatbot.logoUrl ? (
+                                    <img
+                                      src={chatbot.logoUrl}
+                                      alt={`${chatbot.name} logo`}
+                                      className="h-10 w-10 rounded-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-blue-600 font-bold">{chatbot.name.slice(0, 1)}</span>
+                                  )}
                                 </div>
                                 <div className="ml-4">
                                   <div className="text-sm font-medium text-gray-900">{chatbot.name}</div>

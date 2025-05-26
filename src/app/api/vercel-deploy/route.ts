@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/firebase/config';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -21,8 +23,25 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    // Fetch chatbot data from Firestore to get logo URL and other details
+    let chatbotData = null;
+    try {
+      const chatbotRef = doc(db, "chatbots", chatbotId);
+      const chatbotSnap = await getDoc(chatbotRef);
+      
+      if (chatbotSnap.exists()) {
+        chatbotData = chatbotSnap.data();
+        console.log('Chatbot data retrieved for deployment');
+      } else {
+        console.warn('Chatbot not found in Firestore, proceeding without logo');
+      }
+    } catch (firestoreError) {
+      console.error('Error fetching chatbot data:', firestoreError);
+      // Continue deployment without logo if Firestore fails
+    }
+
     // Sanitize project name for Vercel
-    const projectName = (chatbotName || `chatbot-${chatbotId}`)
+    const projectName = (chatbotName || chatbotData?.name || `chatbot-${chatbotId}`)
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-');
 
@@ -83,6 +102,7 @@ export async function POST(request: NextRequest) {
     const envVars = {
       CHATBOT_ID: chatbotId,
       NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
+      NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotData.logoUrl || '',
       // Firebase client configuration
       NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,

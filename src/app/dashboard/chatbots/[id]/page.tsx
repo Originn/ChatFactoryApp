@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useParams, useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 
 // Define the Chatbot type
 interface Chatbot {
@@ -25,6 +26,7 @@ interface Chatbot {
   deploymentId?: string;
   vercelProjectId?: string;
   vercelDeploymentId?: string;
+  logoUrl?: string;
   aiConfig?: {
     embeddingModel: string;
     llmModel: string;
@@ -129,10 +131,11 @@ export default function ChatbotDetailPage() {
     setIsDeleting(true);
     
     try {
-      // Get Vercel project info from the chatbot data
+      // Get Vercel project info and user ID from the chatbot data
       const vercelProjectId = chatbot.vercelProjectId;
       const vercelProjectName = vercelProjectId || (chatbot.name ? 
         chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
+      const chatbotUserId = chatbot.userId;
       
       // Delete from Vercel if we have project info
       if (vercelProjectId || vercelProjectName) {
@@ -165,10 +168,24 @@ export default function ChatbotDetailPage() {
         console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
       }
       
+      // Delete entire chatbot folder from Firebase Storage (includes logos and any other files)
+      if (chatbotUserId) {
+        try {
+          console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', chatbot.id);
+          await deleteChatbotFolder(chatbotUserId, chatbot.id);
+          console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
+        } catch (storageError) {
+          console.error('❌ Error deleting chatbot folder:', storageError);
+          // Continue with deletion even if storage deletion fails
+        }
+      } else {
+        console.log('ℹ️ No user ID found, skipping storage deletion');
+      }
+      
       // Delete from Firestore
       await deleteDoc(doc(db, "chatbots", chatbot.id));
       
-      console.log('✅ Chatbot deleted successfully from both Vercel and Firestore');
+      console.log('✅ Chatbot deleted successfully from Vercel, Storage, and Firestore');
       
       // Redirect to chatbots list
       router.push("/dashboard/chatbots");
@@ -302,8 +319,16 @@ export default function ChatbotDetailPage() {
             <>
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center">
-                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mr-4">
-                    <span className="text-blue-600 font-bold text-xl">{chatbot.name.charAt(0)}</span>
+                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mr-4 overflow-hidden">
+                    {chatbot.logoUrl ? (
+                      <img
+                        src={chatbot.logoUrl}
+                        alt={`${chatbot.name} logo`}
+                        className="h-12 w-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-blue-600 font-bold text-xl">{chatbot.name.charAt(0)}</span>
+                    )}
                   </div>
                   <div>
                     <h1 className="text-2xl font-semibold text-gray-900">{chatbot.name}</h1>
@@ -477,8 +502,16 @@ export default function ChatbotDetailPage() {
                       <div className="border rounded-lg bg-gray-50 p-4 mb-4 h-60 overflow-y-auto">
                         {/* Simulated chat messages */}
                         <div className="flex items-start space-x-2 mb-3">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center">
-                            <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                            {chatbot.logoUrl ? (
+                              <img
+                                src={chatbot.logoUrl}
+                                alt={`${chatbot.name} logo`}
+                                className="h-8 w-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
+                            )}
                           </div>
                           <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
                             <p className="text-sm">
@@ -495,8 +528,16 @@ export default function ChatbotDetailPage() {
                           </div>
                         </div>
                         <div className="flex items-start space-x-2">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center">
-                            <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                            {chatbot.logoUrl ? (
+                              <img
+                                src={chatbot.logoUrl}
+                                alt={`${chatbot.name} logo`}
+                                className="h-8 w-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
+                            )}
                           </div>
                           <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
                             <p className="text-sm">

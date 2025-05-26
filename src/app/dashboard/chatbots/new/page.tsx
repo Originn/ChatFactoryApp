@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
 
 export default function NewChatbotPage() {
   const router = useRouter();
@@ -39,10 +40,58 @@ export default function NewChatbotPage() {
   const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'behavior' | 'appearance'>('basic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Logo upload state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handle logo file selection
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setLogoFile(null);
+      setLogoPreview(null);
+      setLogoError(null);
+      return;
+    }
+
+    // Validate the file
+    const validation = validateLogoFile(file);
+    if (!validation.isValid) {
+      setLogoError(validation.error || 'Invalid file');
+      setLogoFile(null);
+      setLogoPreview(null);
+      return;
+    }
+
+    setLogoFile(file);
+    setLogoError(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setLogoPreview(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Remove logo
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    setLogoError(null);
+    // Reset the file input
+    const fileInput = document.getElementById('logoUpload') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.value = '';
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,6 +116,34 @@ export default function NewChatbotPage() {
       const chatbotsCollectionRef = collection(db, 'chatbots');
       const newChatbotRef = doc(chatbotsCollectionRef);
       
+      let logoUrl: string | null = null;
+
+      // Upload logo if one was selected
+      if (logoFile) {
+        try {
+          setLogoUploading(true);
+          logoUrl = await uploadLogo(logoFile, user.uid, newChatbotRef.id);
+          console.log('Logo uploaded successfully:', logoUrl);
+        } catch (uploadError: any) {
+          console.error('Logo upload failed:', uploadError);
+          
+          // For CORS errors, allow creation without logo but warn user
+          if (uploadError.message?.includes('CORS') || uploadError.message?.includes('blocked')) {
+            console.warn('CORS issue detected, creating chatbot without logo');
+            setError('Logo upload failed due to CORS policy, but chatbot will be created without logo. Please configure CORS settings in Firebase Storage.');
+            logoUrl = null; // Proceed without logo
+          } else {
+            // For other errors, stop the creation process
+            setError(`Failed to upload logo: ${uploadError.message}`);
+            setLoading(false);
+            setLogoUploading(false);
+            return;
+          }
+        } finally {
+          setLogoUploading(false);
+        }
+      }
+      
       // Prepare data for Firestore
       const chatbotData = {
         id: newChatbotRef.id,
@@ -74,6 +151,7 @@ export default function NewChatbotPage() {
         name: formData.name.trim(),
         description: formData.description.trim(),
         domain: formData.domain.trim(),
+        logoUrl: logoUrl, // Add logo URL to the data
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         status: 'draft',
@@ -106,6 +184,12 @@ export default function NewChatbotPage() {
       // Show success message using local storage (will be displayed on the next page)
       localStorage.setItem('chatbotCreated', 'true');
       localStorage.setItem('chatbotName', formData.name.trim());
+      
+      // Clear any error from logo upload if chatbot was created successfully
+      if (logoUrl === null && logoFile) {
+        // Show success but mention logo issue
+        console.log('Chatbot created successfully, but without logo due to upload issue');
+      }
       
       // Redirect to the new chatbot's page
       router.push(`/dashboard/chatbots/${newChatbotRef.id}`);
@@ -501,6 +585,91 @@ export default function NewChatbotPage() {
               {/* Appearance Tab */}
               {activeTab === 'appearance' && (
                 <div className="space-y-6">
+                  {/* Logo Upload Section */}
+                  <div className="space-y-4">
+                    <label className="text-sm font-medium">Chatbot Logo</label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                      {logoPreview ? (
+                        <div className="text-center">
+                          <div className="mb-4">
+                            <img
+                              src={logoPreview}
+                              alt="Logo preview"
+                              className="max-w-32 max-h-32 mx-auto rounded-lg shadow-sm object-contain"
+                            />
+                          </div>
+                          <div className="flex justify-center space-x-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleRemoveLogo}
+                              disabled={logoUploading}
+                            >
+                              Remove Logo
+                            </Button>
+                            <label htmlFor="logoUpload">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={logoUploading}
+                                asChild
+                              >
+                                <span>Change Logo</span>
+                              </Button>
+                            </label>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
+                            <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <label
+                            htmlFor="logoUpload"
+                            className="cursor-pointer"
+                          >
+                            <span className="mt-2 block text-sm font-medium text-gray-900">
+                              Upload a logo for your chatbot
+                            </span>
+                            <span className="mt-1 block text-sm text-gray-500">
+                              PNG, JPG, GIF, SVG or WebP up to 5MB
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="mt-3"
+                              disabled={logoUploading}
+                              asChild
+                            >
+                              <span>Choose File</span>
+                            </Button>
+                          </label>
+                        </div>
+                      )}
+                      <input
+                        id="logoUpload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoChange}
+                        className="hidden"
+                        disabled={logoUploading}
+                      />
+                    </div>
+                    {logoError && (
+                      <p className="text-sm text-red-600 mt-1">{logoError}</p>
+                    )}
+                    {logoUploading && (
+                      <p className="text-sm text-blue-600 mt-1">Uploading logo...</p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      This logo will appear in your chatbot interface. If no logo is uploaded, a generic chatbot icon will be used.
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     <label htmlFor="primaryColor" className="text-sm font-medium">Primary Color</label>
                     <div className="flex items-center space-x-2">
@@ -548,7 +717,15 @@ export default function NewChatbotPage() {
                     </p>
                     <div className="bg-white rounded-md p-3 border border-gray-200">
                       <div className="flex items-start space-x-2 mb-3">
-                        <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0"></div>
+                        <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
+                          {logoPreview ? (
+                            <img src={logoPreview} alt="Logo" className="h-8 w-8 rounded-full object-cover" />
+                          ) : (
+                            <span className="text-xs font-bold" style={{ color: formData.primaryColor }}>
+                              {formData.name.charAt(0) || 'C'}
+                            </span>
+                          )}
+                        </div>
                         <div className="bg-gray-100 rounded-lg p-2 max-w-xs">
                           <p className="text-sm">Hello! How can I help you today?</p>
                         </div>
@@ -562,7 +739,15 @@ export default function NewChatbotPage() {
                         </div>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0"></div>
+                        <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
+                          {logoPreview ? (
+                            <img src={logoPreview} alt="Logo" className="h-8 w-8 rounded-full object-cover" />
+                          ) : (
+                            <span className="text-xs font-bold" style={{ color: formData.primaryColor }}>
+                              {formData.name.charAt(0) || 'C'}
+                            </span>
+                          )}
+                        </div>
                         <div className="bg-gray-100 rounded-lg p-2 max-w-xs">
                           <p className="text-sm">To reset your password, go to the login page and click on "Forgot Password".</p>
                         </div>
