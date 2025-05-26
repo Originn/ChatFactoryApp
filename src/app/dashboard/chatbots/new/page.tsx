@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useRouter } from 'next/navigation';
@@ -11,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
+import { Info } from "lucide-react";
 
 export default function NewChatbotPage() {
   const router = useRouter();
@@ -20,6 +22,7 @@ export default function NewChatbotPage() {
     name: '',
     description: '',
     domain: '',
+    requireAuth: false, // New: Authentication requirement
     
     // AI Configuration
     embeddingModel: 'text-embedding-3-small',
@@ -50,6 +53,11 @@ export default function NewChatbotPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handle switch/boolean changes
+  const handleSwitchChange = (name: string, checked: boolean) => {
+    setFormData(prev => ({ ...prev, [name]: checked }));
   };
 
   // Handle logo file selection
@@ -151,6 +159,7 @@ export default function NewChatbotPage() {
         name: formData.name.trim(),
         description: formData.description.trim(),
         domain: formData.domain.trim(),
+        requireAuth: formData.requireAuth, // Authentication requirement setting
         logoUrl: logoUrl, // Add logo URL to the data
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -368,6 +377,87 @@ export default function NewChatbotPage() {
                     <p className="text-xs text-gray-500">
                       Set a custom subdomain for accessing your chatbot.
                     </p>
+                  </div>
+                  
+                  {/* Authentication Option */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
+                        <label htmlFor="requireAuth" className="text-sm font-medium">
+                          Require User Authentication
+                        </label>
+                        <div className="relative group">
+                          <Info className="h-4 w-4 text-gray-400 cursor-help" />
+                          <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 w-80 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            <div className="space-y-2">
+                              <p className="font-medium">Authentication Options:</p>
+                              <div className="space-y-1">
+                                <p><strong>✅ With Authentication:</strong></p>
+                                <ul className="list-disc list-inside space-y-1 ml-2 text-gray-300">
+                                  <li>Users must sign up/login to use chatbot</li>
+                                  <li>Persistent chat history per user</li>
+                                  <li>User analytics and engagement tracking</li>
+                                  <li>Personalized responses based on user data</li>
+                                  <li>Better abuse prevention</li>
+                                </ul>
+                                <p className="mt-2"><strong>❌ Without Authentication:</strong></p>
+                                <ul className="list-disc list-inside space-y-1 ml-2 text-gray-300">
+                                  <li>Instant access - no signup required</li>
+                                  <li>Anonymous usage (no chat history)</li>
+                                  <li>Easier for simple support/FAQ bots</li>
+                                  <li>Lower user friction</li>
+                                </ul>
+                              </div>
+                            </div>
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <Switch
+                        id="requireAuth"
+                        checked={formData.requireAuth}
+                        onCheckedChange={(checked) => handleSwitchChange('requireAuth', checked)}
+                      />
+                    </div>
+                    <div className={`transition-all duration-200 ${formData.requireAuth ? 'opacity-100' : 'opacity-60'}`}>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-start space-x-2">
+                          <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-blue-900">
+                              {formData.requireAuth ? 'Authentication Enabled' : 'Authentication Disabled'}
+                            </h4>
+                            {formData.requireAuth ? (
+                              <div className="text-sm text-blue-800 space-y-1">
+                                <p>Your chatbot will require users to:</p>
+                                <ul className="list-disc list-inside space-y-1 ml-2">
+                                  <li>Create an account or sign in</li>
+                                  <li>Verify their email address</li>
+                                  <li>Accept terms of service</li>
+                                </ul>
+                                <p className="mt-2 font-medium">Benefits:</p>
+                                <ul className="list-disc list-inside space-y-1 ml-2">
+                                  <li>Personalized chat experience</li>
+                                  <li>Chat history persistence</li>
+                                  <li>User engagement analytics</li>
+                                  <li>Premium feature access control</li>
+                                </ul>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-blue-800 space-y-1">
+                                <p>Your chatbot will allow anonymous access:</p>
+                                <ul className="list-disc list-inside space-y-1 ml-2">
+                                  <li>No signup required - instant usage</li>
+                                  <li>Simpler for basic support/FAQ bots</li>
+                                  <li>Lower barrier to entry</li>
+                                  <li>No chat history or personalization</li>
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
