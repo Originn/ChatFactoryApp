@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     const envVars = {
       CHATBOT_ID: chatbotId,
       NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
-      NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotData.logoUrl || '',
+      NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotData?.logoUrl || '',
       // Firebase client configuration
       NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
