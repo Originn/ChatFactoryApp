@@ -217,7 +217,10 @@ export async function POST(request: NextRequest) {
       
       // Application URLs
       NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'https://chatfactory.ai',
-      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://chatfactory.ai/api'
+      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://chatfactory.ai/api',
+      
+      // Debug page (temporary - remove after testing)
+      ENABLE_DEBUG_PAGE: 'true'
     };
     
     // Filter out empty values but keep empty strings for optional fields

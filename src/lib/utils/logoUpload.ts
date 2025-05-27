@@ -25,6 +25,7 @@ export async function uploadLogo(file: File, userId: string, chatbotId: string):
     // Create a reference to the storage location with descriptive prefixes
     const timestamp = Date.now();
     const fileExtension = file.name.split('.').pop() || 'jpg';
+    // Use underscore instead of asterisk to avoid URL encoding issues
     const fileName = `logo_${timestamp}.${fileExtension}`;
     const storageRef = ref(storage, `user-${userId}/chatbot-logos/chatbot-${chatbotId}/${fileName}`);
 
@@ -39,7 +40,8 @@ export async function uploadLogo(file: File, userId: string, chatbotId: string):
       customMetadata: {
         uploadedBy: userId,
         chatbotId: chatbotId,
-        originalName: file.name
+        originalName: file.name,
+        publicAccess: 'true' // Mark as public
       }
     };
 
@@ -49,6 +51,18 @@ export async function uploadLogo(file: File, userId: string, chatbotId: string):
     // Get the download URL
     const downloadURL = await getDownloadURL(snapshot.ref);
     console.log('Logo uploaded successfully:', downloadURL);
+
+    // Verify the URL is accessible by making a test request
+    try {
+      const testResponse = await fetch(downloadURL, { method: 'HEAD' });
+      if (!testResponse.ok) {
+        console.warn('⚠️ Logo URL may not be publicly accessible:', testResponse.status);
+      } else {
+        console.log('✅ Logo URL verified as accessible');
+      }
+    } catch (testError) {
+      console.warn('⚠️ Could not verify logo URL accessibility:', testError);
+    }
 
     return downloadURL;
   } catch (error: any) {
