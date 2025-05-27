@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase/config';
+import { db, storage } from '@/lib/firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
+import { ref, listAll, getDownloadURL } from 'firebase/storage';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -10,7 +11,9 @@ const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, chatbotName } = body;
+    const { chatbotId, chatbotName, userId } = body;
+
+    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId });
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
@@ -31,12 +34,29 @@ export async function POST(request: NextRequest) {
       
       if (chatbotSnap.exists()) {
         chatbotData = chatbotSnap.data();
-        console.log('Chatbot data retrieved for deployment');
+        console.log('✅ Chatbot data retrieved for deployment');
+        console.log('📊 Chatbot data summary:', {
+          id: chatbotData.id,
+          name: chatbotData.name,
+          logoUrl: chatbotData.logoUrl || 'NOT SET',
+          logoUrlExists: !!chatbotData.logoUrl,
+          logoUrlLength: chatbotData.logoUrl?.length || 0,
+          allFields: Object.keys(chatbotData)
+        });
+        
+        // Log the exact logo URL value for debugging
+        if (chatbotData.logoUrl) {
+          console.log('🖼️  Logo URL found:', chatbotData.logoUrl);
+        } else {
+          console.warn('⚠️  Logo URL is empty or missing from chatbot data');
+          console.log('🔍 Available fields in chatbot data:', Object.keys(chatbotData));
+        }
       } else {
-        console.warn('Chatbot not found in Firestore, proceeding without logo');
+        console.warn('❌ Chatbot document not found in Firestore');
+        console.log('🔍 Attempted to fetch chatbot ID:', chatbotId);
       }
     } catch (firestoreError) {
-      console.error('Error fetching chatbot data:', firestoreError);
+      console.error('❌ Error fetching chatbot data from Firestore:', firestoreError);
       // Continue deployment without logo if Firestore fails
     }
 
@@ -99,11 +119,49 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Prepare complete chatbot configuration for the template
+    // Try multiple possible field names for logo URL
+    let logoUrl = chatbotData?.logoUrl || 
+                  chatbotData?.logo_url || 
+                  chatbotData?.logo?.url || 
+                  chatbotData?.appearance?.logoUrl || 
+                  '';
+    
+    console.log('🔍 Logo URL resolution from Firestore:', {
+      'chatbotData?.logoUrl': chatbotData?.logoUrl || 'undefined',
+      'chatbotData?.logo_url': chatbotData?.logo_url || 'undefined', 
+      'chatbotData?.logo?.url': chatbotData?.logo?.url || 'undefined',
+      'chatbotData?.appearance?.logoUrl': chatbotData?.appearance?.logoUrl || 'undefined',
+      'preliminaryLogoUrl': logoUrl || 'EMPTY'
+    });
+    
+    // If no logo URL found in Firestore, try to find it in Firebase Storage
+    if (!logoUrl) {
+      // Try to get userId from request body first, then from chatbot data
+      const userIdForStorage = userId || chatbotData?.userId;
+      
+      if (userIdForStorage) {
+        console.log('🔍 Logo URL not found in Firestore, checking Firebase Storage...');
+        console.log('🔍 Using userId for storage search:', userIdForStorage);
+        try {
+          logoUrl = await findLogoInStorage(userIdForStorage, chatbotId);
+          if (logoUrl) {
+            console.log('✅ Found logo URL in Firebase Storage:', logoUrl);
+          } else {
+            console.log('❌ No logo found in Firebase Storage either');
+          }
+        } catch (storageError) {
+          console.error('❌ Error checking Firebase Storage for logo:', storageError);
+        }
+      } else {
+        console.warn('⚠️  No userId available for Firebase Storage search');
+      }
+    }
+    
     const chatbotConfig = {
       id: chatbotId,
       name: chatbotName || chatbotData?.name || `Chatbot ${chatbotId}`,
       description: chatbotData?.description || 'AI-powered chatbot',
-      logoUrl: chatbotData?.logoUrl || '',
+      logoUrl: logoUrl,
       primaryColor: chatbotData?.appearance?.primaryColor || '#3b82f6',
       bubbleStyle: chatbotData?.appearance?.bubbleStyle || 'rounded',
       requireAuth: chatbotData?.requireAuth || false,
@@ -112,6 +170,15 @@ export async function POST(request: NextRequest) {
       temperature: chatbotData?.aiConfig?.temperature || 0.7,
       ...chatbotData
     };
+    
+    console.log('🚀 Final chatbot config for deployment:', {
+      id: chatbotConfig.id,
+      name: chatbotConfig.name,
+      logoUrl: chatbotConfig.logoUrl || 'STILL EMPTY!',
+      hasLogoUrl: !!chatbotConfig.logoUrl,
+      logoUrlType: typeof chatbotConfig.logoUrl,
+      logoUrlLength: chatbotConfig.logoUrl?.length || 0
+    });
 
     // Set environment variables on the project
     const envVars = {
@@ -267,6 +334,48 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       error: `Error deploying chatbot: ${error.message}` 
     }, { status: 500 });
+  }
+}
+
+// Helper function to find logo in Firebase Storage if not in Firestore
+async function findLogoInStorage(userId: string, chatbotId: string): Promise<string | null> {
+  try {
+    // Check the expected path for chatbot logos
+    const logoFolderRef = ref(storage, `user-${userId}/chatbot-logos/chatbot-${chatbotId}`);
+    console.log(`🔍 Checking Firebase Storage path: user-${userId}/chatbot-logos/chatbot-${chatbotId}`);
+    
+    const listResult = await listAll(logoFolderRef);
+    
+    if (listResult.items.length === 0) {
+      console.log('📁 No files found in logo folder');
+      return null;
+    }
+    
+    console.log(`📁 Found ${listResult.items.length} files in logo folder`);
+    
+    // Look for image files (logos typically have these patterns)
+    const logoFile = listResult.items.find(item => {
+      const fileName = item.name.toLowerCase();
+      return fileName.includes('logo') || 
+             fileName.match(/\.(jpg|jpeg|png|gif|svg|webp)$/i);
+    });
+    
+    if (!logoFile) {
+      console.log('🖼️  No logo files found in the folder');
+      return null;
+    }
+    
+    console.log(`🖼️  Found potential logo file: ${logoFile.name}`);
+    
+    // Get the download URL for the logo
+    const logoUrl = await getDownloadURL(logoFile);
+    console.log(`✅ Successfully retrieved logo URL from storage: ${logoUrl}`);
+    
+    return logoUrl;
+    
+  } catch (error) {
+    console.error('❌ Error searching for logo in Firebase Storage:', error);
+    return null;
   }
 }
 

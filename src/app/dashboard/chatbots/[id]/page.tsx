@@ -198,7 +198,7 @@ export default function ChatbotDetailPage() {
 
   // Handle deploy chatbot - Using the Vercel API
   const handleDeployChatbot = async () => {
-    if (!chatbot) return;
+    if (!chatbot || !user) return;
     
     setIsDeploying(true);
     setDeploymentError(null);
@@ -212,7 +212,8 @@ export default function ChatbotDetailPage() {
         },
         body: JSON.stringify({
           chatbotId: chatbot.id,
-          chatbotName: chatbot.name
+          chatbotName: chatbot.name,
+          userId: user.uid
         }),
       });
       
