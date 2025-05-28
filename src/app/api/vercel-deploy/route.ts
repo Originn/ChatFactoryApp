@@ -215,6 +215,25 @@ export async function POST(request: NextRequest) {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       COHERE_API_KEY: process.env.COHERE_API_KEY || '',
       
+      // Pinecone Vector Database Configuration
+      PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
+      PINECONE_ENVIRONMENT: process.env.PINECONE_ENVIRONMENT || '',
+      PINECONE_INDEX_NAME: chatbotData?.pineconeIndexName || process.env.PINECONE_INDEX_NAME || `${chatbotId}-knowledge-base`,
+      MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
+      
+      // Embedding Configuration
+      FETCH_K_EMBEDDINGS: process.env.DEFAULT_FETCH_K_EMBEDDINGS || process.env.FETCH_K_EMBEDDINGS || '12',
+      LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
+      K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
+      
+      // Database Configuration
+      DATABASE_URL: process.env.DATABASE_URL || '',
+      
+      // AI Model Configuration
+      MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-3.5-turbo',
+      IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-4-mini',
+      TEMPRATURE: chatbotData?.aiConfig?.temperature?.toString() || process.env.DEFAULT_TEMPERATURE || process.env.TEMPRATURE || '0.7',
+      
       // Application URLs
       NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'https://chatfactory.ai',
       NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://chatfactory.ai/api',
@@ -238,6 +257,13 @@ export async function POST(request: NextRequest) {
       logoUrl: chatbotConfig.logoUrl ? 'Present' : 'Missing',
       hasFirebaseConfig: !!filteredEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY
     });
+    
+    // Debug: Log Pinecone configuration specifically
+    console.log('🔍 Pinecone Configuration Check:');
+    console.log('PINECONE_API_KEY:', filteredEnvVars.PINECONE_API_KEY ? 'SET ✅' : 'MISSING ❌');
+    console.log('PINECONE_ENVIRONMENT:', filteredEnvVars.PINECONE_ENVIRONMENT ? 'SET ✅' : 'MISSING ❌');
+    console.log('PINECONE_INDEX_NAME:', filteredEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
+    console.log('MINSCORESOURCESTHRESHOLD:', filteredEnvVars.MINSCORESOURCESTHRESHOLD ? 'SET ✅' : 'MISSING ❌');
     
     // Set environment variables on the project with better error handling
     console.log('Setting environment variables on project:', projectName);
