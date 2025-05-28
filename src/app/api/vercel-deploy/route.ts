@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
       // Pinecone Vector Database Configuration
       PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
       PINECONE_ENVIRONMENT: process.env.PINECONE_ENVIRONMENT || '',
-      PINECONE_INDEX_NAME: chatbotData?.pineconeIndexName || process.env.PINECONE_INDEX_NAME || `${chatbotId}-knowledge-base`,
+      PINECONE_INDEX_NAME: chatbotData?.pineconeIndexName || `${chatbotId.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-kb`,
       MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
       
       // Embedding Configuration
