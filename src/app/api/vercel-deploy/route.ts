@@ -223,8 +223,17 @@ export async function POST(request: NextRequest) {
       LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
       K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
       
-      // Database Configuration
+      // Database Configuration  
       DATABASE_URL: process.env.DATABASE_URL || '',
+      
+      // Debug: Log what DATABASE_URL we're setting (remove after debugging)
+      DEBUG_DATABASE_URL_CHECK: process.env.DATABASE_URL ? 'DATABASE_URL_SET' : 'DATABASE_URL_MISSING',
+      
+      // Firebase Admin Configuration (Server-side)
+      GOOGLE_APPLICATION_CREDENTIALS: '', // Not needed when using service account key directly
+      FIREBASE_ADMIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || '',
+      FIREBASE_ADMIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+      FIREBASE_ADMIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
       
       // AI Model Configuration
       MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-3.5-turbo',
