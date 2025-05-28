@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, storage } from '@/lib/firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
-import { ref, listAll, getDownloadURL } from 'firebase/storage';
+import { adminDb, adminStorage } from '@/lib/firebase/admin';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -29,10 +27,9 @@ export async function POST(request: NextRequest) {
     // Fetch chatbot data from Firestore to get logo URL and other details
     let chatbotData = null;
     try {
-      const chatbotRef = doc(db, "chatbots", chatbotId);
-      const chatbotSnap = await getDoc(chatbotRef);
+      const chatbotSnap = await adminDb.collection("chatbots").doc(chatbotId).get();
       
-      if (chatbotSnap.exists()) {
+      if (chatbotSnap.exists) {
         chatbotData = chatbotSnap.data();
         console.log('✅ Chatbot data retrieved for deployment');
         console.log('📊 Chatbot data summary:', {
@@ -370,21 +367,25 @@ export async function POST(request: NextRequest) {
 async function findLogoInStorage(userId: string, chatbotId: string): Promise<string | null> {
   try {
     // Check the expected path for chatbot logos
-    const logoFolderRef = ref(storage, `user-${userId}/chatbot-logos/chatbot-${chatbotId}`);
-    console.log(`🔍 Checking Firebase Storage path: user-${userId}/chatbot-logos/chatbot-${chatbotId}`);
+    const bucket = adminStorage.bucket();
+    const folderPath = `user-${userId}/chatbot-logos/chatbot-${chatbotId}/`;
+    console.log(`🔍 Checking Firebase Storage path: ${folderPath}`);
     
-    const listResult = await listAll(logoFolderRef);
+    const [files] = await bucket.getFiles({
+      prefix: folderPath,
+      maxResults: 100
+    });
     
-    if (listResult.items.length === 0) {
+    if (files.length === 0) {
       console.log('📁 No files found in logo folder');
       return null;
     }
     
-    console.log(`📁 Found ${listResult.items.length} files in logo folder`);
+    console.log(`📁 Found ${files.length} files in logo folder`);
     
     // Look for image files (logos typically have these patterns)
-    const logoFile = listResult.items.find(item => {
-      const fileName = item.name.toLowerCase();
+    const logoFile = files.find(file => {
+      const fileName = file.name.toLowerCase();
       return fileName.includes('logo') || 
              fileName.match(/\.(jpg|jpeg|png|gif|svg|webp)$/i);
     });
@@ -397,10 +398,13 @@ async function findLogoInStorage(userId: string, chatbotId: string): Promise<str
     console.log(`🖼️  Found potential logo file: ${logoFile.name}`);
     
     // Get the download URL for the logo
-    const logoUrl = await getDownloadURL(logoFile);
-    console.log(`✅ Successfully retrieved logo URL from storage: ${logoUrl}`);
+    const [signedUrl] = await logoFile.getSignedUrl({
+      action: 'read',
+      expires: '03-17-2030' // Long expiration for public logo files
+    });
+    console.log(`✅ Successfully retrieved logo URL from storage: ${signedUrl}`);
     
-    return logoUrl;
+    return signedUrl;
     
   } catch (error) {
     console.error('❌ Error searching for logo in Firebase Storage:', error);
