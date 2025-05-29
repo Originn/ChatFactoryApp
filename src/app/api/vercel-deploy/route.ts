@@ -11,7 +11,8 @@ const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, chatbotName, userId, vectorstore } = body;
+    const { chatbotId, chatbotName, userId, vectorstore, target } = body;
+    const targetEnv = target || 'production';
 
     console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore });
 
@@ -381,7 +382,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           name: projectName,
           project: projectName,
-          target: 'production',
+          target: targetEnv,
           framework: 'nextjs',
           gitSource: {
             type: 'github',
@@ -394,7 +395,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       console.log('Using file-based deployment (no repoId available)');
-      deploymentResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName);
+      deploymentResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, targetEnv);
     }
 
     // Handle deployment response
@@ -405,7 +406,7 @@ export async function POST(request: NextRequest) {
       // If GitHub integration failed, fall back to file-based deployment
       if (repoId) {
         console.log('Falling back to file-based deployment');
-        const fallbackResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName);
+        const fallbackResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, targetEnv);
         
         if (!fallbackResponse.ok) {
           const fallbackError = await fallbackResponse.json();
@@ -677,7 +678,7 @@ async function verifyEnvironmentVariables(
 }
 
 // Helper function for file-based deployment
-async function createFileBasedDeployment(token: string, projectName: string) {
+async function createFileBasedDeployment(token: string, projectName: string, target: string = 'production') {
   return fetch('https://api.vercel.com/v13/deployments', {
     method: 'POST',
     headers: {
@@ -687,7 +688,7 @@ async function createFileBasedDeployment(token: string, projectName: string) {
     body: JSON.stringify({
       name: projectName,
       project: projectName,
-      target: 'production',
+      target,
       files: []
       // Environment variables are set on the project, not in deployment
     })
