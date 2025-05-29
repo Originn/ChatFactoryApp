@@ -10,9 +10,10 @@ import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
 import { Info } from "lucide-react";
+import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 
 export default function NewChatbotPage() {
   const router = useRouter();
@@ -49,6 +50,11 @@ export default function NewChatbotPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+
+  // Preview deployment
+  const [newChatbotId, setNewChatbotId] = useState<string | null>(null);
+  const [showVectorDialog, setShowVectorDialog] = useState(false);
+  const [isDeployingPreview, setIsDeployingPreview] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -99,6 +105,75 @@ export default function NewChatbotPage() {
     const fileInput = document.getElementById('logoUpload') as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
+    }
+  };
+
+  const deployPreview = async (indexName: string, displayName: string) => {
+    if (!user || !newChatbotId) return;
+
+    setIsDeployingPreview(true);
+    try {
+      const response = await fetch('/api/vercel-deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatbotId: newChatbotId,
+          chatbotName: formData.name.trim(),
+          userId: user.uid,
+          vectorstore: { indexName, displayName },
+          target: 'preview',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to deploy preview');
+      }
+
+      await updateDoc(doc(db, 'chatbots', newChatbotId), {
+        status: 'preview',
+        deployedUrl: data.url,
+        vercelProjectId: data.projectName,
+        vercelDeploymentId: data.deploymentId,
+        vectorstore: {
+          indexName,
+          displayName,
+          provider: 'pinecone',
+          status: 'ready',
+        },
+        updatedAt: serverTimestamp(),
+      });
+
+      router.push(`/dashboard/chatbots/${newChatbotId}`);
+    } catch (err: any) {
+      console.error('Error deploying preview:', err);
+      setError(err.message || 'Failed to deploy preview');
+    } finally {
+      setIsDeployingPreview(false);
+    }
+  };
+
+  const handleConfirmVectorstore = async (displayName: string, indexName: string) => {
+    setShowVectorDialog(false);
+    try {
+      const res = await fetch('/api/vectorstore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          userId: user?.uid,
+          userInputName: displayName,
+        }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        deployPreview(result.indexName, displayName);
+      } else {
+        throw new Error(result.error || 'Failed to create vectorstore');
+      }
+    } catch (err: any) {
+      console.error('Vectorstore creation failed:', err);
+      setError(err.message || 'Failed to create vectorstore');
     }
   };
 
@@ -200,9 +275,9 @@ export default function NewChatbotPage() {
         console.log('Chatbot created successfully, but without logo due to upload issue');
       }
       
-      // Redirect to the new chatbot's page
-      router.push(`/dashboard/chatbots/${newChatbotRef.id}`);
-    } catch (err: any) {
+      setNewChatbotId(newChatbotRef.id);
+      setShowVectorDialog(true);
+   } catch (err: any) {
       console.error('Error creating chatbot:', err);
       setError(err.message || 'Failed to create chatbot. Please try again.');
     } finally {
@@ -921,6 +996,13 @@ export default function NewChatbotPage() {
           </Card>
         </div>
       </main>
+      <VectorStoreNameDialog
+        isOpen={showVectorDialog}
+        onConfirm={handleConfirmVectorstore}
+        onCancel={() => setShowVectorDialog(false)}
+        userId={user?.uid || ''}
+        isValidating={isDeployingPreview}
+      />
     </div>
   );
 }
