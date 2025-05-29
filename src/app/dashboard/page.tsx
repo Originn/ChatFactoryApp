@@ -413,13 +413,16 @@ export default function DashboardPage() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                chatbot.status === 'active' 
+                                chatbot.status === 'active'
                                   ? 'bg-green-100 text-green-800'
+                                  : chatbot.status === 'preview'
+                                  ? 'bg-blue-100 text-blue-800'
                                   : chatbot.status === 'draft'
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {chatbot.status === 'active' ? 'Active' : 
+                                {chatbot.status === 'active' ? 'Active' :
+                                 chatbot.status === 'preview' ? 'Preview' :
                                  chatbot.status === 'draft' ? 'Draft' : chatbot.status}
                               </span>
                             </td>
@@ -435,9 +438,6 @@ export default function DashboardPage() {
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <Link href={`/dashboard/chatbots/${chatbot.id}`} className="text-blue-600 hover:text-blue-900 mr-4">
                                 View
-                              </Link>
-                              <Link href={`/dashboard/chatbots/${chatbot.id}/deploy`} className="text-purple-600 hover:text-purple-900 mr-4">
-                                Deploy
                               </Link>
                               <Link href={`/dashboard/chatbots/${chatbot.id}/edit`} className="text-blue-600 hover:text-blue-900">
                                 Edit
