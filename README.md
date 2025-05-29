@@ -238,15 +238,16 @@ Chat Factory is a SaaS platform that transforms documentation into intelligent A
 1. Users create a new chatbot
 2. Select which document collections to include
 3. Configure appearance and behavior
-4. Get a deployment link or embed code
-5. Monitor performance in the analytics dashboard
+4. A preview deployment is automatically created
+5. Use the **Go Live** button to promote it to production
+6. Monitor performance in the analytics dashboard
 
 ### User Journey
 
 1. Users sign up for a free or paid account
 2. Upload documentation
-3. Create and customize chatbots
-4. Deploy chatbots to their websites/applications
+3. Create and customize chatbots (automatically deployed to a preview URL)
+4. Promote the chatbot to production using **Go Live**
 5. Monitor and optimize based on analytics
 
 ## Development Roadmap

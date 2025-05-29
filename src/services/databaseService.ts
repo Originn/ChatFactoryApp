@@ -17,6 +17,7 @@ interface DeploymentInfo {
   deploymentUrl?: string;
   customDomain?: string | null; // Allow null explicitly
   status: 'pending' | 'deploying' | 'deployed' | 'failed';
+  target?: 'production' | 'preview';
 }
 
 class DatabaseService {
@@ -62,13 +63,17 @@ class DatabaseService {
       console.log('📦 Original deployment info:', deploymentInfo);
       console.log('🧹 Cleaned deployment info:', cleanDeploymentInfo);
       
+      const chatbotStatus = deploymentInfo.status === 'deployed'
+        ? (deploymentInfo.target === 'preview' ? 'preview' : 'active')
+        : 'draft';
+
       const updateData: any = {
         deployment: {
           ...cleanDeploymentInfo,
           deployedAt: deploymentInfo.status === 'deployed' ? FieldValue.serverTimestamp() : null,
           lastDeploymentAt: FieldValue.serverTimestamp(),
         },
-        status: deploymentInfo.status === 'deployed' ? 'active' : 'draft',
+        status: chatbotStatus,
         updatedAt: FieldValue.serverTimestamp(),
       };
       
