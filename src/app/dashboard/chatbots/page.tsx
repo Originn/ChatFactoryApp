@@ -302,7 +302,7 @@ export default function ChatbotsPage() {
                               <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                 chatbot.status === 'active'
                                   ? 'bg-green-100 text-green-800'
-                                  : chatbot.status === 'staged'
+                                  : chatbot.status === 'staged-production'
                                   ? 'bg-purple-100 text-purple-800'
                                   : chatbot.status === 'draft'
                                   ? 'bg-yellow-100 text-yellow-800'
@@ -310,8 +310,8 @@ export default function ChatbotsPage() {
                               }`}>
                                 {chatbot.status === 'active'
                                   ? 'Active'
-                                  : chatbot.status === 'staged'
-                                  ? 'Staged'
+                                  : chatbot.status === 'staged-production'
+                                  ? 'Staged (Prod)'
                                   : chatbot.status === 'draft'
                                   ? 'Draft'
                                   : chatbot.status}

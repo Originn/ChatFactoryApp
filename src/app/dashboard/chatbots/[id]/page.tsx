@@ -471,7 +471,7 @@ export default function ChatbotDetailPage() {
       // Update the chatbot directly in Firestore with deployment info
       const chatbotRef = doc(db, "chatbots", chatbot.id);
       await updateDoc(chatbotRef, {
-        status: target === 'preview' ? 'staged' : 'active',
+        status: target === 'preview' ? 'staged-production' : 'active',
         deployedUrl: data.url,
         vercelProjectId: data.projectName,
         vercelDeploymentId: data.deploymentId,
@@ -489,7 +489,7 @@ export default function ChatbotDetailPage() {
       // Update local state
       setChatbot({
         ...chatbot,
-        status: target === 'preview' ? 'staged' : 'active',
+        status: target === 'preview' ? 'staged-production' : 'active',
         deployedUrl: data.url,
       });
       
@@ -629,14 +629,14 @@ export default function ChatbotDetailPage() {
                   </Button>
                   <Button
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={chatbot.status === 'staged' ? handleGoLive : handleDeployChatbot}
+                    onClick={chatbot.status === 'staged-production' ? handleGoLive : handleDeployChatbot}
                     disabled={isDeploying || chatbot.status === 'active'}
                   >
                     {isDeploying
                       ? 'Deploying...'
                       : chatbot.status === 'active'
                         ? 'Deployed'
-                        : chatbot.status === 'staged'
+                        : chatbot.status === 'staged-production'
                           ? 'Go Live'
                           : 'Deploy Chatbot'}
                   </Button>
@@ -715,7 +715,7 @@ export default function ChatbotDetailPage() {
                           <span className={`h-3 w-3 rounded-full ${
                             chatbot.status === 'active'
                               ? 'bg-green-500'
-                              : chatbot.status === 'staged'
+                              : chatbot.status === 'staged-production'
                               ? 'bg-purple-500'
                               : chatbot.status === 'draft'
                               ? 'bg-yellow-500'

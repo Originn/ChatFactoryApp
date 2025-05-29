@@ -199,14 +199,14 @@ export default function NewChatbotPage() {
             chatbotId: newChatbotRef.id,
             chatbotName: formData.name.trim(),
             userId: user.uid,
-            target: 'preview'
+            target: 'production'
           })
         });
         const deployData = await deployRes.json();
         if (deployRes.ok) {
           deployedUrl = deployData.url;
           await updateDoc(newChatbotRef, {
-            status: 'staged',
+            status: 'staged-production',
             deployedUrl: deployData.url,
             vercelProjectId: deployData.projectName,
             vercelDeploymentId: deployData.deploymentId,
