@@ -10,6 +10,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
+import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialog';
+import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSelectionDialog';
+import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 
 // Define the Chatbot type
 interface Chatbot {
@@ -61,9 +64,22 @@ export default function ChatbotDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [hasVectorstore, setHasVectorstore] = useState(false);
+  const [vectorstoreDocCount, setVectorstoreDocCount] = useState(0);
+  const [vectorStoreName, setVectorStoreName] = useState<string>('');
+  const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
+  
+  // Vector store deployment dialogs
+  const [showVectorStoreSelection, setShowVectorStoreSelection] = useState(false);
+  const [showVectorStoreNaming, setShowVectorStoreNaming] = useState(false);
+  const [selectedVectorStore, setSelectedVectorStore] = useState<{
+    indexName: string;
+    displayName: string;
+  } | null>(null);
   
   // Check for chatbot creation success message
   useEffect(() => {
@@ -79,6 +95,85 @@ export default function ChatbotDetailPage() {
       }
     }
   }, []);
+  
+  // Check if vectorstore exists for this chatbot
+  const checkVectorstoreExists = async (chatbotId: string): Promise<boolean> => {
+    try {
+      console.log('🔍 Checking if vectorstore exists for chatbot:', chatbotId);
+      
+      // First check if chatbot has an assigned vector store
+      const chatbotRef = doc(db, "chatbots", chatbotId);
+      const chatbotSnap = await getDoc(chatbotRef);
+      
+      if (chatbotSnap.exists()) {
+        const chatbotData = chatbotSnap.data();
+        const assignedIndexName = chatbotData.vectorstore?.indexName;
+        const vectorstoreDisplayName = chatbotData.vectorstore?.displayName || 'Knowledge Base';
+        
+        if (assignedIndexName) {
+          console.log('📋 Found assigned index name:', assignedIndexName);
+          setVectorStoreIndexName(assignedIndexName);
+          setVectorStoreName(vectorstoreDisplayName);
+          
+          // Check if the assigned index still exists
+          const response = await fetch('/api/vectorstore', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'exists',
+              indexName: assignedIndexName,
+            }),
+          });
+          
+          const result = await response.json();
+          console.log('📊 Vectorstore existence check result:', result);
+          
+          if (result.exists) {
+            setHasVectorstore(true);
+            console.log('✅ Vectorstore exists, checking stats...');
+            
+            // Get stats for the specific index
+            try {
+              const statsResponse = await fetch('/api/vectorstore', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  action: 'stats',
+                  indexName: assignedIndexName,
+                }),
+              });
+              
+              const statsResult = await statsResponse.json();
+              console.log('📈 Vectorstore stats:', statsResult);
+              if (statsResult.success && statsResult.stats) {
+                const docCount = statsResult.stats.totalVectorCount || 0;
+                setVectorstoreDocCount(docCount);
+                console.log('📋 Vector count:', docCount);
+              }
+            } catch (statsError) {
+              console.warn('⚠️ Could not get vectorstore stats:', statsError);
+            }
+            return true;
+          }
+        }
+      }
+      
+      // Fallback: No assigned index found or index doesn't exist
+      setHasVectorstore(false);
+      setVectorstoreDocCount(0);
+      console.log('❌ No vectorstore found');
+      return false;
+    } catch (error) {
+      console.error('❌ Error checking vectorstore existence:', error);
+      setHasVectorstore(false);
+      setVectorstoreDocCount(0);
+      return false;
+    }
+  };
   
   // Fetch chatbot data
   useEffect(() => {
@@ -106,6 +201,16 @@ export default function ChatbotDetailPage() {
             id: chatbotSnap.id,
             ...chatbotData
           });
+          
+          // Check if vectorstore exists
+          const vectorstoreExists = await checkVectorstoreExists(chatbotSnap.id);
+          
+          // Fallback: also check if documents exist in the chatbot data
+          if (!vectorstoreExists && chatbotData.documents && chatbotData.documents.length > 0) {
+            console.log('🔄 Fallback: Found documents in chatbot data, assuming vectorstore exists');
+            setHasVectorstore(true);
+            setVectorstoreDocCount(chatbotData.documents.length);
+          }
         } else {
           setError("Chatbot not found");
         }
@@ -121,14 +226,20 @@ export default function ChatbotDetailPage() {
   }, [chatbotId, user]);
   
   // Handle delete chatbot
-  const handleDeleteChatbot = async () => {
+  const handleDeleteChatbot = () => {
+    console.log('🗑️ Delete button clicked');
+    console.log('📊 Chatbot data:', chatbot);
+    console.log('📦 Has vectorstore:', hasVectorstore);
+    console.log('📋 Vector count:', vectorstoreDocCount);
+    console.log('📄 Documents in chatbot:', chatbot?.documents?.length || 0);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteChatbot = async (deleteVectorstore: boolean) => {
     if (!chatbot) return;
     
-    if (!window.confirm("Are you sure you want to delete this chatbot? This action cannot be undone.")) {
-      return;
-    }
-    
     setIsDeleting(true);
+    setShowDeleteDialog(false);
     
     try {
       // Get Vercel project info and user ID from the chatbot data
@@ -137,10 +248,57 @@ export default function ChatbotDetailPage() {
         chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
       const chatbotUserId = chatbot.userId;
       
+      // Delete vector store if requested
+      if (deleteVectorstore && chatbot) {
+        try {
+          console.log('🗑️ Deleting vector store for chatbot:', chatbot.id);
+          
+          // Get the actual index name from chatbot data
+          const chatbotRef = doc(db, "chatbots", chatbot.id);
+          const chatbotSnap = await getDoc(chatbotRef);
+          let indexNameToDelete = null;
+          
+          if (chatbotSnap.exists()) {
+            const chatbotData = chatbotSnap.data();
+            indexNameToDelete = chatbotData.vectorstore?.indexName;
+          }
+          
+          if (indexNameToDelete) {
+            console.log('🎯 Found index name to delete:', indexNameToDelete);
+            
+            const vectorstoreResponse = await fetch('/api/vectorstore', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'delete',
+                indexName: indexNameToDelete,
+              }),
+            });
+            
+            const vectorstoreResult = await vectorstoreResponse.json();
+            
+            if (vectorstoreResult.success) {
+              console.log('✅ Successfully deleted vector store:', vectorstoreResult);
+            } else {
+              console.warn('⚠️ Failed to delete vector store:', vectorstoreResult.error);
+            }
+          } else {
+            console.log('ℹ️ No index name found in chatbot data');
+          }
+        } catch (vectorstoreError) {
+          console.error('❌ Error deleting vector store:', vectorstoreError);
+          // Continue with other deletions even if vector store deletion fails
+        }
+      } else {
+        console.log('ℹ️ Skipping vector store deletion (user choice or no chatbot data)');
+      }
+      
       // Delete from Vercel if we have project info
       if (vercelProjectId || vercelProjectName) {
         try {
-          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
+          console.log('🚀 Deleting from Vercel:', vercelProjectId || vercelProjectName);
           const vercelDeleteResponse = await fetch('/api/vercel-delete', {
             method: 'DELETE',
             headers: {
@@ -171,7 +329,7 @@ export default function ChatbotDetailPage() {
       // Delete entire chatbot folder from Firebase Storage (includes logos and any other files)
       if (chatbotUserId) {
         try {
-          console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', chatbot.id);
+          console.log('🗂️ Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', chatbot.id);
           await deleteChatbotFolder(chatbotUserId, chatbot.id);
           console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
         } catch (storageError) {
@@ -185,25 +343,90 @@ export default function ChatbotDetailPage() {
       // Delete from Firestore
       await deleteDoc(doc(db, "chatbots", chatbot.id));
       
-      console.log('✅ Chatbot deleted successfully from Vercel, Storage, and Firestore');
+      console.log('✅ Chatbot deleted successfully from all services');
       
       // Redirect to chatbots list
       router.push("/dashboard/chatbots");
     } catch (err: any) {
-      console.error("Error deleting chatbot:", err);
+      console.error("❌ Error deleting chatbot:", err);
       setError(`Failed to delete chatbot: ${err.message}`);
       setIsDeleting(false);
     }
   };
 
-  // Handle deploy chatbot - Using the Vercel API
+  // Handle deploy chatbot - Show vector store selection first
   const handleDeployChatbot = async () => {
+    if (!chatbot || !user) return;
+    
+    // Check if chatbot already has a vector store
+    if (hasVectorstore && vectorStoreIndexName) {
+      // Already has vector store, deploy directly
+      deployWithVectorStore(vectorStoreIndexName, vectorStoreName);
+    } else {
+      // No vector store yet, show selection dialog
+      setShowVectorStoreSelection(true);
+    }
+  };
+
+  // Handle selecting existing vector store
+  const handleSelectExistingVectorStore = (indexName: string, displayName: string) => {
+    setSelectedVectorStore({ indexName, displayName });
+    setShowVectorStoreSelection(false);
+    deployWithVectorStore(indexName, displayName);
+  };
+
+  // Handle creating new vector store
+  const handleCreateNewVectorStore = () => {
+    setShowVectorStoreSelection(false);
+    setShowVectorStoreNaming(true);
+  };
+
+  // Handle confirming new vector store name
+  const handleConfirmVectorStoreName = async (displayName: string, indexName: string) => {
+    setShowVectorStoreNaming(false);
+    setIsDeploying(true);
+    
+    try {
+      console.log('🎯 Creating new vector store:', displayName, '->', indexName);
+      
+      // Create the vector store first
+      const vectorStoreResponse = await fetch('/api/vectorstore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'create',
+          userId: user.uid,
+          userInputName: displayName,
+        }),
+      });
+
+      const vectorStoreResult = await vectorStoreResponse.json();
+      
+      if (vectorStoreResult.success) {
+        console.log('✅ Vector store created successfully:', vectorStoreResult);
+        deployWithVectorStore(vectorStoreResult.indexName, displayName);
+      } else {
+        throw new Error(vectorStoreResult.error || 'Failed to create vector store');
+      }
+    } catch (error) {
+      console.error('❌ Error creating vector store:', error);
+      setDeploymentError(`Failed to create vector store: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsDeploying(false);
+    }
+  };
+
+  // Deploy with specified vector store
+  const deployWithVectorStore = async (indexName: string, displayName: string) => {
     if (!chatbot || !user) return;
     
     setIsDeploying(true);
     setDeploymentError(null);
     
     try {
+      console.log('🚀 Deploying with vector store:', displayName, '(' + indexName + ')');
+      
       // Call our API route that handles Vercel deployment
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
@@ -213,7 +436,11 @@ export default function ChatbotDetailPage() {
         body: JSON.stringify({
           chatbotId: chatbot.id,
           chatbotName: chatbot.name,
-          userId: user.uid
+          userId: user.uid,
+          vectorstore: {
+            indexName: indexName,
+            displayName: displayName
+          }
         }),
       });
       
@@ -231,6 +458,13 @@ export default function ChatbotDetailPage() {
         vercelProjectId: data.projectName,
         vercelDeploymentId: data.deploymentId,
         deploymentTimestamp: serverTimestamp(),
+        // Add vector store info
+        vectorstore: {
+          indexName: indexName,
+          displayName: displayName,
+          provider: 'pinecone',
+          status: 'ready'
+        },
         updatedAt: serverTimestamp()
       });
       
@@ -241,12 +475,17 @@ export default function ChatbotDetailPage() {
         deployedUrl: data.url,
       });
       
-      setSuccessMessage(`Chatbot "${chatbot.name}" was deployed successfully! It's now available at: ${data.url}`);
+      // Update vector store state
+      setHasVectorstore(true);
+      setVectorStoreName(displayName);
+      setVectorStoreIndexName(indexName);
       
-      // Refresh the page after 2 seconds to show updated status
+      setSuccessMessage(`Chatbot "${chatbot.name}" was deployed successfully with "${displayName}" knowledge base! It's now available at: ${data.url}`);
+      
+      // Refresh the page after 3 seconds to show updated status
       setTimeout(() => {
         window.location.reload();
-      }, 2000);
+      }, 3000);
       
     } catch (err: any) {
       console.error("Error deploying chatbot:", err);
@@ -746,6 +985,37 @@ export default function ChatbotDetailPage() {
           )}
         </div>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && chatbot && (
+        <ChatbotDeletionDialog
+          chatbotName={chatbot.name}
+          hasVectorstore={hasVectorstore}
+          vectorStoreName={vectorStoreName}
+          documentsCount={vectorstoreDocCount}
+          onConfirm={confirmDeleteChatbot}
+          onCancel={() => setShowDeleteDialog(false)}
+          isDeleting={isDeleting}
+        />
+      )}
+
+      {/* Vector Store Selection Dialog */}
+      <VectorStoreSelectionDialog
+        isOpen={showVectorStoreSelection}
+        onSelectExisting={handleSelectExistingVectorStore}
+        onCreateNew={handleCreateNewVectorStore}
+        onCancel={() => setShowVectorStoreSelection(false)}
+        userId={user?.uid || ''}
+      />
+
+      {/* Vector Store Naming Dialog */}
+      <VectorStoreNameDialog
+        isOpen={showVectorStoreNaming}
+        onConfirm={handleConfirmVectorStoreName}
+        onCancel={() => setShowVectorStoreNaming(false)}
+        userId={user?.uid || ''}
+        isValidating={isDeploying}
+      />
     </div>
   );
 }

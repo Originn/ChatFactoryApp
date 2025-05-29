@@ -19,6 +19,7 @@ import { DeploymentRecord, QueryUsageRecord, PLAN_LIMITS } from '@/types/deploym
 import { UpdatedUserProfile } from '@/types/deployment';
 import { UserService } from './userService';
 import { ChatbotConfig } from '@/types/chatbot';
+import { PineconeService } from './pineconeService';
 
 interface DeploymentOptions {
   chatbot: ChatbotConfig;
@@ -136,6 +137,26 @@ class DeploymentService {
         
         environmentVariables: this.prepareEnvironmentVariables(chatbot, user)
       };
+
+      // Create Pinecone index for the chatbot
+      console.log('🗄️ Creating Pinecone vectorstore for chatbot:', chatbot.id);
+      
+      try {
+        // Use backward compatibility method that generates index name from chatbot ID
+        const pineconeResult = await PineconeService.createIndexFromChatbotId(chatbot.id, chatbot.userId || 'unknown');
+        
+        if (!pineconeResult.success) {
+          console.error('❌ Failed to create Pinecone index:', pineconeResult.error);
+          console.error('❌ This will affect document search functionality for the deployed chatbot');
+          // Continue deployment but the chatbot won't have vector search capability
+        } else {
+          console.log('✅ Successfully created Pinecone index:', pineconeResult.indexName);
+        }
+      } catch (pineconeError) {
+        console.error('❌ Pinecone service error during deployment:', pineconeError);
+        console.error('❌ Chatbot will be deployed without vector search functionality');
+        // Continue deployment - the chatbot can still work without vector search
+      }
 
       // Save deployment record
       const deploymentRef = await addDoc(

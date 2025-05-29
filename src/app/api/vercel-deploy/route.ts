@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminStorage } from '@/lib/firebase/admin';
+import { PineconeService } from '@/services/pineconeService';
+import { DatabaseService } from '@/services/databaseService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -9,9 +11,9 @@ const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, chatbotName, userId } = body;
+    const { chatbotId, chatbotName, userId, vectorstore } = body;
 
-    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId });
+    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore });
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
@@ -177,6 +179,68 @@ export async function POST(request: NextRequest) {
       logoUrlLength: chatbotConfig.logoUrl?.length || 0
     });
 
+    // Handle Pinecone vectorstore for the chatbot
+    let vectorstoreIndexName = '';
+    
+    if (vectorstore && vectorstore.indexName) {
+      // Use provided vectorstore
+      console.log('🎯 Using provided vectorstore:', vectorstore.displayName, '(' + vectorstore.indexName + ')');
+      vectorstoreIndexName = vectorstore.indexName;
+      
+      // Verify the vectorstore exists
+      try {
+        const exists = await PineconeService.indexExists(vectorstore.indexName);
+        if (exists) {
+          console.log('✅ Vectorstore exists and is ready');
+          
+          // Update chatbot document with vectorstore info
+          await DatabaseService.updateChatbotVectorstore(chatbotId, {
+            provider: 'pinecone',
+            indexName: vectorstore.indexName,
+            displayName: vectorstore.displayName,
+            dimension: 1536,
+            metric: 'cosine',
+            region: 'us-east-1',
+            status: 'ready',
+          });
+        } else {
+          console.error('❌ Provided vectorstore does not exist:', vectorstore.indexName);
+          throw new Error(`Vectorstore "${vectorstore.displayName}" does not exist`);
+        }
+      } catch (vectorstoreError) {
+        console.error('❌ Error verifying vectorstore:', vectorstoreError);
+        throw new Error(`Failed to verify vectorstore: ${vectorstoreError}`);
+      }
+    } else {
+      // Create new vectorstore (backward compatibility)
+      console.log('🗄️ Creating new Pinecone vectorstore for chatbot:', chatbotId);
+      
+      try {
+        const pineconeResult = await PineconeService.createIndexFromChatbotId(chatbotId, userId || chatbotData?.userId || 'unknown');
+        
+        if (!pineconeResult.success) {
+          console.error('❌ Failed to create Pinecone index:', pineconeResult.error);
+          throw new Error(`Failed to create vectorstore: ${pineconeResult.error}`);
+        } else {
+          console.log('✅ Successfully created Pinecone index:', pineconeResult.indexName);
+          vectorstoreIndexName = pineconeResult.indexName;
+          
+          // Update chatbot document with vectorstore info
+          await DatabaseService.updateChatbotVectorstore(chatbotId, {
+            provider: 'pinecone',
+            indexName: pineconeResult.indexName,
+            dimension: 1536,
+            metric: 'cosine',
+            region: 'us-east-1',
+            status: 'ready',
+          });
+        }
+      } catch (pineconeError) {
+        console.error('❌ Pinecone service error during deployment:', pineconeError);
+        throw new Error(`Vectorstore creation failed: ${pineconeError}`);
+      }
+    }
+
     // Set environment variables on the project
     const envVars = {
       // Chatbot-specific configuration
@@ -214,8 +278,8 @@ export async function POST(request: NextRequest) {
       
       // Pinecone Vector Database Configuration
       PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
-      PINECONE_ENVIRONMENT: process.env.PINECONE_ENVIRONMENT || '',
-      PINECONE_INDEX_NAME: chatbotData?.pineconeIndexName || `${chatbotId.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-kb`,
+      PINECONE_ENVIRONMENT: 'us-east-1', // Use us-east-1 for free plan compatibility
+      PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
       MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
       
       // Embedding Configuration
@@ -362,6 +426,42 @@ export async function POST(request: NextRequest) {
     const deploymentData = await deploymentResponse.json();
     console.log('✅ Deployment created successfully:', deploymentData.id);
     console.log('🔗 Deployment URL:', deploymentData.url);
+    
+    // Update database with deployment information
+    try {
+      // Get userId - try from request body first, then from chatbot data
+      const userIdForUpdate = userId || chatbotData?.userId;
+      
+      if (userIdForUpdate) {
+        // Update user deployment count
+        console.log('📊 Updating user deployment count for user:', userIdForUpdate);
+        await DatabaseService.updateUserDeploymentCount(userIdForUpdate);
+      } else {
+        console.warn('⚠️ No userId available for updating deployment count');
+      }
+      
+      // Update chatbot with deployment info
+      console.log('📝 Updating chatbot deployment info...');
+      const deploymentUrl = deploymentData.url ? 
+        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+        `https://${projectName}.vercel.app`;
+        
+      const deploymentInfo: any = {
+        vercelProjectId: projectName,
+        deploymentUrl,
+        status: 'deployed' as const,
+      };
+      
+      // Only add customDomain if it exists
+      // Don't add undefined values to avoid Firestore errors
+      
+      await DatabaseService.updateChatbotDeployment(chatbotId, deploymentInfo);
+      
+      console.log('✅ Database updates completed successfully');
+    } catch (dbError) {
+      console.error('❌ Failed to update database after deployment:', dbError);
+      // Don't fail the entire deployment for database update issues
+    }
     
     return createSuccessResponse(deploymentData, projectName, chatbotConfig);
   } catch (error: any) {

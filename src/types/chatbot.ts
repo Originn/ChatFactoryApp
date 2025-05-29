@@ -32,6 +32,27 @@ export interface ChatbotConfig {
     successRate: number;
     lastUpdated: Timestamp;
   };
+  // Vectorstore configuration
+  vectorstore?: {
+    provider: 'pinecone';
+    indexName: string;
+    dimension: number;
+    metric: 'cosine' | 'euclidean' | 'dotproduct';
+    region: string;
+    createdAt: Timestamp;
+    status: 'creating' | 'ready' | 'failed';
+    documentsCount: number;
+    lastDocumentUpload?: Timestamp;
+  };
+  // Deployment information
+  deployment?: {
+    vercelProjectId?: string;
+    deploymentUrl?: string;
+    customDomain?: string;
+    status: 'pending' | 'deploying' | 'deployed' | 'failed';
+    deployedAt?: Timestamp;
+    lastDeploymentAt?: Timestamp;
+  };
   // Authentication settings (when requireAuth is true)
   authConfig?: {
     allowSignup: boolean;
