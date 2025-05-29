@@ -439,9 +439,6 @@ export default function DashboardPage() {
                               <Link href={`/dashboard/chatbots/${chatbot.id}`} className="text-blue-600 hover:text-blue-900 mr-4">
                                 View
                               </Link>
-                              <Link href={`/dashboard/chatbots/${chatbot.id}/deploy`} className="text-purple-600 hover:text-purple-900 mr-4">
-                                Deploy
-                              </Link>
                               <Link href={`/dashboard/chatbots/${chatbot.id}/edit`} className="text-blue-600 hover:text-blue-900">
                                 Edit
                               </Link>
