@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
         
-        const sanitizedName = PineconeService.sanitizeIndexName(userInputName, userId);
+        const sanitizedName = await PineconeService.sanitizeIndexName(userInputName, userId);
         const isAvailable = await PineconeService.isIndexNameAvailable(sanitizedName);
         
         if (!isAvailable) {
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
         
-        const validatedName = PineconeService.sanitizeIndexName(userInputName, userId);
+        const validatedName = await PineconeService.sanitizeIndexName(userInputName, userId);
         const nameAvailable = await PineconeService.isIndexNameAvailable(validatedName);
         
         return NextResponse.json({
