@@ -72,6 +72,8 @@ export default function ChatbotDetailPage() {
   const [vectorstoreDocCount, setVectorstoreDocCount] = useState(0);
   const [vectorStoreName, setVectorStoreName] = useState<string>('');
   const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
+
+  const [previewFullScreen, setPreviewFullScreen] = useState(false);
   
   // Vector store deployment dialogs
   const [showVectorStoreSelection, setShowVectorStoreSelection] = useState(false);
@@ -361,7 +363,7 @@ export default function ChatbotDetailPage() {
     // Check if chatbot already has a vector store
     if (hasVectorstore && vectorStoreIndexName) {
       // Already has vector store, deploy directly
-      deployWithVectorStore(vectorStoreIndexName, vectorStoreName);
+      deployWithVectorStore(vectorStoreIndexName, vectorStoreName, 'preview');
     } else {
       // No vector store yet, show selection dialog
       setShowVectorStoreSelection(true);
@@ -372,13 +374,24 @@ export default function ChatbotDetailPage() {
   const handleSelectExistingVectorStore = (indexName: string, displayName: string) => {
     setSelectedVectorStore({ indexName, displayName });
     setShowVectorStoreSelection(false);
-    deployWithVectorStore(indexName, displayName);
+    deployWithVectorStore(indexName, displayName, 'preview');
   };
 
   // Handle creating new vector store
   const handleCreateNewVectorStore = () => {
     setShowVectorStoreSelection(false);
     setShowVectorStoreNaming(true);
+  };
+
+  // Handle go live - deploy to production
+  const handleGoLive = async () => {
+    if (!chatbot || !user) return;
+
+    if (hasVectorstore && vectorStoreIndexName) {
+      deployWithVectorStore(vectorStoreIndexName, vectorStoreName, 'production');
+    } else {
+      setShowVectorStoreSelection(true);
+    }
   };
 
   // Handle confirming new vector store name
@@ -406,7 +419,7 @@ export default function ChatbotDetailPage() {
       
       if (vectorStoreResult.success) {
         console.log('✅ Vector store created successfully:', vectorStoreResult);
-        deployWithVectorStore(vectorStoreResult.indexName, displayName);
+        deployWithVectorStore(vectorStoreResult.indexName, displayName, 'preview');
       } else {
         throw new Error(vectorStoreResult.error || 'Failed to create vector store');
       }
@@ -418,7 +431,11 @@ export default function ChatbotDetailPage() {
   };
 
   // Deploy with specified vector store
-  const deployWithVectorStore = async (indexName: string, displayName: string) => {
+  const deployWithVectorStore = async (
+    indexName: string,
+    displayName: string,
+    target: 'preview' | 'production' = 'production'
+  ) => {
     if (!chatbot || !user) return;
     
     setIsDeploying(true);
@@ -440,7 +457,8 @@ export default function ChatbotDetailPage() {
           vectorstore: {
             indexName: indexName,
             displayName: displayName
-          }
+          },
+          target
         }),
       });
       
@@ -453,7 +471,7 @@ export default function ChatbotDetailPage() {
       // Update the chatbot directly in Firestore with deployment info
       const chatbotRef = doc(db, "chatbots", chatbot.id);
       await updateDoc(chatbotRef, {
-        status: 'active',
+        status: target === 'preview' ? 'staged' : 'active',
         deployedUrl: data.url,
         vercelProjectId: data.projectName,
         vercelDeploymentId: data.deploymentId,
@@ -471,7 +489,7 @@ export default function ChatbotDetailPage() {
       // Update local state
       setChatbot({
         ...chatbot,
-        status: 'active',
+        status: target === 'preview' ? 'staged' : 'active',
         deployedUrl: data.url,
       });
       
@@ -480,7 +498,11 @@ export default function ChatbotDetailPage() {
       setVectorStoreName(displayName);
       setVectorStoreIndexName(indexName);
       
-      setSuccessMessage(`Chatbot "${chatbot.name}" was deployed successfully with "${displayName}" knowledge base! It's now available at: ${data.url}`);
+      setSuccessMessage(
+        target === 'preview'
+          ? `Chatbot "${chatbot.name}" was deployed to preview at: ${data.url}`
+          : `Chatbot "${chatbot.name}" is now live at: ${data.url}`
+      );
       
       // Refresh the page after 3 seconds to show updated status
       setTimeout(() => {
@@ -607,10 +629,16 @@ export default function ChatbotDetailPage() {
                   </Button>
                   <Button
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={handleDeployChatbot}
+                    onClick={chatbot.status === 'staged' ? handleGoLive : handleDeployChatbot}
                     disabled={isDeploying || chatbot.status === 'active'}
                   >
-                    {isDeploying ? 'Deploying...' : chatbot.status === 'active' ? 'Deployed' : 'Deploy Chatbot'}
+                    {isDeploying
+                      ? 'Deploying...'
+                      : chatbot.status === 'active'
+                        ? 'Deployed'
+                        : chatbot.status === 'staged'
+                          ? 'Go Live'
+                          : 'Deploy Chatbot'}
                   </Button>
                 </div>
               </div>
@@ -685,8 +713,13 @@ export default function ChatbotDetailPage() {
                       <CardContent>
                         <div className="flex items-center">
                           <span className={`h-3 w-3 rounded-full ${
-                            chatbot.status === 'active' ? 'bg-green-500' : 
-                            chatbot.status === 'draft' ? 'bg-yellow-500' : 'bg-gray-500'
+                            chatbot.status === 'active'
+                              ? 'bg-green-500'
+                              : chatbot.status === 'staged'
+                              ? 'bg-purple-500'
+                              : chatbot.status === 'draft'
+                              ? 'bg-yellow-500'
+                              : 'bg-gray-500'
                           } mr-2`}></span>
                           <div className="text-xl font-bold capitalize">
                             {chatbot.status}
@@ -738,73 +771,39 @@ export default function ChatbotDetailPage() {
                   {/* Chatbot Preview */}
                   <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-4">Chatbot Preview</h2>
                   <Card className="max-w-md mx-auto">
-                    <CardContent className="p-6">
-                      <div className="border rounded-lg bg-gray-50 p-4 mb-4 h-60 overflow-y-auto">
-                        {/* Simulated chat messages */}
-                        <div className="flex items-start space-x-2 mb-3">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                            {chatbot.logoUrl ? (
-                              <img
-                                src={chatbot.logoUrl}
-                                alt={`${chatbot.name} logo`}
-                                className="h-8 w-8 rounded-full object-cover"
-                              />
-                            ) : (
-                              <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
-                            )}
-                          </div>
-                          <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
-                            <p className="text-sm">
-                              Hello! I'm an AI assistant trained on {chatbot.name} documentation. How can I help you today?
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex justify-end mb-3">
-                          <div 
-                            className="p-2 max-w-xs rounded-lg text-white shadow-sm"
-                            style={{ backgroundColor: chatbot.appearance?.primaryColor || '#3b82f6' }}
+                    <CardContent className="p-0">
+                      {chatbot.deployedUrl ? (
+                        <div className="relative">
+                          <iframe
+                            src={chatbot.deployedUrl.startsWith('http') ? chatbot.deployedUrl : `https://${chatbot.deployedUrl}`}
+                            className="w-full h-96 rounded-md border"
+                          />
+                          <button
+                            onClick={() => setPreviewFullScreen(true)}
+                            className="absolute top-2 right-2 bg-white text-xs px-2 py-1 rounded shadow"
                           >
-                            <p className="text-sm">How do I get started?</p>
-                          </div>
+                            Enlarge
+                          </button>
+                          {previewFullScreen && (
+                            <div className="fixed inset-0 z-50 bg-black bg-opacity-80 flex items-center justify-center">
+                              <div className="relative w-11/12 h-5/6">
+                                <iframe
+                                  src={chatbot.deployedUrl.startsWith('http') ? chatbot.deployedUrl : `https://${chatbot.deployedUrl}`}
+                                  className="w-full h-full rounded-md bg-white"
+                                />
+                                <button
+                                  onClick={() => setPreviewFullScreen(false)}
+                                  className="absolute top-2 right-2 bg-white text-xs px-2 py-1 rounded shadow"
+                                >
+                                  Close
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-start space-x-2">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                            {chatbot.logoUrl ? (
-                              <img
-                                src={chatbot.logoUrl}
-                                alt={`${chatbot.name} logo`}
-                                className="h-8 w-8 rounded-full object-cover"
-                              />
-                            ) : (
-                              <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
-                            )}
-                          </div>
-                          <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
-                            <p className="text-sm">
-                              To get started, you'll need to sign up for an account and complete the onboarding process. 
-                              Would you like me to guide you through the steps?
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type="text" 
-                          className="w-full px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Ask a question..."
-                          disabled
-                        />
-                        <button 
-                          className="absolute right-2 top-2 rounded-full p-1"
-                          style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }}
-                          disabled
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="22" y1="2" x2="11" y2="13"></line>
-                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                          </svg>
-                        </button>
-                      </div>
+                      ) : (
+                        <div className="p-6 text-center text-sm text-gray-500">No deployment yet.</div>
+                      )}
                     </CardContent>
                   </Card>
 

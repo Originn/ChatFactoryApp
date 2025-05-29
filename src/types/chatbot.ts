@@ -10,7 +10,7 @@ export interface ChatbotConfig {
   logoUrl?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  status: 'draft' | 'active' | 'paused' | 'archived';
+  status: 'draft' | 'staged' | 'active' | 'paused' | 'archived';
   documents: string[]; // Array of document IDs
   aiConfig: {
     embeddingModel: string;

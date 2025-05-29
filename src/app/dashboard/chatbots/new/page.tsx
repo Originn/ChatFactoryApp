@@ -10,7 +10,7 @@ import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
 import { Info } from "lucide-react";
 
@@ -189,17 +189,47 @@ export default function NewChatbotPage() {
       
       // Save to Firestore
       await setDoc(newChatbotRef, chatbotData);
-      
+
+      let deployedUrl: string | null = null;
+      try {
+        const deployRes = await fetch('/api/vercel-deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatbotId: newChatbotRef.id,
+            chatbotName: formData.name.trim(),
+            userId: user.uid,
+            target: 'preview'
+          })
+        });
+        const deployData = await deployRes.json();
+        if (deployRes.ok) {
+          deployedUrl = deployData.url;
+          await updateDoc(newChatbotRef, {
+            status: 'staged',
+            deployedUrl: deployData.url,
+            vercelProjectId: deployData.projectName,
+            vercelDeploymentId: deployData.deploymentId,
+            deploymentTimestamp: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          console.error('Deployment error:', deployData.error);
+        }
+      } catch (deployError) {
+        console.error('Deployment error:', deployError);
+      }
+
       // Show success message using local storage (will be displayed on the next page)
       localStorage.setItem('chatbotCreated', 'true');
       localStorage.setItem('chatbotName', formData.name.trim());
-      
+
       // Clear any error from logo upload if chatbot was created successfully
       if (logoUrl === null && logoFile) {
         // Show success but mention logo issue
         console.log('Chatbot created successfully, but without logo due to upload issue');
       }
-      
+
       // Redirect to the new chatbot's page
       router.push(`/dashboard/chatbots/${newChatbotRef.id}`);
     } catch (err: any) {
@@ -863,7 +893,7 @@ export default function NewChatbotPage() {
               className="bg-blue-600 hover:bg-blue-700"
               disabled={loading || !formData.name.trim()}
             >
-              {loading ? 'Creating...' : 'Create Chatbot'}
+              {loading ? 'Deploying...' : 'Deploy Preview'}
             </Button>
           </CardFooter>
         </Card>
