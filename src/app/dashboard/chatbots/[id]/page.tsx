@@ -495,52 +495,6 @@ export default function ChatbotDetailPage() {
     }
   };
 
-  // Promote preview to production
-  const handleGoLive = async () => {
-    if (!chatbot || !user) return;
-
-    setIsDeploying(true);
-    setDeploymentError(null);
-
-    try {
-      const response = await fetch('/api/vercel-deploy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatbotId: chatbot.id,
-          chatbotName: chatbot.name,
-          userId: user.uid,
-          vectorstore: {
-            indexName: chatbot.vectorstore?.indexName || vectorStoreIndexName,
-            displayName: chatbot.vectorstore?.displayName || vectorStoreName,
-          },
-          target: 'production',
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to deploy chatbot');
-      }
-
-      await updateDoc(doc(db, 'chatbots', chatbot.id), {
-        status: 'active',
-        deployedUrl: data.url,
-        vercelProjectId: data.projectName,
-        vercelDeploymentId: data.deploymentId,
-        updatedAt: serverTimestamp(),
-      });
-
-      setChatbot({ ...chatbot, status: 'active', deployedUrl: data.url });
-      setSuccessMessage(`Chatbot "${chatbot.name}" is now live at: ${data.url}`);
-    } catch (err: any) {
-      console.error('Error going live:', err);
-      setDeploymentError(err.message || 'Failed to go live');
-    } finally {
-      setIsDeploying(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Dashboard Header */}
@@ -650,13 +604,6 @@ export default function ChatbotDetailPage() {
                     <Link href={`/dashboard/chatbots/${chatbotId}/documents`}>
                       Manage Documents
                     </Link>
-                  </Button>
-                  <Button
-                    className="bg-green-600 hover:bg-green-700"
-                    onClick={handleGoLive}
-                    disabled={isDeploying || chatbot.status === 'active'}
-                  >
-                    {isDeploying ? 'Going Live...' : chatbot.status === 'active' ? 'Live' : 'Go Live'}
                   </Button>
                 </div>
               </div>

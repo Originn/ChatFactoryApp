@@ -8,16 +8,23 @@ const REPO_OWNER = 'Originn';
 const REPO_NAME = 'ChatFactoryTemplate';  // Your chatbot template repository
 const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 
+// SIMPLIFIED: Always deploy from main branch to production
+// No staging/preview workflow needed - direct to production deployment
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, chatbotName, userId, vectorstore, target = 'production' } = body;
+    const { chatbotId, chatbotName, userId, vectorstore } = body;
 
-    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore, target });
+    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore });
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
     }
+
+    // SIMPLIFIED DEPLOYMENT STRATEGY:
+    // Always deploy from 'main' branch to 'production' target
+    // No staging/preview complexity - straight to production
 
     const VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
     if (!VERCEL_API_TOKEN) {
@@ -254,7 +261,7 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotConfig.logoUrl,
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
-      NEXT_PUBLIC_CHATBOT_REQUIRE_AUTH: chatbotConfig.requireAuth.toString(),
+      NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
       
       // Firebase client configuration (public)
       NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
@@ -365,13 +372,14 @@ export async function POST(request: NextRequest) {
       console.log('✅ Critical environment variables verified');
     }
 
-    // 3. Create deployment
-    // 3. Create deployment
+    // 3. Create production deployment from main branch
     let deploymentResponse;
     
     // Create deployment payload based on whether we have repoId
     if (repoId) {
       console.log(`Using GitHub integration with repoId: ${repoId}`);
+      console.log('Deployment config: target=production, ref=main');
+      
       deploymentResponse = await fetch('https://api.vercel.com/v13/deployments', {
         method: 'POST',
         headers: {
@@ -381,7 +389,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           name: projectName,
           project: projectName,
-          target,
+          target: 'production',
           framework: 'nextjs',
           gitSource: {
             type: 'github',
@@ -394,7 +402,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       console.log('Using file-based deployment (no repoId available)');
-      deploymentResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, target);
+      deploymentResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, 'production');
     }
 
     // Handle deployment response
@@ -405,7 +413,7 @@ export async function POST(request: NextRequest) {
       // If GitHub integration failed, fall back to file-based deployment
       if (repoId) {
         console.log('Falling back to file-based deployment');
-        const fallbackResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, target);
+        const fallbackResponse = await createFileBasedDeployment(VERCEL_API_TOKEN, projectName, 'production');
         
         if (!fallbackResponse.ok) {
           const fallbackError = await fallbackResponse.json();
@@ -415,7 +423,7 @@ export async function POST(request: NextRequest) {
         }
         
         const deploymentData = await fallbackResponse.json();
-        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true);
+        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false);
       }
       
       return NextResponse.json({ 
@@ -449,8 +457,11 @@ export async function POST(request: NextRequest) {
       const deploymentInfo: any = {
         vercelProjectId: projectName,
         deploymentUrl,
-        status: 'deployed' as const,
-        target,
+        deploymentId: deploymentData.id,
+        status: 'live',
+        target: 'production',
+        gitRef: 'main',
+        isStaged: false,
       };
       
       // Only add customDomain if it exists
@@ -464,7 +475,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the entire deployment for database update issues
     }
     
-    return createSuccessResponse(deploymentData, projectName, chatbotConfig);
+    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false);
   } catch (error: any) {
     console.error('Deployment error:', error);
     return NextResponse.json({ 
@@ -696,7 +707,7 @@ async function createFileBasedDeployment(token: string, projectName: string, tar
 }
 
 // Helper function to create success response
-function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false) {
+function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false) {
   const deploymentUrl = deploymentData.url ? 
     (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
     `https://${projectName}.vercel.app`;
@@ -706,6 +717,8 @@ function createSuccessResponse(deploymentData: any, projectName: string, chatbot
     projectName,
     deploymentId: deploymentData.id,
     url: deploymentUrl,
+    status: 'live', // Always live since we deploy straight to production
+    isStaged: false, // Never staged anymore
     chatbot: {
       id: chatbotConfig.id,
       name: chatbotConfig.name,
@@ -721,7 +734,9 @@ function createSuccessResponse(deploymentData: any, projectName: string, chatbot
     ...(isFallback && { note: 'Deployed using file-based deployment due to GitHub integration issues' }),
     debug: {
       timestamp: new Date().toISOString(),
-      deploymentMethod: isFallback ? 'file-based' : 'git-integration'
+      deploymentMethod: isFallback ? 'file-based' : 'git-integration',
+      target: 'production',
+      gitRef: 'main'
     }
   });
 }
