@@ -1,5 +1,17 @@
 import { Timestamp } from 'firebase/firestore';
 
+// User invitation management
+export interface InvitedUser {
+  id: string;
+  email: string;
+  displayName?: string;
+  invitedAt: Timestamp;
+  invitedBy: string; // userId of the creator
+  status: 'pending' | 'accepted' | 'disabled';
+  lastSignInAt?: Timestamp;
+  firebaseUid?: string; // Firebase user ID once they accept invitation
+}
+
 export interface ChatbotConfig {
   id: string;
   userId: string;
@@ -55,12 +67,17 @@ export interface ChatbotConfig {
   };
   // Authentication settings (when requireAuth is true)
   authConfig?: {
-    allowSignup: boolean;
+    accessMode: 'open' | 'managed'; // open = allow signups, managed = admin invites users
+    allowSignup: boolean; // deprecated but kept for backwards compatibility
     requireEmailVerification: boolean;
     allowGoogleAuth: boolean;
     allowAnonymousUsers: boolean;
     sessionTimeout: number; // in minutes
     maxConcurrentSessions: number;
+    // Firebase tenant management
+    firebaseTenantId?: string; // Firebase tenant ID for this chatbot
+    firebaseProjectId?: string; // Dedicated Firebase project ID (if using separate projects)
+    invitedUsers: InvitedUser[]; // Users invited by the creator
   };
 }
 

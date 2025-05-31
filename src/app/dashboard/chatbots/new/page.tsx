@@ -24,6 +24,8 @@ export default function NewChatbotPage() {
     description: '',
     domain: '',
     requireAuth: false, // New: Authentication requirement
+    accessMode: 'open' as 'open' | 'managed', // Access control mode
+    invitedUsers: [] as string[], // Email addresses to invite
     
     // AI Configuration
     embeddingModel: 'text-embedding-3-small',
@@ -55,6 +57,60 @@ export default function NewChatbotPage() {
   const [newChatbotId, setNewChatbotId] = useState<string | null>(null);
   const [showVectorDialog, setShowVectorDialog] = useState(false);
   const [isDeployingPreview, setIsDeployingPreview] = useState(false);
+
+  // Email management for invited users
+  const [newEmail, setNewEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+
+  // Email validation function
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Add email to invited users
+  const addEmailToInvited = () => {
+    const email = newEmail.trim().toLowerCase();
+    
+    if (!email) {
+      setEmailError('Please enter an email address');
+      return;
+    }
+    
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    
+    if (formData.invitedUsers.includes(email)) {
+      setEmailError('This email is already added');
+      return;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      invitedUsers: [...prev.invitedUsers, email]
+    }));
+    
+    setNewEmail('');
+    setEmailError('');
+  };
+
+  // Remove email from invited users
+  const removeEmailFromInvited = (email: string) => {
+    setFormData(prev => ({
+      ...prev,
+      invitedUsers: prev.invitedUsers.filter(e => e !== email)
+    }));
+  };
+
+  // Handle Enter key in email input
+  const handleEmailKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addEmailToInvited();
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -235,6 +291,16 @@ export default function NewChatbotPage() {
         description: formData.description.trim(),
         domain: formData.domain.trim(),
         requireAuth: formData.requireAuth, // Authentication requirement setting
+        authConfig: formData.requireAuth ? {
+          accessMode: formData.accessMode,
+          allowSignup: formData.accessMode === 'open', // backward compatibility
+          requireEmailVerification: true,
+          allowGoogleAuth: true,
+          allowAnonymousUsers: false,
+          sessionTimeout: 60, // minutes
+          maxConcurrentSessions: 1,
+          invitedUsers: formData.accessMode === 'managed' ? formData.invitedUsers : [], // Use actual invited users
+        } : undefined,
         logoUrl: logoUrl, // Add logo URL to the data
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -494,6 +560,112 @@ export default function NewChatbotPage() {
                         onCheckedChange={(checked) => handleSwitchChange('requireAuth', checked)}
                       />
                     </div>
+                    
+                    {/* Access Control Options - Only shown when authentication is enabled */}
+                    {formData.requireAuth && (
+                      <div className="space-y-4 pl-4 border-l-2 border-blue-200">
+                        <h4 className="text-sm font-medium text-gray-900">Access Control</h4>
+                        
+                        <div className="space-y-3">
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="accessMode"
+                              value="open"
+                              checked={formData.accessMode === 'open'}
+                              onChange={(e) => setFormData(prev => ({ ...prev, accessMode: e.target.value as 'open' | 'managed' }))}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                            />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">Open Signup</div>
+                              <div className="text-sm text-gray-500">Allow anyone to create an account and use the chatbot</div>
+                            </div>
+                          </label>
+                          
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="accessMode"
+                              value="managed"
+                              checked={formData.accessMode === 'managed'}
+                              onChange={(e) => setFormData(prev => ({ ...prev, accessMode: e.target.value as 'open' | 'managed' }))}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                            />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">Admin-Managed Users</div>
+                              <div className="text-sm text-gray-500">Only users you invite can access the chatbot</div>
+                            </div>
+                          </label>
+                        </div>
+                        
+                        {/* User Invitation Interface - Only shown when managed mode is selected */}
+                        {formData.accessMode === 'managed' && (
+                          <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                            <h5 className="text-sm font-medium text-gray-900">Invite Users</h5>
+                            <p className="text-xs text-gray-600">
+                              Add email addresses of users you want to invite. They'll receive login instructions after deployment.
+                            </p>
+                            
+                            {/* Add Email Input */}
+                            <div className="flex space-x-2">
+                              <Input
+                                type="email"
+                                placeholder="Enter email address"
+                                value={newEmail}
+                                onChange={(e) => {
+                                  setNewEmail(e.target.value);
+                                  setEmailError('');
+                                }}
+                                onKeyPress={handleEmailKeyPress}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                onClick={addEmailToInvited}
+                                size="sm"
+                                className="bg-blue-600 hover:bg-blue-700"
+                              >
+                                Add
+                              </Button>
+                            </div>
+                            
+                            {emailError && (
+                              <p className="text-sm text-red-600">{emailError}</p>
+                            )}
+                            
+                            {/* Display Invited Emails */}
+                            {formData.invitedUsers.length > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-sm text-gray-700">{formData.invitedUsers.length} user(s) to be invited:</p>
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                  {formData.invitedUsers.map((email, index) => (
+                                    <div key={index} className="flex items-center justify-between bg-white px-3 py-2 rounded border text-sm">
+                                      <span className="text-gray-900">{email}</span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => removeEmailFromInvited(email)}
+                                        className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
+                                      >
+                                        ×
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {formData.invitedUsers.length === 0 && (
+                              <p className="text-sm text-gray-500 italic">
+                                Add email addresses above. You can also invite users after deployment.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     <div className={`transition-all duration-200 ${formData.requireAuth ? 'opacity-100' : 'opacity-60'}`}>
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <div className="flex items-start space-x-2">
@@ -509,14 +681,18 @@ export default function NewChatbotPage() {
                                   <li>Create an account or sign in</li>
                                   <li>Verify their email address</li>
                                   <li>Accept terms of service</li>
+                                  {formData.accessMode === 'managed' && (
+                                    <li className="font-medium">Be invited by you first</li>
+                                  )}
                                 </ul>
-                                <p className="mt-2 font-medium">Benefits:</p>
-                                <ul className="list-disc list-inside space-y-1 ml-2">
-                                  <li>Personalized chat experience</li>
-                                  <li>Chat history persistence</li>
-                                  <li>User engagement analytics</li>
-                                  <li>Premium feature access control</li>
-                                </ul>
+                                <p className="mt-2 font-medium">
+                                  Access Mode: {formData.accessMode === 'open' ? 'Open Signup' : 'Admin-Managed Users'}
+                                </p>
+                                {formData.accessMode === 'managed' && formData.invitedUsers.length > 0 && (
+                                  <p className="text-sm">
+                                    {formData.invitedUsers.length} user(s) will be invited after deployment
+                                  </p>
+                                )}
                               </div>
                             ) : (
                               <div className="text-sm text-blue-800 space-y-1">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminStorage } from '@/lib/firebase/admin';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
+import { FirebaseTenantService } from '@/services/firebaseTenantService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -248,6 +249,61 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Handle Firebase tenant creation for authentication
+    let firebaseTenantId = '';
+    
+    if (chatbotConfig.requireAuth) {
+      console.log('🔐 Creating Firebase tenant for authenticated chatbot');
+      
+      try {
+        const tenantResult = await FirebaseTenantService.createTenant({
+          chatbotId: chatbotId,
+          chatbotName: chatbotConfig.name,
+          creatorUserId: userId || chatbotData?.userId || 'unknown'
+        });
+        
+        if (tenantResult.success && tenantResult.tenantId) {
+          firebaseTenantId = tenantResult.tenantId;
+          console.log('✅ Firebase tenant created successfully:', firebaseTenantId);
+          
+          // Process invited users from chatbot creation
+          if (chatbotConfig.authConfig?.invitedUsers && chatbotConfig.authConfig.invitedUsers.length > 0) {
+            console.log(`📧 Processing ${chatbotConfig.authConfig.invitedUsers.length} invited users...`);
+            
+            for (const email of chatbotConfig.authConfig.invitedUsers) {
+              try {
+                console.log(`👤 Inviting user: ${email}`);
+                
+                const inviteResult = await FirebaseTenantService.inviteUser({
+                  chatbotId: chatbotId,
+                  tenantId: firebaseTenantId,
+                  email: email,
+                  displayName: email.split('@')[0], // Use email prefix as display name
+                  creatorUserId: userId || chatbotData?.userId || 'system'
+                });
+                
+                if (inviteResult.success) {
+                  console.log(`✅ Successfully invited: ${email}`);
+                } else {
+                  console.error(`❌ Failed to invite ${email}:`, inviteResult.error);
+                }
+              } catch (inviteError) {
+                console.error(`❌ Error inviting ${email}:`, inviteError);
+                // Continue with other users even if one fails
+              }
+            }
+          }
+        } else {
+          console.error('❌ Failed to create Firebase tenant:', tenantResult.error);
+          // Don't fail the entire deployment for tenant creation issues
+          // The chatbot can still work without authentication
+        }
+      } catch (tenantError) {
+        console.error('❌ Firebase tenant creation error:', tenantError);
+        // Continue with deployment without authentication
+      }
+    }
+
     // Set environment variables on the project
     const envVars = {
       // Chatbot-specific configuration
@@ -262,6 +318,7 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
+      NEXT_PUBLIC_FIREBASE_TENANT_ID: firebaseTenantId || '',
       
       // Firebase client configuration (public)
       NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',

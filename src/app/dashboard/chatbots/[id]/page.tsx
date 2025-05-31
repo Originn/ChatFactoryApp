@@ -13,6 +13,7 @@ import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialog';
 import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSelectionDialog';
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
+import ChatbotUserManagement from '@/components/dashboard/ChatbotUserManagement';
 
 // Define the Chatbot type
 interface Chatbot {
@@ -59,7 +60,7 @@ export default function ChatbotDetailPage() {
   const chatbotId = params.id as string;
   
   // State
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'analytics' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'users' | 'analytics' | 'settings'>('overview');
   const [chatbot, setChatbot] = useState<Chatbot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -644,6 +645,16 @@ export default function ChatbotDetailPage() {
                     Documents
                   </button>
                   <button
+                    onClick={() => setActiveTab('users')}
+                    className={`${
+                      activeTab === 'users'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                  >
+                    Users
+                  </button>
+                  <button
                     onClick={() => setActiveTab('analytics')}
                     className={`${
                       activeTab === 'analytics'
@@ -854,6 +865,20 @@ export default function ChatbotDetailPage() {
                       </div>
                     </CardContent>
                   </Card>
+                </div>
+              )}
+
+              {activeTab === 'users' && (
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">User Management</h2>
+                  
+                  <ChatbotUserManagement
+                    chatbot={chatbot}
+                    onUpdate={() => {
+                      // Refresh chatbot data when users are updated
+                      window.location.reload();
+                    }}
+                  />
                 </div>
               )}
 
