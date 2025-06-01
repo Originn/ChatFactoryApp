@@ -13,6 +13,17 @@ export interface DeploymentRecord {
   deploymentUrl?: string;
   customDomain?: string;
   
+  // Firebase project integration (separate projects approach)
+  firebaseProjectId?: string;
+  firebaseConfig?: {
+    apiKey: string;
+    authDomain: string;
+    projectId: string;
+    storageBucket: string;
+    messagingSenderId: string;
+    appId: string;
+  };
+  
   // Deployment configuration
   subdomain: string; // generated subdomain like "chatbot-name"
   branding: {

@@ -20,6 +20,7 @@ import { UpdatedUserProfile } from '@/types/deployment';
 import { UserService } from './userService';
 import { ChatbotConfig } from '@/types/chatbot';
 import { PineconeService } from './pineconeService';
+import { FirebaseProjectService } from './firebaseProjectService';
 
 interface DeploymentOptions {
   chatbot: ChatbotConfig;
@@ -84,7 +85,7 @@ class DeploymentService {
   }
 
   /**
-   * Deploy chatbot to Vercel
+   * Deploy chatbot to Vercel with dedicated Firebase project
    */
   static async deployToVercel(options: DeploymentOptions): Promise<DeploymentResult> {
     const { chatbot, user, customDomain } = options;
@@ -100,11 +101,31 @@ class DeploymentService {
         };
       }
 
+      console.log('🚀 Starting deployment for chatbot:', chatbot.id);
+
+      // Step 1: Create dedicated Firebase project
+      console.log('🔥 Creating dedicated Firebase project...');
+      const firebaseResult = await FirebaseProjectService.createProjectForChatbot({
+        chatbotId: chatbot.id,
+        chatbotName: chatbot.name,
+        creatorUserId: user.uid
+      });
+
+      if (!firebaseResult.success) {
+        return {
+          success: false,
+          error: `Failed to create Firebase project: ${firebaseResult.error}`,
+          limitations: []
+        };
+      }
+
+      console.log('✅ Firebase project created:', firebaseResult.project?.projectId);
+
       // Generate subdomain
       const subdomain = this.generateSubdomain(chatbot.name);
       const deploymentUrl = customDomain || `${subdomain}.vercel.app`;
 
-      // Create deployment record
+      // Create deployment record with Firebase project info
       const deploymentRecord: Omit<DeploymentRecord, 'id'> = {
         chatbotId: chatbot.id,
         userId: user.uid,
@@ -112,6 +133,10 @@ class DeploymentService {
         subdomain,
         deploymentUrl,
         customDomain,
+        
+        // Firebase project information
+        firebaseProjectId: firebaseResult.project!.projectId,
+        firebaseConfig: firebaseResult.project!.config,
         
         branding: {
           show: PLAN_LIMITS[user.subscription.plan].branding,
@@ -135,7 +160,7 @@ class DeploymentService {
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         
-        environmentVariables: this.prepareEnvironmentVariables(chatbot, user)
+        environmentVariables: this.prepareEnvironmentVariables(chatbot, user, firebaseResult.project!)
       };
 
       // Create Pinecone index for the chatbot
@@ -363,7 +388,8 @@ class DeploymentService {
 
   private static prepareEnvironmentVariables(
     chatbot: ChatbotConfig, 
-    user: UpdatedUserProfile
+    user: UpdatedUserProfile,
+    firebaseProject: any
   ): Record<string, string> {
     return {
       CHATBOT_ID: chatbot.id,
@@ -372,7 +398,20 @@ class DeploymentService {
       MONTHLY_QUERY_LIMIT: PLAN_LIMITS[user.subscription.plan].monthlyQueries.toString(),
       ANALYTICS_RETENTION: PLAN_LIMITS[user.subscription.plan].analyticsRetention.toString(),
       BRANDING_ENABLED: PLAN_LIMITS[user.subscription.plan].branding.toString(),
-      FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+      
+      // Dedicated Firebase project configuration
+      NEXT_PUBLIC_FIREBASE_API_KEY: firebaseProject.config.apiKey,
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: firebaseProject.config.authDomain,
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: firebaseProject.config.projectId,
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: firebaseProject.config.storageBucket,
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: firebaseProject.config.messagingSenderId,
+      NEXT_PUBLIC_FIREBASE_APP_ID: firebaseProject.config.appId,
+      
+      // Server-side Firebase Admin for the dedicated project
+      FIREBASE_PROJECT_ID: firebaseProject.config.projectId,
+      FIREBASE_CLIENT_EMAIL: firebaseProject.serviceAccount?.clientEmail || '',
+      FIREBASE_PRIVATE_KEY: firebaseProject.serviceAccount?.privateKey || '',
+      
       DEPLOYMENT_WEBHOOK_URL: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/deployment`
     };
   }

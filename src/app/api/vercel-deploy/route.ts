@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, adminStorage } from '@/lib/firebase/admin';
+import { adminDb, adminStorage } from '@/lib/firebase/admin/index';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
-import { FirebaseTenantService } from '@/services/firebaseTenantService';
+import { FirebaseProjectService } from '@/services/firebaseProjectService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -249,59 +249,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle Firebase tenant creation for authentication
-    let firebaseTenantId = '';
+    // Handle authentication setup for separate Firebase projects
+    console.log('🔥 Creating dedicated Firebase project for chatbot...');
     
-    if (chatbotConfig.requireAuth) {
-      console.log('🔐 Creating Firebase tenant for authenticated chatbot');
-      
-      try {
-        const tenantResult = await FirebaseTenantService.createTenant({
-          chatbotId: chatbotId,
-          chatbotName: chatbotConfig.name,
-          creatorUserId: userId || chatbotData?.userId || 'unknown'
-        });
-        
-        if (tenantResult.success && tenantResult.tenantId) {
-          firebaseTenantId = tenantResult.tenantId;
-          console.log('✅ Firebase tenant created successfully:', firebaseTenantId);
-          
-          // Process invited users from chatbot creation
-          if (chatbotConfig.authConfig?.invitedUsers && chatbotConfig.authConfig.invitedUsers.length > 0) {
-            console.log(`📧 Processing ${chatbotConfig.authConfig.invitedUsers.length} invited users...`);
-            
-            for (const email of chatbotConfig.authConfig.invitedUsers) {
-              try {
-                console.log(`👤 Inviting user: ${email}`);
-                
-                const inviteResult = await FirebaseTenantService.inviteUser({
-                  chatbotId: chatbotId,
-                  tenantId: firebaseTenantId,
-                  email: email,
-                  displayName: email.split('@')[0], // Use email prefix as display name
-                  creatorUserId: userId || chatbotData?.userId || 'system'
-                });
-                
-                if (inviteResult.success) {
-                  console.log(`✅ Successfully invited: ${email}`);
-                } else {
-                  console.error(`❌ Failed to invite ${email}:`, inviteResult.error);
-                }
-              } catch (inviteError) {
-                console.error(`❌ Error inviting ${email}:`, inviteError);
-                // Continue with other users even if one fails
-              }
-            }
-          }
-        } else {
-          console.error('❌ Failed to create Firebase tenant:', tenantResult.error);
-          // Don't fail the entire deployment for tenant creation issues
-          // The chatbot can still work without authentication
-        }
-      } catch (tenantError) {
-        console.error('❌ Firebase tenant creation error:', tenantError);
-        // Continue with deployment without authentication
+    let dedicatedFirebaseProject = null;
+    try {
+      // Create dedicated Firebase project for this chatbot
+      const firebaseResult = await FirebaseProjectService.createProjectForChatbot({
+        chatbotId,
+        chatbotName: chatbotConfig.name,
+        creatorUserId: userId || chatbotData?.userId || 'unknown'
+      });
+
+      if (!firebaseResult.success) {
+        console.error('❌ Failed to create Firebase project:', firebaseResult.error);
+        throw new Error(`Failed to create Firebase project: ${firebaseResult.error}`);
       }
+
+      if (!firebaseResult.project) {
+        console.error('❌ Firebase project creation succeeded but no project returned');
+        throw new Error('Firebase project creation succeeded but no project data returned');
+      }
+
+      dedicatedFirebaseProject = firebaseResult.project;
+      console.log('✅ Dedicated Firebase project created:', dedicatedFirebaseProject.projectId);
+      
+    } catch (firebaseError) {
+      console.error('❌ Firebase project creation failed:', firebaseError);
+      throw new Error(`Firebase project creation failed: ${firebaseError.message}`);
     }
 
     // Set environment variables on the project
@@ -318,21 +293,20 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
-      NEXT_PUBLIC_FIREBASE_TENANT_ID: firebaseTenantId || '',
       
-      // Firebase client configuration (public)
-      NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-      NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
-      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
+      // Dedicated Firebase client configuration (public)
+      NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject?.config.apiKey || '',
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dedicatedFirebaseProject?.config.authDomain || '',
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dedicatedFirebaseProject?.config.storageBucket || '',
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: dedicatedFirebaseProject?.config.messagingSenderId || '',
+      NEXT_PUBLIC_FIREBASE_APP_ID: dedicatedFirebaseProject?.config.appId || '',
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '', // Keep from main project for analytics
       
-      // Firebase Admin SDK (Server-side, secure)
-      FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || '',
-      FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-      FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
+      // Dedicated Firebase Admin SDK (Server-side, secure)
+      FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
+      FIREBASE_CLIENT_EMAIL: dedicatedFirebaseProject?.serviceAccount?.clientEmail || '',
+      FIREBASE_PRIVATE_KEY: dedicatedFirebaseProject?.serviceAccount?.privateKey || '',
       
       // API Keys (Server-side, secure)
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
@@ -356,12 +330,6 @@ export async function POST(request: NextRequest) {
       
       // Debug: Log what DATABASE_URL we're setting (remove after debugging)
       DEBUG_DATABASE_URL_CHECK: process.env.DATABASE_URL ? 'DATABASE_URL_SET' : 'DATABASE_URL_MISSING',
-      
-      // Firebase Admin Configuration (Server-side)
-      GOOGLE_APPLICATION_CREDENTIALS: '', // Not needed when using service account key directly
-      FIREBASE_ADMIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || '',
-      FIREBASE_ADMIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-      FIREBASE_ADMIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
       
       // AI Model Configuration
       MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-3.5-turbo',
@@ -480,7 +448,7 @@ export async function POST(request: NextRequest) {
         }
         
         const deploymentData = await fallbackResponse.json();
-        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false);
+        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false, dedicatedFirebaseProject);
       }
       
       return NextResponse.json({ 
@@ -519,6 +487,9 @@ export async function POST(request: NextRequest) {
         target: 'production',
         gitRef: 'main',
         isStaged: false,
+        // Dedicated Firebase project information
+        firebaseProjectId: dedicatedFirebaseProject?.projectId,
+        firebaseConfig: dedicatedFirebaseProject?.config,
       };
       
       // Only add customDomain if it exists
@@ -532,7 +503,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the entire deployment for database update issues
     }
     
-    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false);
+    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject);
   } catch (error: any) {
     console.error('Deployment error:', error);
     return NextResponse.json({ 
@@ -764,7 +735,7 @@ async function createFileBasedDeployment(token: string, projectName: string, tar
 }
 
 // Helper function to create success response
-function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false) {
+function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false, firebaseProject: any = null) {
   const deploymentUrl = deploymentData.url ? 
     (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
     `https://${projectName}.vercel.app`;
@@ -782,11 +753,18 @@ function createSuccessResponse(deploymentData: any, projectName: string, chatbot
       logoUrl: chatbotConfig.logoUrl,
       hasLogo: !!chatbotConfig.logoUrl
     },
+    firebaseProject: firebaseProject ? {
+      projectId: firebaseProject.projectId,
+      authDomain: firebaseProject.config?.authDomain,
+      hasDedicatedProject: true
+    } : {
+      hasDedicatedProject: false
+    },
     environmentVariables: {
       chatbotId: !!chatbotConfig.id,
       chatbotName: !!chatbotConfig.name,
       logoUrl: !!chatbotConfig.logoUrl,
-      firebaseConfig: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+      firebaseConfig: !!firebaseProject?.config?.projectId
     },
     ...(isFallback && { note: 'Deployed using file-based deployment due to GitHub integration issues' }),
     debug: {
