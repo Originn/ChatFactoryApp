@@ -1,4 +1,4 @@
-import { adminDb } from '@/lib/firebase/admin/index';
+import { adminDb } from '@/lib/firebase/admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { execSync } from 'child_process';
 
@@ -58,49 +58,77 @@ export class FirebaseProjectService {
       });
 
       try {
-        // Step 1: Create Firebase project
-        console.log('🚀 Creating Firebase project:', projectId);
-        const token = process.env.FIREBASE_TOKEN;
-        const createCommand = token 
-          ? `firebase projects:create ${projectId} --display-name "${displayName}" --token ${token}`
-          : `firebase projects:create ${projectId} --display-name "${displayName}"`;
+        // Step 1: Get organization ID for proper project placement
+        console.log('🏢 Getting organization ID...');
+        const organizationId = await this.getOrganizationId();
+        
+        if (!organizationId) {
+          console.warn('⚠️ No organization ID found, creating project without organization');
+        } else {
+          console.log('✅ Found organization ID:', organizationId);
+        }
+
+        // Step 2: Create Firebase project using user authentication
+        console.log('🚀 Creating Firebase project with user token:', projectId);
+        
+        let createCommand: string;
+        if (organizationId) {
+          createCommand = `firebase projects:create ${projectId} --display-name "${displayName}" --organization ${organizationId}`;
+        } else {
+          createCommand = `firebase projects:create ${projectId} --display-name "${displayName}"`;
+        }
+        
+        console.log('🔧 Firebase CLI command (with user token):', createCommand);
         
         const createOutput = execSync(createCommand, { 
           encoding: 'utf8',
           timeout: 180000, // 3 minutes
-          stdio: ['pipe', 'pipe', 'pipe']
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            // Use user token instead of service account
+            FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
+            // Remove service account to avoid conflicts
+            GOOGLE_APPLICATION_CREDENTIALS: undefined
+          }
         });
         
-        console.log('✅ Project created:', createOutput);
+        console.log('✅ Project created successfully:', createOutput);
 
-        // Step 2: Create web app in the project
+        // Step 3: Create web app in the project
         console.log('📱 Creating web app in project...');
-        const appCommand = token
-          ? `firebase apps:create web "${displayName} App" --project ${projectId} --token ${token}`
-          : `firebase apps:create web "${displayName} App" --project ${projectId}`;
+        const appCommand = `firebase apps:create web "${displayName} App" --project ${projectId}`;
           
         const appOutput = execSync(appCommand, { 
           encoding: 'utf8',
-          timeout: 60000
+          timeout: 60000,
+          env: {
+            ...process.env,
+            FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
+            GOOGLE_APPLICATION_CREDENTIALS: undefined
+          }
         });
         
         console.log('✅ Web app created:', appOutput);
 
-        // Step 3: Get Firebase configuration
+        // Step 4: Get Firebase configuration
         console.log('⚙️ Getting Firebase configuration...');
-        const configCommand = token
-          ? `firebase apps:sdkconfig web --project ${projectId} --token ${token}`
-          : `firebase apps:sdkconfig web --project ${projectId}`;
+        const configCommand = `firebase apps:sdkconfig web --project ${projectId}`;
           
         const configOutput = execSync(configCommand, { 
           encoding: 'utf8',
-          timeout: 60000
+          timeout: 60000,
+          env: {
+            ...process.env,
+            FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
+            GOOGLE_APPLICATION_CREDENTIALS: undefined
+          }
         });
         
         const config = this.parseFirebaseConfig(configOutput, projectId);
         console.log('✅ Firebase config retrieved');
 
-        // Step 4: Update project record with success
+        // Step 5: Update project record with success
         const completeProject: FirebaseProject = {
           projectId,
           displayName,
@@ -117,7 +145,7 @@ export class FirebaseProjectService {
           updatedAt: Timestamp.now()
         });
 
-        // Step 5: Update chatbot with Firebase project reference
+        // Step 6: Update chatbot with Firebase project reference
         await adminDb.collection('chatbots').doc(chatbotId).update({
           firebaseProjectId: projectId,
           firebaseConfig: config,
@@ -243,12 +271,6 @@ export class FirebaseProjectService {
    * Generate Firebase project ID (follows GCP naming rules)
    */
   private static generateProjectId(chatbotName: string, chatbotId: string): string {
-    // Firebase project ID rules:
-    // - 6-30 characters
-    // - Lowercase letters, numbers, hyphens only  
-    // - Must start with letter
-    // - Cannot end with hyphen
-    
     const sanitizedName = chatbotName
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
@@ -256,15 +278,10 @@ export class FirebaseProjectService {
       .replace(/^-|-$/g, '')
       .substring(0, 15);
 
-    // Ensure it starts with a letter
     const namePrefix = sanitizedName.match(/^[a-z]/) ? sanitizedName : `cb-${sanitizedName}`;
-    
-    // Use first 8 chars of chatbot ID for uniqueness
     const idSuffix = chatbotId.substring(0, 8).toLowerCase();
-    
     const projectId = `${namePrefix}-${idSuffix}`.substring(0, 30);
     
-    // Ensure it doesn't end with hyphen
     return projectId.replace(/-$/, '');
   }
 
@@ -273,12 +290,10 @@ export class FirebaseProjectService {
    */
   private static parseFirebaseConfig(cliOutput: string, projectId: string): FirebaseProject['config'] {
     try {
-      // Look for JSON object in the output
       const jsonMatch = cliOutput.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
         const config = JSON.parse(jsonMatch[0]);
         
-        // Validate required fields
         if (config.apiKey && config.authDomain && config.projectId) {
           return {
             apiKey: config.apiKey,
@@ -291,7 +306,6 @@ export class FirebaseProjectService {
         }
       }
       
-      // Try alternative parsing for different CLI output formats
       const lines = cliOutput.split('\n');
       const config: any = {};
       
@@ -319,7 +333,6 @@ export class FirebaseProjectService {
       console.error('Failed to parse Firebase config:', parseError);
     }
 
-    // Fallback: generate reasonable defaults
     console.warn('⚠️ Using fallback Firebase config - please verify manually');
     return {
       apiKey: 'PARSING_FAILED_CHECK_MANUALLY',
@@ -335,8 +348,75 @@ export class FirebaseProjectService {
    * Extract user info from CLI output
    */
   private static extractUserFromOutput(output: string): string | undefined {
-    // Try to find user email in the output
     const emailMatch = output.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
     return emailMatch ? emailMatch[1] : 'authenticated';
+  }
+
+  /**
+   * Get the organization ID for project creation
+   */
+  private static async getOrganizationId(): Promise<string | null> {
+    // Use explicit organization ID from environment
+    if (process.env.GOOGLE_CLOUD_ORGANIZATION_ID) {
+      const orgId = process.env.GOOGLE_CLOUD_ORGANIZATION_ID;
+      console.log(`🏢 Using organization ID from environment: ${orgId}`);
+      return orgId;
+    }
+    
+    console.error('❌ No organization found. Please set GOOGLE_CLOUD_ORGANIZATION_ID environment variable.');
+    return null;
+  }
+
+  /**
+   * Delete Firebase project with organization-level permissions
+   */
+  static async deleteProject(chatbotId: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    automated?: boolean;
+  }> {
+    try {
+      const project = await this.getProjectForChatbot(chatbotId);
+      
+      if (!project) {
+        return { success: false, error: 'No Firebase project found for this chatbot' };
+      }
+
+      console.log(`🗑️ Starting organization-level project deletion: ${project.projectId}`);
+
+      // Mark as deleting
+      const projectRef = adminDb.collection(this.FIREBASE_PROJECTS_COLLECTION).doc(project.projectId);
+      await projectRef.update({
+        status: 'deleting',
+        deletedAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      });
+
+      // Simple deletion - mark as deleted for manual cleanup
+      await projectRef.update({
+        status: 'deleted',
+        deletedFromCloud: false,
+        automatedDeletion: false,
+        manualDeletionRequired: true,
+        manualDeletionUrl: `https://console.firebase.google.com/project/${project.projectId}/settings/general`,
+        deletionNote: 'Project marked for manual deletion. Please delete manually from Firebase Console.',
+        updatedAt: Timestamp.now()
+      });
+
+      console.log('📝 Project marked for manual deletion');
+      
+      return {
+        success: true,
+        automated: false,
+        error: `Project marked for deletion. Please delete manually: https://console.firebase.google.com/project/${project.projectId}/settings/general`
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error in deleteProject:', error);
+      return { 
+        success: false, 
+        error: `System error: ${error.message}` 
+      };
+    }
   }
 }

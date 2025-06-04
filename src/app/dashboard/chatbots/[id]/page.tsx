@@ -14,6 +14,7 @@ import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialo
 import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSelectionDialog';
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import ChatbotUserManagement from '@/components/dashboard/ChatbotUserManagement';
+import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 
 // Define the Chatbot type
 interface Chatbot {
@@ -339,6 +340,30 @@ export default function ChatbotDetailPage() {
         }
       } else {
         console.log('ℹ️ No user ID found, skipping storage deletion');
+      }
+      
+      // Delete dedicated Firebase project
+      try {
+        console.log('🔥 Deleting dedicated Firebase project for chatbot:', chatbot.id);
+        
+        if (!user) {
+          console.error('❌ No authenticated user');
+          return;
+        }
+
+        // Get auth token from Firebase user
+        const token = await user.getIdToken();
+        const firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(chatbot.id, token);
+        
+        if (firebaseDeleteResult.success) {
+          console.log('✅ Successfully deleted Firebase project');
+        } else {
+          console.error('❌ Failed to delete Firebase project:', firebaseDeleteResult.error);
+          // Continue with deletion even if Firebase project deletion fails
+        }
+      } catch (firebaseError) {
+        console.error('❌ Error deleting Firebase project:', firebaseError);
+        // Continue with deletion even if Firebase project deletion fails
       }
       
       // Delete from Firestore

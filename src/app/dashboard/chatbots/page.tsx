@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc } from "firebase/firestore";
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
+import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 
 // Define the Chatbot type for TypeScript
 interface Chatbot {
@@ -143,6 +144,108 @@ export default function ChatbotsPage() {
         }
       } else {
         console.log('ℹ️ No user ID found, skipping storage deletion');
+      }
+      
+      // Delete dedicated Firebase project (Fully Automated)
+      try {
+        console.log('🔥 Attempting automated Firebase project deletion for chatbot:', id);
+        
+        if (!user) {
+          console.error('❌ No authenticated user');
+          throw new Error('No authenticated user');
+        }
+
+        // Get auth token from Firebase user
+        const token = await user.getIdToken();
+        const firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(id, token);
+        
+        if (firebaseDeleteResult.success) {
+          if (firebaseDeleteResult.error) {
+            // Partial success or warning - show detailed instructions
+            console.warn('⚠️ Firebase project deletion completed with warnings:', firebaseDeleteResult.error);
+            
+            // Show a notification that includes troubleshooting info
+            if (firebaseDeleteResult.error.includes('TROUBLESHOOTING AUTOMATED DELETION')) {
+              // This is an automated deletion failure - show technical details
+              const shouldShowDetails = confirm(
+                `⚠️ AUTOMATED DELETION FAILED\n\n` +
+                `Your chatbot has been deleted from this app, but the Firebase project deletion failed.\n\n` +
+                `This typically happens due to authentication or permission issues.\n\n` +
+                `Click OK to see technical troubleshooting details, or Cancel to skip.`
+              );
+              
+              if (shouldShowDetails) {
+                // Show detailed technical information in a new window or alert
+                const detailsWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
+                if (detailsWindow) {
+                  detailsWindow.document.write(`
+                    <html>
+                      <head><title>Firebase Project Deletion Troubleshooting</title></head>
+                      <body style="font-family: monospace; padding: 20px; white-space: pre-wrap;">
+                        ${firebaseDeleteResult.error.replace(/\n/g, '<br>')}
+                      </body>
+                    </html>
+                  `);
+                  detailsWindow.document.close();
+                } else {
+                  // Fallback to console log if popup blocked
+                  console.log('🔧 Troubleshooting details:', firebaseDeleteResult.error);
+                  alert('Troubleshooting details have been logged to the console (F12 → Console)');
+                }
+              }
+            } else {
+              // Other types of warnings
+              alert(`⚠️ Firebase Project Deletion Warning\n\n${firebaseDeleteResult.error}`);
+            }
+          } else {
+            console.log('✅ Successfully deleted Firebase project automatically');
+            
+            // Show success notification
+            const successDiv = document.createElement('div');
+            successDiv.style.cssText = `
+              position: fixed; top: 20px; right: 20px; z-index: 9999;
+              background: #10b981; color: white; padding: 15px 20px;
+              border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              font-weight: 500; max-width: 400px;
+            `;
+            successDiv.textContent = '✅ Chatbot and Firebase project deleted successfully!';
+            document.body.appendChild(successDiv);
+            
+            // Remove notification after 5 seconds
+            setTimeout(() => successDiv.remove(), 5000);
+          }
+        } else {
+          console.error('❌ Failed to delete Firebase project:', firebaseDeleteResult.error);
+          
+          // Show user-friendly error with actionable steps
+          alert(
+            `❌ Automated Firebase Project Deletion Failed\n\n` +
+            `Your chatbot has been deleted from this app, but we couldn't automatically delete the Firebase project.\n\n` +
+            `Common causes:\n` +
+            `• Authentication not configured\n` +
+            `• Insufficient permissions\n` +
+            `• Project has active services\n\n` +
+            `To manually delete the project:\n` +
+            `1. Go to: https://console.firebase.google.com\n` +
+            `2. Select your project\n` +
+            `3. Go to Settings → General\n` +
+            `4. Click "Delete project"\n\n` +
+            `Technical details logged to console.`
+          );
+          
+          console.error('🔧 Full error details:', firebaseDeleteResult.error);
+        }
+      } catch (firebaseError) {
+        console.error('❌ Error during automated Firebase project deletion:', firebaseError);
+        
+        alert(
+          `❌ Automated Deletion System Error\n\n` +
+          `Your chatbot has been deleted from this app, but there was a system error during Firebase project deletion.\n\n` +
+          `Please manually delete the Firebase project from the Firebase Console to avoid ongoing charges.\n\n` +
+          `Error details have been logged to the console.`
+        );
+        
+        console.error('🔧 System error details:', firebaseError);
       }
       
       // Delete the document from Firestore

@@ -155,3 +155,53 @@ export interface ChatbotDeployment {
   lastDeploymentAt?: Timestamp;
   environmentVariables: Record<string, string>;
 }
+
+// Firebase project details stored in chatbot document
+export interface ChatbotFirebaseProject {
+  projectId: string;
+  displayName: string;
+  status: 'creating' | 'active' | 'failed' | 'deleted';
+  createdAt: Timestamp;
+  createdBy: 'firebase-cli' | 'api' | 'manual';
+  
+  // Firebase services configured
+  services: {
+    auth: boolean;
+    firestore: boolean;
+    storage: boolean;
+    hosting: boolean;
+    functions?: boolean;
+    analytics?: boolean;
+  };
+  
+  // Project URLs for easy access
+  urls: {
+    console: string;
+    auth: string;
+    firestore: string;
+    storage: string;
+    hosting?: string;
+  };
+  
+  // Configuration details
+  config: {
+    region: string;
+    authDomain: string;
+    storageBucket: string;
+  };
+  
+  // Deployment information (populated when deployed)
+  deployment?: {
+    status: 'deployed' | 'failed';
+    url: string;
+    vercelProjectId: string;
+    deployedAt: Timestamp;
+  };
+}
+
+// Firebase project deletion metadata
+export interface ChatbotFirebaseProjectDeleted {
+  projectId: string;
+  deletedAt: Timestamp;
+  deletionMethod: 'firebase-cli' | 'manual' | 'cleanup';
+}

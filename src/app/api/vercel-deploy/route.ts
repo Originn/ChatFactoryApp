@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminStorage } from '@/lib/firebase/admin/index';
+import { Timestamp } from 'firebase-admin/firestore';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseProjectService } from '@/services/firebaseProjectService';
@@ -496,6 +497,27 @@ export async function POST(request: NextRequest) {
       // Don't add undefined values to avoid Firestore errors
       
       await DatabaseService.updateChatbotDeployment(chatbotId, deploymentInfo);
+      
+      // Update Firebase project details to indicate hosting is now active
+      if (dedicatedFirebaseProject?.projectId) {
+        try {
+          await adminDb.collection('chatbots').doc(chatbotId).update({
+            'firebaseProject.services.hosting': true,
+            'firebaseProject.urls.hosting': deploymentUrl,
+            'firebaseProject.deployment': {
+              status: 'deployed',
+              url: deploymentUrl,
+              vercelProjectId: projectName,
+              deployedAt: Timestamp.now()
+            },
+            updatedAt: Timestamp.now()
+          });
+          console.log('✅ Updated Firebase project deployment status');
+        } catch (updateError) {
+          console.error('❌ Failed to update Firebase project deployment status:', updateError);
+          // Don't fail the entire deployment for this
+        }
+      }
       
       console.log('✅ Database updates completed successfully');
     } catch (dbError) {
