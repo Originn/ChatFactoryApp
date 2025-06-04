@@ -56,7 +56,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
 
-        const removeResult = await FirebaseTenantService.removeUser(chatbotId, userId);
+        const removeResult = await FirebaseTenantService.removeUser({
+          chatbotId,
+          tenantId: chatbotData.authConfig?.firebaseTenantId || '',
+          userId
+        });
 
         if (!removeResult.success) {
           return NextResponse.json({ error: removeResult.error }, { status: 400 });

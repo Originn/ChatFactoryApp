@@ -1,7 +1,7 @@
 // src/components/dialogs/VectorStoreSelectionDialog.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Database, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,26 +29,8 @@ export function VectorStoreSelectionDialog({ isOpen, onSelectExisting, onCreateN
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load user's vector stores
-  useEffect(() => {
-    if (isOpen && userId) {
-      loadVectorStores();
-    }
-  }, [isOpen, userId]);
-
-  // Filter stores based on search
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredStores(vectorStores);
-    } else {
-      const filtered = vectorStores.filter(store =>
-        store.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredStores(filtered);
-    }
-  }, [searchQuery, vectorStores]);
-
-  const loadVectorStores = async () => {
+  // Load vector stores function with useCallback
+  const loadVectorStores = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
@@ -76,7 +58,26 @@ export function VectorStoreSelectionDialog({ isOpen, onSelectExisting, onCreateN
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
+
+  // Load user's vector stores
+  useEffect(() => {
+    if (isOpen && userId) {
+      loadVectorStores();
+    }
+  }, [isOpen, userId, loadVectorStores]);
+
+  // Filter stores based on search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredStores(vectorStores);
+    } else {
+      const filtered = vectorStores.filter(store =>
+        store.displayName.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredStores(filtered);
+    }
+  }, [searchQuery, vectorStores]);
 
   if (!isOpen) return null;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
@@ -34,7 +34,7 @@ export default function ChatbotsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   
   // Function to fetch chatbots
-  const fetchChatbots = async () => {
+  const fetchChatbots = useCallback(async () => {
     if (!user) {
       setIsLoading(false);
       return;
@@ -67,7 +67,7 @@ export default function ChatbotsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
   
   // Delete chatbot function
   const handleDeleteChatbot = async (id: string) => {
@@ -265,7 +265,7 @@ export default function ChatbotsPage() {
   
   useEffect(() => {
     fetchChatbots();
-  }, [user]);
+  }, [fetchChatbots]);
   
   return (
     <div className="min-h-screen bg-gray-50">

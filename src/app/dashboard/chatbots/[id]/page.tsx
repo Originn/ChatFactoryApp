@@ -15,44 +15,7 @@ import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSele
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import ChatbotUserManagement from '@/components/dashboard/ChatbotUserManagement';
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
-
-// Define the Chatbot type
-interface Chatbot {
-  id: string;
-  name: string;
-  description: string;
-  domain?: string;
-  status: string;
-  createdAt: any;
-  updatedAt: any;
-  userId: string;
-  documents?: any[];
-  deployedUrl?: string;
-  deploymentId?: string;
-  vercelProjectId?: string;
-  vercelDeploymentId?: string;
-  logoUrl?: string;
-  aiConfig?: {
-    embeddingModel: string;
-    llmModel: string;
-    temperature: number;
-    contextWindow: number;
-  };
-  behavior?: {
-    persona: string;
-    responseLength: string;
-    systemPrompt: string;
-  };
-  appearance?: {
-    primaryColor: string;
-    bubbleStyle: string;
-  };
-  stats?: {
-    queries: number;
-    successRate: number;
-    responseTime?: string;
-  };
-}
+import { ChatbotConfig } from '@/types/chatbot';
 
 export default function ChatbotDetailPage() {
   const { user } = useAuth();
@@ -62,7 +25,7 @@ export default function ChatbotDetailPage() {
   
   // State
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'users' | 'analytics' | 'settings'>('overview');
-  const [chatbot, setChatbot] = useState<Chatbot | null>(null);
+  const [chatbot, setChatbot] = useState<ChatbotConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -190,7 +153,7 @@ export default function ChatbotDetailPage() {
         const chatbotSnap = await getDoc(chatbotRef);
         
         if (chatbotSnap.exists()) {
-          const chatbotData = chatbotSnap.data() as Omit<Chatbot, 'id'>;
+          const chatbotData = chatbotSnap.data() as Omit<ChatbotConfig, 'id'>;
           
           // Verify the chatbot belongs to the current user
           if (chatbotData.userId !== user.uid) {
@@ -245,7 +208,7 @@ export default function ChatbotDetailPage() {
     
     try {
       // Get Vercel project info and user ID from the chatbot data
-      const vercelProjectId = chatbot.vercelProjectId;
+      const vercelProjectId = chatbot.deployment?.vercelProjectId;
       const vercelProjectName = vercelProjectId || (chatbot.name ? 
         chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
       const chatbotUserId = chatbot.userId;
@@ -498,7 +461,12 @@ export default function ChatbotDetailPage() {
       setChatbot({
         ...chatbot,
         status: 'active',
-        deployedUrl: data.url,
+        deployment: {
+          ...chatbot.deployment,
+          deploymentUrl: data.url,
+          status: 'deployed',
+          deployedAt: new Date() as any, // Will be converted to Timestamp by Firestore
+        }
       });
       
       // Update vector store state
@@ -722,15 +690,15 @@ export default function ChatbotDetailPage() {
                             {chatbot.status}
                           </div>
                         </div>
-                        {chatbot.deployedUrl && (
+                        {chatbot.deployment?.deploymentUrl && (
                           <div className="mt-2 text-xs text-gray-500">
                             <a 
-                              href={chatbot.deployedUrl.startsWith('http') ? chatbot.deployedUrl : `https://${chatbot.deployedUrl}`} 
+                              href={chatbot.deployment.deploymentUrl.startsWith('http') ? chatbot.deployment.deploymentUrl : `https://${chatbot.deployment.deploymentUrl}`} 
                               target="_blank" 
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline"
                             >
-                              {chatbot.deployedUrl}
+                              {chatbot.deployment.deploymentUrl}
                             </a>
                           </div>
                         )}

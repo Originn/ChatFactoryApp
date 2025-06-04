@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,12 +26,8 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
     return emailRegex.test(email);
   };
 
-  // Load users on component mount
-  useEffect(() => {
-    loadUsers();
-  }, [chatbot.id]);
-
-  const loadUsers = async () => {
+  // Load users function with useCallback
+  const loadUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
       const response = await fetch(`/api/chatbot-users?chatbotId=${chatbot.id}`);
@@ -47,7 +43,12 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, [chatbot.id]);
+
+  // Load users on component mount
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   // Invite user
   const handleInviteUser = async () => {
