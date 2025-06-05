@@ -89,7 +89,7 @@ FIREBASE_DEFAULT_REGION=us-central1
 1. ✅ Check user deployment eligibility
 2. ✅ **Create dedicated Firebase project** (new!)
 3. ✅ Generate unique project ID: `chatbot-{name}-{id}`
-4. ✅ Configure Firebase Auth, Firestore, Storage
+4. ✅ Configure Firebase Auth, Firestore, Storage (create buckets `chatbot_documents`, `chatbot_private_images`, `chatbot_documents_images`)
 5. ✅ Create Pinecone vectorstore
 6. ✅ Deploy to Vercel with dedicated Firebase config
 7. ✅ Update deployment record with Firebase project info

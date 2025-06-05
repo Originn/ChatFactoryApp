@@ -189,6 +189,11 @@ export interface ChatbotFirebaseProject {
     authDomain: string;
     storageBucket: string;
   };
+  buckets?: {
+    documents: string;
+    privateImages: string;
+    documentImages: string;
+  };
   
   // Deployment information (populated when deployed)
   deployment?: {

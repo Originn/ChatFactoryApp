@@ -22,6 +22,11 @@ export interface FirebaseProject {
     messagingSenderId: string;
     appId: string;
   };
+  buckets?: {
+    documents: string;
+    privateImages: string;
+    documentImages: string;
+  };
 }
 
 export class FirebaseProjectService {
@@ -128,19 +133,58 @@ export class FirebaseProjectService {
         const config = this.parseFirebaseConfig(configOutput, projectId);
         console.log('✅ Firebase config retrieved');
 
-        // Step 5: Update project record with success
+        // Step 5: Create Cloud Storage buckets for the chatbot
+        console.log('🪣 Creating Cloud Storage buckets...');
+        const region = process.env.FIREBASE_DEFAULT_REGION || 'us-central1';
+        const bucketSuffixes = [
+          'chatbot_documents',
+          'chatbot_private_images',
+          'chatbot_documents_images'
+        ];
+        const buckets: Record<string, string> = {};
+        for (const suffix of bucketSuffixes) {
+          const bucketName = `${projectId}-${suffix}`;
+          const bucketCommand = `gsutil mb -p ${projectId} -l ${region} gs://${bucketName}`;
+          try {
+            execSync(bucketCommand, {
+              encoding: 'utf8',
+              timeout: 60000,
+              env: {
+                ...process.env,
+                FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
+                GOOGLE_APPLICATION_CREDENTIALS: undefined
+              }
+            });
+            buckets[suffix] = bucketName;
+            console.log('✅ Bucket created:', bucketName);
+          } catch (bucketError: any) {
+            console.error(`❌ Failed to create bucket ${bucketName}:`, bucketError.message);
+          }
+        }
+
+        // Step 6: Update project record with success
         const completeProject: FirebaseProject = {
           projectId,
           displayName,
           chatbotId,
           createdAt: Timestamp.now(),
           status: 'active',
-          config
+          config,
+          buckets: {
+            documents: buckets['chatbot_documents'],
+            privateImages: buckets['chatbot_private_images'],
+            documentImages: buckets['chatbot_documents_images']
+          }
         };
 
         await projectRef.update({
           status: 'active',
           config,
+          buckets: {
+            documents: buckets['chatbot_documents'],
+            privateImages: buckets['chatbot_private_images'],
+            documentImages: buckets['chatbot_documents_images']
+          },
           completedAt: Timestamp.now(),
           updatedAt: Timestamp.now()
         });
@@ -149,6 +193,11 @@ export class FirebaseProjectService {
         await adminDb.collection('chatbots').doc(chatbotId).update({
           firebaseProjectId: projectId,
           firebaseConfig: config,
+          storageBuckets: {
+            documents: buckets['chatbot_documents'],
+            privateImages: buckets['chatbot_private_images'],
+            documentImages: buckets['chatbot_documents_images']
+          },
           updatedAt: Timestamp.now()
         });
 
