@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "setup-vercel": "node scripts/setup-vercel.js"
+    "lint": "next lint"
   },
   "dependencies": {
     "@google-cloud/billing": "^5.0.1",
