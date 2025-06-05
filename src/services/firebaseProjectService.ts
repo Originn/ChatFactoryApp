@@ -1,6 +1,8 @@
 import { adminDb } from '@/lib/firebase/admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { execSync } from 'child_process';
+import { Storage } from '@google-cloud/storage';
+import { CloudBillingClient } from '@google-cloud/billing';
 
 export interface CreateFirebaseProjectRequest {
   chatbotId: string;
@@ -31,6 +33,45 @@ export interface FirebaseProject {
 
 export class FirebaseProjectService {
   private static readonly FIREBASE_PROJECTS_COLLECTION = 'firebaseProjects';
+  private static readonly BILLING_ACCOUNT_NAME = 'billingAccounts/011C35-0F1A1B-49FBEC'; // wizechat.ai organization billing account
+
+  /**
+   * Attach billing account to a newly created project
+   */
+  private static async attachBillingAccount(projectId: string): Promise<boolean> {
+    try {
+      console.log(`💳 Attaching billing account to project: ${projectId}`);
+      
+      const billing = new CloudBillingClient({
+        // Uses GOOGLE_APPLICATION_CREDENTIALS environment variable automatically
+      });
+
+      const projectName = `projects/${projectId}`;
+      
+      // Attach the billing account to the project
+      await billing.updateProjectBillingInfo({
+        name: projectName,
+        projectBillingInfo: {
+          billingAccountName: this.BILLING_ACCOUNT_NAME,
+        },
+      });
+      
+      console.log('✅ Billing account attached successfully');
+      return true;
+      
+    } catch (billingError: any) {
+      console.error('❌ Failed to attach billing account:', billingError.message);
+      
+      if (billingError.message?.includes('permission')) {
+        console.warn('💡 Service account needs billing permissions. See setup instructions below.');
+        console.warn('💡 1. Go to: https://console.cloud.google.com/iam-admin/iam');
+        console.warn('💡 2. Find your service account: firebase-project-manager@docsai-chatbot-app.iam.gserviceaccount.com');
+        console.warn('💡 3. Add role: "Billing Account Administrator" or "Billing Project Manager"');
+      }
+      
+      return false;
+    }
+  }
 
   /**
    * Create a real Firebase project using Firebase CLI
@@ -91,10 +132,10 @@ export class FirebaseProjectService {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
             ...process.env,
-            // Use user token instead of service account
-            FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
-            // Remove service account to avoid conflicts
-            GOOGLE_APPLICATION_CREDENTIALS: undefined
+            // Only set FIREBASE_TOKEN if it has a value
+            ...(process.env.FIREBASE_TOKEN && process.env.FIREBASE_TOKEN.trim() !== '' ? 
+                { FIREBASE_TOKEN: process.env.FIREBASE_TOKEN } : {}),
+            // Don't unset GOOGLE_APPLICATION_CREDENTIALS - let it fall back to default auth
           }
         });
         
@@ -109,14 +150,25 @@ export class FirebaseProjectService {
           timeout: 60000,
           env: {
             ...process.env,
-            FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
-            GOOGLE_APPLICATION_CREDENTIALS: undefined
+            // Only set FIREBASE_TOKEN if it has a value
+            ...(process.env.FIREBASE_TOKEN && process.env.FIREBASE_TOKEN.trim() !== '' ? 
+                { FIREBASE_TOKEN: process.env.FIREBASE_TOKEN } : {}),
           }
         });
         
         console.log('✅ Web app created:', appOutput);
 
-        // Step 4: Get Firebase configuration
+        // Step 4.5: Attach billing account to enable bucket creation
+        console.log('💳 Setting up billing for the new project...');
+        const billingAttached = await this.attachBillingAccount(projectId);
+        
+        if (billingAttached) {
+          console.log('✅ Billing account attached - bucket creation will be enabled');
+        } else {
+          console.warn('⚠️ Could not attach billing - buckets may not be created');
+        }
+
+        // Step 5: Get Firebase configuration
         console.log('⚙️ Getting Firebase configuration...');
         const configCommand = `firebase apps:sdkconfig web --project ${projectId}`;
           
@@ -125,15 +177,16 @@ export class FirebaseProjectService {
           timeout: 60000,
           env: {
             ...process.env,
-            FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
-            GOOGLE_APPLICATION_CREDENTIALS: undefined
+            // Only set FIREBASE_TOKEN if it has a value
+            ...(process.env.FIREBASE_TOKEN && process.env.FIREBASE_TOKEN.trim() !== '' ? 
+                { FIREBASE_TOKEN: process.env.FIREBASE_TOKEN } : {}),
           }
         });
         
         const config = this.parseFirebaseConfig(configOutput, projectId);
         console.log('✅ Firebase config retrieved');
 
-        // Step 5: Create Cloud Storage buckets for the chatbot
+        // Step 6: Create Cloud Storage buckets for the chatbot
         console.log('🪣 Creating Cloud Storage buckets...');
         const region = process.env.FIREBASE_DEFAULT_REGION || 'us-central1';
         const bucketSuffixes = [
@@ -142,27 +195,65 @@ export class FirebaseProjectService {
           'chatbot_documents_images'
         ];
         const buckets: Record<string, string> = {};
-        for (const suffix of bucketSuffixes) {
-          const bucketName = `${projectId}-${suffix}`;
-          const bucketCommand = `gsutil mb -p ${projectId} -l ${region} gs://${bucketName}`;
-          try {
-            execSync(bucketCommand, {
-              encoding: 'utf8',
-              timeout: 60000,
-              env: {
-                ...process.env,
-                FIREBASE_TOKEN: process.env.FIREBASE_TOKEN,
-                GOOGLE_APPLICATION_CREDENTIALS: undefined
+        
+        try {
+          // Initialize Google Cloud Storage client with service account
+          const storage = new Storage({
+            projectId: projectId,
+            // Uses GOOGLE_APPLICATION_CREDENTIALS environment variable automatically
+          });
+          
+          console.log('✅ Google Cloud Storage client initialized');
+          console.log(`📋 Attempting to create buckets in project: ${projectId}`);
+          
+          for (const suffix of bucketSuffixes) {
+            const bucketName = `${projectId}-${suffix}`;
+            try {
+              // Create bucket using Google Cloud Storage client library
+              const [bucket] = await storage.createBucket(bucketName, {
+                location: region,
+                storageClass: 'STANDARD',
+                uniformBucketLevelAccess: true,
+                publicAccessPrevention: 'enforced'
+              });
+              
+              buckets[suffix] = bucketName;
+              console.log('✅ Bucket created:', bucketName);
+            } catch (bucketError: any) {
+              if (bucketError.code === 409) {
+                // Bucket already exists
+                console.log('ℹ️ Bucket already exists:', bucketName);
+                buckets[suffix] = bucketName;
+              } else if (bucketError.message?.includes('billing account')) {
+                console.warn(`💳 Billing not enabled for new project ${projectId}`);
+                console.warn('💡 New Firebase projects require billing to be enabled manually.');
+                console.warn('💡 Steps to enable billing:');
+                console.warn(`💡 1. Go to: https://console.cloud.google.com/billing/linkedaccount?project=${projectId}`);
+                console.warn('💡 2. Link a billing account (Google Cloud free tier applies)');
+                console.warn('💡 3. Buckets can be created manually or re-deploy after enabling billing');
+                console.warn('🚀 Deployment will continue without buckets - they are optional');
+                // Break out of the loop - no point trying other buckets
+                break;
+              } else {
+                console.error(`❌ Failed to create bucket ${bucketName}:`, bucketError.message);
               }
-            });
-            buckets[suffix] = bucketName;
-            console.log('✅ Bucket created:', bucketName);
-          } catch (bucketError: any) {
-            console.error(`❌ Failed to create bucket ${bucketName}:`, bucketError.message);
+            }
           }
+          
+          const bucketCount = Object.keys(buckets).length;
+          if (bucketCount > 0) {
+            console.log(`✅ Successfully created ${bucketCount} storage buckets`);
+          } else {
+            console.warn('⚠️ No storage buckets were created. Continuing deployment without buckets.');
+            console.warn('📝 Buckets are optional and can be created later when needed.');
+          }
+          
+        } catch (storageError: any) {
+          console.error('❌ Failed to initialize Google Cloud Storage client:', storageError.message);
+          console.warn('⚠️ Continuing without bucket creation. Buckets can be created manually later.');
         }
 
-        // Step 6: Update project record with success
+        // Step 7: Update project record with success
         const completeProject: FirebaseProject = {
           projectId,
           displayName,
@@ -170,36 +261,52 @@ export class FirebaseProjectService {
           createdAt: Timestamp.now(),
           status: 'active',
           config,
-          buckets: {
-            documents: buckets['chatbot_documents'],
-            privateImages: buckets['chatbot_private_images'],
-            documentImages: buckets['chatbot_documents_images']
-          }
+          // Only include buckets if they were successfully created
+          ...(Object.keys(buckets).length > 0 && {
+            buckets: {
+              documents: buckets['chatbot_documents'] || null,
+              privateImages: buckets['chatbot_private_images'] || null,
+              documentImages: buckets['chatbot_documents_images'] || null
+            }
+          })
         };
 
-        await projectRef.update({
+        // Prepare update data, filtering out undefined values
+        const updateData: any = {
           status: 'active',
           config,
-          buckets: {
-            documents: buckets['chatbot_documents'],
-            privateImages: buckets['chatbot_private_images'],
-            documentImages: buckets['chatbot_documents_images']
-          },
           completedAt: Timestamp.now(),
           updatedAt: Timestamp.now()
-        });
+        };
 
-        // Step 6: Update chatbot with Firebase project reference
-        await adminDb.collection('chatbots').doc(chatbotId).update({
+        // Only add buckets if they exist
+        if (Object.keys(buckets).length > 0) {
+          updateData.buckets = {
+            documents: buckets['chatbot_documents'] || null,
+            privateImages: buckets['chatbot_private_images'] || null,
+            documentImages: buckets['chatbot_documents_images'] || null
+          };
+        }
+
+        await projectRef.update(updateData);
+
+        // Step 8: Update chatbot with Firebase project reference
+        const chatbotUpdateData: any = {
           firebaseProjectId: projectId,
           firebaseConfig: config,
-          storageBuckets: {
-            documents: buckets['chatbot_documents'],
-            privateImages: buckets['chatbot_private_images'],
-            documentImages: buckets['chatbot_documents_images']
-          },
           updatedAt: Timestamp.now()
-        });
+        };
+
+        // Only add storage buckets if they were successfully created
+        if (Object.keys(buckets).length > 0) {
+          chatbotUpdateData.storageBuckets = {
+            documents: buckets['chatbot_documents'] || null,
+            privateImages: buckets['chatbot_private_images'] || null,
+            documentImages: buckets['chatbot_documents_images'] || null
+          };
+        }
+
+        await adminDb.collection('chatbots').doc(chatbotId).update(chatbotUpdateData);
 
         console.log('🎉 Firebase project setup completed successfully:', projectId);
         
@@ -257,7 +364,7 @@ export class FirebaseProjectService {
       // Check authentication
       try {
         const token = process.env.FIREBASE_TOKEN;
-        const listCommand = token 
+        const listCommand = (token && token.trim() !== '') 
           ? `firebase projects:list --token ${token}`
           : 'firebase projects:list';
           

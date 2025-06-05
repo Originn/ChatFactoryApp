@@ -27,6 +27,12 @@ yarn-error.log*
 .env*.local
 .env
 
+# Google Cloud service account keys (NEVER COMMIT THESE!)
+*-service-account*.json
+docsai-chatbot-app-*.json
+firebase-adminsdk-*.json
+*-firebase-adminsdk-*.json
+
 # vercel
 .vercel
 
