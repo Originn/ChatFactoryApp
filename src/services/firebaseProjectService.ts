@@ -36,15 +36,33 @@ export class FirebaseProjectService {
   private static readonly BILLING_ACCOUNT_NAME = 'billingAccounts/011C35-0F1A1B-49FBEC'; // wizechat.ai organization billing account
 
   /**
+   * Get Google Cloud credentials configuration
+   */
+  private static getGoogleCloudCredentials() {
+    // In production (Vercel), use JSON from environment variable
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      try {
+        return JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      } catch (error) {
+        console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', error);
+        throw new Error('Invalid Google Cloud credentials JSON in environment variable');
+      }
+    }
+    
+    // In development, use the file path (if GOOGLE_APPLICATION_CREDENTIALS is set)
+    // The Google Cloud libraries will automatically use this
+    return undefined; // Let the library use default authentication
+  }
+
+  /**
    * Attach billing account to a newly created project
    */
   private static async attachBillingAccount(projectId: string): Promise<boolean> {
     try {
       console.log(`💳 Attaching billing account to project: ${projectId}`);
       
-      const billing = new CloudBillingClient({
-        // Uses GOOGLE_APPLICATION_CREDENTIALS environment variable automatically
-      });
+      const credentials = this.getGoogleCloudCredentials();
+      const billing = new CloudBillingClient(credentials ? { credentials } : {});
 
       const projectName = `projects/${projectId}`;
       
@@ -198,9 +216,10 @@ export class FirebaseProjectService {
         
         try {
           // Initialize Google Cloud Storage client with service account
+          const credentials = this.getGoogleCloudCredentials();
           const storage = new Storage({
             projectId: projectId,
-            // Uses GOOGLE_APPLICATION_CREDENTIALS environment variable automatically
+            ...(credentials && { credentials })
           });
           
           console.log('✅ Google Cloud Storage client initialized');

@@ -33,6 +33,10 @@ docsai-chatbot-app-*.json
 firebase-adminsdk-*.json
 *-firebase-adminsdk-*.json
 
+# Scripts directory - include scripts but exclude any JSON files
+!scripts/
+scripts/*.json
+
 # vercel
 .vercel
 
