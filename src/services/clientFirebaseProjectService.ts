@@ -14,6 +14,11 @@ export interface ClientFirebaseProject {
   chatbotId: string;
   status: 'creating' | 'active' | 'failed' | 'deleted';
   config: FirebaseProjectConfig;
+  buckets?: {
+    documents: string;
+    privateImages: string;
+    documentImages: string;
+  };
 }
 
 export class ClientFirebaseProjectService {
