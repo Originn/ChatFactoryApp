@@ -85,19 +85,52 @@ export async function POST(
     if (action === 'delete') {
       console.log('🗑️ Deleting Firebase project via API for chatbot:', chatbotId);
       
-      // Note: This marks the project as deleted in our database
-      // Actual Google Cloud project deletion would require additional setup
       const result = await FirebaseProjectService.deleteProject(chatbotId);
 
       if (result.success) {
         return NextResponse.json({
           success: true,
-          message: 'Firebase project deleted successfully'
+          automated: result.automated,
+          message: result.automated ? 
+            'Firebase project deleted successfully using GCP SDK' : 
+            'Firebase project marked for deletion - manual cleanup may be required',
+          details: result.error || undefined
         });
       } else {
         return NextResponse.json({
           success: false,
           error: result.error
+        }, { status: 500 });
+      }
+    }
+
+    if (action === 'test-permissions') {
+      console.log('🧪 Testing GCP project deletion permissions...');
+      
+      try {
+        // Import the Google Cloud Resource Manager client
+        const { ProjectsClient } = require('@google-cloud/resource-manager').v3;
+        
+        // Initialize the client with credentials
+        const credentials = FirebaseProjectService['getGoogleCloudCredentials']();
+        const projectsClient = new ProjectsClient(credentials ? { credentials } : {});
+
+        // Test by listing projects (requires basic permissions)
+        const [projects] = await projectsClient.searchProjects({});
+        
+        return NextResponse.json({
+          success: true,
+          message: 'GCP Resource Manager client initialized successfully',
+          projectCount: projects.length,
+          hasCredentials: !!credentials,
+          testPassed: true
+        });
+        
+      } catch (error: any) {
+        return NextResponse.json({
+          success: false,
+          error: `Permission test failed: ${error.message}`,
+          testPassed: false
         }, { status: 500 });
       }
     }

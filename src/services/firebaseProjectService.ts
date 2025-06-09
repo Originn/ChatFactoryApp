@@ -837,7 +837,7 @@ export class FirebaseProjectService {
   }
 
   /**
-   * Delete Firebase project with organization-level permissions
+   * Delete Firebase project using Google Cloud Resource Manager SDK
    */
   static async deleteProject(chatbotId: string): Promise<{ 
     success: boolean; 
@@ -851,7 +851,7 @@ export class FirebaseProjectService {
         return { success: false, error: 'No Firebase project found for this chatbot' };
       }
 
-      console.log(`🗑️ Starting organization-level project deletion: ${project.projectId}`);
+      console.log(`🗑️ Starting automated GCP project deletion: ${project.projectId}`);
 
       // Mark as deleting
       const projectRef = adminDb.collection(this.FIREBASE_PROJECTS_COLLECTION).doc(project.projectId);
@@ -861,24 +861,91 @@ export class FirebaseProjectService {
         updatedAt: Timestamp.now()
       });
 
-      // Simple deletion - mark as deleted for manual cleanup
-      await projectRef.update({
-        status: 'deleted',
-        deletedFromCloud: false,
-        automatedDeletion: false,
-        manualDeletionRequired: true,
-        manualDeletionUrl: `https://console.firebase.google.com/project/${project.projectId}/settings/general`,
-        deletionNote: 'Project marked for manual deletion. Please delete manually from Firebase Console.',
-        updatedAt: Timestamp.now()
-      });
+      try {
+        // Import the Google Cloud Resource Manager client
+        const { ProjectsClient } = require('@google-cloud/resource-manager').v3;
+        
+        // Initialize the client with credentials
+        const credentials = this.getGoogleCloudCredentials();
+        const projectsClient = new ProjectsClient(credentials ? { credentials } : {});
 
-      console.log('📝 Project marked for manual deletion');
-      
-      return {
-        success: true,
-        automated: false,
-        error: `Project marked for deletion. Please delete manually: https://console.firebase.google.com/project/${project.projectId}/settings/general`
-      };
+        // Construct the project resource name in the required format
+        const projectResourceName = `projects/${project.projectId}`;
+        
+        console.log(`🗑️ Calling GCP Resource Manager deleteProject API for: ${projectResourceName}`);
+        
+        // Call the deleteProject method
+        const [operation] = await projectsClient.deleteProject({
+          name: projectResourceName
+        });
+
+        console.log('⏳ Waiting for project deletion operation to complete...');
+        
+        // Wait for the long-running operation to complete
+        const [response] = await operation.promise();
+        
+        console.log('✅ GCP project deletion completed successfully:', response);
+
+        // Update project record with successful deletion
+        await projectRef.update({
+          status: 'deleted',
+          deletedFromCloud: true,
+          automatedDeletion: true,
+          manualDeletionRequired: false,
+          deletionCompletedAt: Timestamp.now(),
+          deletionResponse: JSON.stringify(response),
+          updatedAt: Timestamp.now()
+        });
+
+        console.log(`🎉 Successfully deleted GCP project: ${project.projectId}`);
+        
+        return {
+          success: true,
+          automated: true
+        };
+
+      } catch (deletionError: any) {
+        console.error('❌ GCP project deletion failed:', deletionError);
+        
+        // Check if it's a permissions error
+        if (deletionError.code === 3 || deletionError.message?.includes('PERMISSION_DENIED')) {
+          console.error('🔐 Permission denied - service account lacks project deletion permissions');
+          console.error('💡 Required permission: resourcemanager.projects.delete');
+          console.error('💡 Required role: Project Deleter or Organization Admin');
+        } else if (deletionError.code === 5 || deletionError.message?.includes('NOT_FOUND')) {
+          console.warn('⚠️ Project not found - may have been already deleted');
+          // Mark as deleted since it doesn't exist anymore
+          await projectRef.update({
+            status: 'deleted',
+            deletedFromCloud: true,
+            automatedDeletion: true,
+            deletionNote: 'Project not found - likely already deleted',
+            updatedAt: Timestamp.now()
+          });
+          return { success: true, automated: true };
+        } else if (deletionError.code === 9 || deletionError.message?.includes('FAILED_PRECONDITION')) {
+          console.error('⚠️ Failed precondition - project may have active billing or resources');
+          console.error('💡 Ensure all resources are deleted and billing is disabled before deletion');
+        }
+
+        // Fall back to manual deletion marking
+        await projectRef.update({
+          status: 'deleted',
+          deletedFromCloud: false,
+          automatedDeletion: false,
+          manualDeletionRequired: true,
+          manualDeletionUrl: `https://console.firebase.google.com/project/${project.projectId}/settings/general`,
+          deletionError: deletionError.message,
+          deletionNote: 'Automated deletion failed. Please delete manually from Firebase Console.',
+          updatedAt: Timestamp.now()
+        });
+
+        return {
+          success: true,
+          automated: false,
+          error: `Automated deletion failed: ${deletionError.message}. Please delete manually: https://console.firebase.google.com/project/${project.projectId}/settings/general`
+        };
+      }
       
     } catch (error: any) {
       console.error('❌ Error in deleteProject:', error);
