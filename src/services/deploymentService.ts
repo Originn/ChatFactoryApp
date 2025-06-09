@@ -20,7 +20,9 @@ import { UpdatedUserProfile } from '@/types/deployment';
 import { UserService } from './userService';
 import { ChatbotConfig } from '@/types/chatbot';
 import { PineconeService } from './pineconeService';
-import { FirebaseProjectService } from './firebaseProjectService';
+import { FirebaseAPIService } from './firebaseAPIService';
+import { GoogleOAuthClientManager } from './googleOAuthClientManager';
+import { FirebaseAuthConfigService } from './firebaseAuthSetup';
 
 interface DeploymentOptions {
   chatbot: ChatbotConfig;
@@ -105,7 +107,7 @@ class DeploymentService {
 
       // Step 1: Create dedicated Firebase project
       console.log('🔥 Creating dedicated Firebase project...');
-      const firebaseResult = await FirebaseProjectService.createProjectForChatbot({
+      const firebaseResult = await FirebaseAPIService.createProjectForChatbot({
         chatbotId: chatbot.id,
         chatbotName: chatbot.name,
         creatorUserId: user.uid
@@ -121,9 +123,25 @@ class DeploymentService {
 
       console.log('✅ Firebase project created:', firebaseResult.project?.projectId);
 
-      // Generate subdomain
+      // Step 1.5: Setup OAuth and Firebase Authentication
+      const projectId = firebaseResult.project!.projectId;
       const subdomain = this.generateSubdomain(chatbot.name);
       const deploymentUrl = customDomain || `${subdomain}.vercel.app`;
+
+      console.log('🔐 Setting up OAuth and Firebase authentication...');
+      const authResult = await this.setupChatbotAuthentication(
+        projectId,
+        chatbot.name,
+        deploymentUrl
+      );
+
+      if (!authResult.success) {
+        console.error('❌ Authentication setup failed:', authResult.error);
+        // Continue deployment but log the auth failure
+        console.warn('⚠️ Chatbot will be deployed without Google OAuth authentication');
+      } else {
+        console.log('✅ Authentication setup completed successfully');
+      }
 
       // Create deployment record with Firebase project info
       const deploymentRecord: Omit<DeploymentRecord, 'id'> = {
@@ -160,7 +178,7 @@ class DeploymentService {
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         
-        environmentVariables: this.prepareEnvironmentVariables(chatbot, user, firebaseResult.project!)
+        environmentVariables: this.prepareEnvironmentVariables(chatbot, user, firebaseResult.project!, authResult)
       };
 
       // Create Pinecone index for the chatbot
@@ -389,7 +407,13 @@ class DeploymentService {
   private static prepareEnvironmentVariables(
     chatbot: ChatbotConfig, 
     user: UpdatedUserProfile,
-    firebaseProject: any
+    firebaseProject: any,
+    authResult?: {
+      success: boolean;
+      oauthClientId?: string;
+      oauthClientSecret?: string;
+      error?: string;
+    }
   ): Record<string, string> {
     return {
       CHATBOT_ID: chatbot.id,
@@ -411,6 +435,11 @@ class DeploymentService {
       FIREBASE_PROJECT_ID: firebaseProject.config.projectId,
       FIREBASE_CLIENT_EMAIL: firebaseProject.serviceAccount?.clientEmail || '',
       FIREBASE_PRIVATE_KEY: firebaseProject.serviceAccount?.privateKey || '',
+      
+      // OAuth Configuration (if available)
+      NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: authResult?.oauthClientId || '',
+      GOOGLE_OAUTH_CLIENT_SECRET: authResult?.oauthClientSecret || '',
+      OAUTH_ENABLED: authResult?.success ? 'true' : 'false',
       
       DEPLOYMENT_WEBHOOK_URL: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/deployment`
     };
@@ -440,7 +469,154 @@ class DeploymentService {
       updatedAt: Timestamp.now()
     });
   }
+
+  /**
+   * Setup OAuth and Firebase Authentication for new chatbot
+   */
+  private static async setupChatbotAuthentication(
+    projectId: string,
+    chatbotName: string,
+    deploymentUrl: string
+  ): Promise<{
+    success: boolean;
+    oauthClientId?: string;
+    oauthClientSecret?: string;
+    error?: string;
+  }> {
+    try {
+      console.log('🔐 Setting up OAuth and Firebase authentication...');
+
+      // Step 1: Create Google OAuth Client with proper redirect URIs
+      const redirectUris = [
+        `https://${projectId}.firebaseapp.com/__/auth/handler`,
+        `https://${projectId}.web.app/__/auth/handler`,
+        `http://localhost:3000/__/auth/handler`,
+        `http://localhost:3001/__/auth/handler`,
+        `http://localhost:5000/__/auth/handler`
+      ];
+
+      // Add deployment URL if it's different from Firebase hosting
+      if (deploymentUrl && !deploymentUrl.includes('firebaseapp.com') && !deploymentUrl.includes('.web.app')) {
+        redirectUris.push(`https://${deploymentUrl}/__/auth/handler`);
+      }
+
+      const oauthClient = await GoogleOAuthClientManager.createOAuthClient({
+        projectId,
+        clientId: `${projectId}-oauth-client`,
+        displayName: `${chatbotName} OAuth Client`,
+        description: `OAuth client for ${chatbotName} chatbot authentication`,
+        allowedRedirectUris: redirectUris,
+        allowedGrantTypes: ['AUTHORIZATION_CODE_GRANT', 'REFRESH_TOKEN_GRANT'],
+        allowedScopes: [
+          'https://www.googleapis.com/auth/cloud-platform',
+          'openid',
+          'email',
+          'profile'
+        ],
+        clientType: 'CONFIDENTIAL_CLIENT'
+      });
+
+      if (!oauthClient) {
+        return {
+          success: false,
+          error: 'Failed to create OAuth client'
+        };
+      }
+
+      console.log('✅ OAuth client created:', oauthClient.clientId);
+
+      // Step 2: Enable Firebase Authentication with the new OAuth client
+      const authSetup = await FirebaseAuthConfigService.setupAuthenticationForChatbot({
+        projectId,
+        emailPasswordEnabled: true,
+        googleConfig: {
+          enabled: true,
+          clientId: oauthClient.clientId,
+          clientSecret: oauthClient.clientSecret
+        }
+      });
+
+      if (!authSetup) {
+        return {
+          success: false,
+          error: 'Failed to configure Firebase authentication'
+        };
+      }
+
+      console.log('✅ Firebase authentication configured successfully');
+
+      return {
+        success: true,
+        oauthClientId: oauthClient.clientId,
+        oauthClientSecret: oauthClient.clientSecret
+      };
+
+    } catch (error) {
+      console.error('❌ Authentication setup failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Authentication setup failed'
+      };
+    }
+  }
 }
 
 export { DeploymentService };
 export type { DeploymentOptions, DeploymentResult };
+
+  /**
+   * Update OAuth redirect URIs after deployment completes
+   */
+  static async updateOAuthRedirectUris(
+    deploymentId: string,
+    actualDeploymentUrl: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const deployment = await this.getDeployment(deploymentId);
+      if (!deployment) {
+        return { success: false, error: 'Deployment not found' };
+      }
+
+      const projectId = deployment.firebaseProjectId;
+      const oauthClientId = `${projectId}-oauth-client`;
+
+      // Updated redirect URIs with the actual deployment URL
+      const redirectUris = [
+        `https://${projectId}.firebaseapp.com/__/auth/handler`,
+        `https://${projectId}.web.app/__/auth/handler`,
+        `https://${actualDeploymentUrl}/__/auth/handler`,
+        `http://localhost:3000/__/auth/handler`,
+        `http://localhost:3001/__/auth/handler`,
+        `http://localhost:5000/__/auth/handler`
+      ];
+
+      const success = await GoogleOAuthClientManager.updateRedirectUris(
+        projectId,
+        oauthClientId,
+        redirectUris
+      );
+
+      if (success) {
+        console.log('✅ OAuth redirect URIs updated with actual deployment URL');
+        
+        // Update deployment record
+        const deploymentRef = doc(db, this.DEPLOYMENTS_COLLECTION, deploymentId);
+        await updateDoc(deploymentRef, {
+          'oauthConfig.redirectUrisUpdated': true,
+          'oauthConfig.actualDeploymentUrl': actualDeploymentUrl,
+          updatedAt: Timestamp.now()
+        });
+        
+        return { success: true };
+      } else {
+        return { success: false, error: 'Failed to update OAuth redirect URIs' };
+      }
+
+    } catch (error) {
+      console.error('❌ Error updating OAuth redirect URIs:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }

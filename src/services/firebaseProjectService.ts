@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { execSync } from 'child_process';
 import { Storage } from '@google-cloud/storage';
 import { CloudBillingClient } from '@google-cloud/billing';
+import { GoogleAuth } from 'google-auth-library';
 
 export interface CreateFirebaseProjectRequest {
   chatbotId: string;
@@ -52,6 +53,279 @@ export class FirebaseProjectService {
     // In development, use the file path (if GOOGLE_APPLICATION_CREDENTIALS is set)
     // The Google Cloud libraries will automatically use this
     return undefined; // Let the library use default authentication
+  }
+
+  /**
+   * Grant service account permissions on newly created project
+   */
+  private static async grantServiceAccountPermissions(projectId: string): Promise<boolean> {
+    try {
+      console.log(`🔐 Granting service account permissions on project: ${projectId}`);
+      console.log('🔐 Required permissions: roles/iam.oauthClientAdmin, roles/identitytoolkit.admin, roles/iap.admin');
+      
+      const credentials = this.getGoogleCloudCredentials();
+      const auth = new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        ...(credentials && { credentials })
+      });
+
+      const client = await auth.getClient();
+      const tokenResponse = await client.getAccessToken();
+      
+      if (!tokenResponse.token) {
+        console.error('❌ Failed to get access token for permission granting');
+        return false;
+      }
+
+      const serviceAccountEmail = 'firebase-project-manager@docsai-chatbot-app.iam.gserviceaccount.com';
+      console.log(`🔐 Service account: ${serviceAccountEmail}`);
+      
+      // Get current IAM policy
+      console.log('🔐 Getting current IAM policy...');
+      const getPolicyUrl = `https://cloudresourcemanager.googleapis.com/v1/projects/${projectId}:getIamPolicy`;
+      const getPolicyResponse = await fetch(getPolicyUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokenResponse.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!getPolicyResponse.ok) {
+        const errorText = await getPolicyResponse.text();
+        console.error('❌ Failed to get IAM policy:', errorText);
+        console.error(`❌ Response status: ${getPolicyResponse.status} ${getPolicyResponse.statusText}`);
+        
+        // Check if this is a permissions issue
+        if (getPolicyResponse.status === 403) {
+          console.error('💡 Main service account may lack permission to manage IAM on new projects');
+          console.error('💡 Required permission: resourcemanager.projects.getIamPolicy');
+          console.error('💡 You may need to grant "Project IAM Admin" role to the main service account');
+        }
+        
+        return false;
+      }
+
+      const currentPolicy = await getPolicyResponse.json();
+      console.log(`🔐 Current policy has ${currentPolicy.bindings?.length || 0} bindings`);
+      
+      // Add required permissions for OAuth client creation and consent screen
+      const requiredRoles = [
+        'roles/iam.oauthClientAdmin',
+        'roles/identitytoolkit.admin',
+        'roles/iap.admin' // 🆕 For OAuth consent screen creation
+      ];
+
+      let policyChanged = false;
+      const bindings = currentPolicy.bindings || [];
+
+      for (const role of requiredRoles) {
+        console.log(`🔐 Processing role: ${role}`);
+        
+        // Find existing binding for this role
+        let binding = bindings.find(b => b.role === role);
+        
+        if (!binding) {
+          // Create new binding
+          console.log(`🔐 Creating new binding for role: ${role}`);
+          binding = {
+            role: role,
+            members: []
+          };
+          bindings.push(binding);
+        }
+
+        const memberString = `serviceAccount:${serviceAccountEmail}`;
+        if (!binding.members.includes(memberString)) {
+          binding.members.push(memberString);
+          policyChanged = true;
+          console.log(`✅ Added role ${role} for service account`);
+        } else {
+          console.log(`ℹ️ Service account already has role: ${role}`);
+        }
+      }
+
+      if (policyChanged) {
+        console.log('🔐 Updating IAM policy with new permissions...');
+        
+        // Update IAM policy
+        const setPolicyUrl = `https://cloudresourcemanager.googleapis.com/v1/projects/${projectId}:setIamPolicy`;
+        const setPolicyResponse = await fetch(setPolicyUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${tokenResponse.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            policy: {
+              ...currentPolicy,
+              bindings: bindings
+            }
+          })
+        });
+
+        if (setPolicyResponse.ok) {
+          console.log('🔐 IAM policy updated successfully');
+          console.log('⏳ Waiting 15 seconds for permissions to propagate...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+          
+          // Verify permissions were granted
+          console.log('🔍 Verifying permissions were granted...');
+          const verifySuccess = await this.verifyServiceAccountPermissions(projectId, serviceAccountEmail, tokenResponse.token);
+          
+          if (verifySuccess) {
+            console.log('✅ Service account permissions verified successfully');
+            return true;
+          } else {
+            console.warn('⚠️ Permission verification failed, but continuing (may work anyway)');
+            return true; // Continue anyway, might still work
+          }
+        } else {
+          const errorText = await setPolicyResponse.text();
+          console.error('❌ Failed to set IAM policy:', errorText);
+          console.error(`❌ Response status: ${setPolicyResponse.status} ${setPolicyResponse.statusText}`);
+          return false;
+        }
+      } else {
+        console.log('✅ Service account already has required permissions');
+        return true;
+      }
+
+    } catch (error: any) {
+      console.error('❌ Failed to grant service account permissions:', error.message);
+      console.error('❌ Stack trace:', error.stack);
+      return false;
+    }
+  }
+
+  /**
+   * Verify service account has required permissions
+   */
+  private static async verifyServiceAccountPermissions(
+    projectId: string, 
+    serviceAccountEmail: string, 
+    accessToken: string
+  ): Promise<boolean> {
+    try {
+      const getPolicyUrl = `https://cloudresourcemanager.googleapis.com/v1/projects/${projectId}:getIamPolicy`;
+      const response = await fetch(getPolicyUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.warn('⚠️ Failed to verify permissions');
+        return false;
+      }
+
+      const policy = await response.json();
+      const bindings = policy.bindings || [];
+      
+      const requiredRoles = ['roles/iam.oauthClientAdmin', 'roles/identitytoolkit.admin', 'roles/iap.admin'];
+      const serviceAccountRoles = bindings
+        .filter(binding => binding.members?.includes(`serviceAccount:${serviceAccountEmail}`))
+        .map(binding => binding.role);
+      
+      const hasAllRoles = requiredRoles.every(role => serviceAccountRoles.includes(role));
+      
+      if (hasAllRoles) {
+        console.log('✅ Verification: Service account has all required roles');
+        return true;
+      } else {
+        const missingRoles = requiredRoles.filter(role => !serviceAccountRoles.includes(role));
+        console.warn('⚠️ Verification: Missing roles:', missingRoles.join(', '));
+        return false;
+      }
+      
+    } catch (error) {
+      console.warn('⚠️ Permission verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Enable required APIs for OAuth functionality
+   */
+  private static async enableRequiredAPIs(projectId: string): Promise<boolean> {
+    try {
+      console.log(`🔧 Enabling required APIs for project: ${projectId}`);
+      
+      const credentials = this.getGoogleCloudCredentials();
+      const auth = new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        ...(credentials && { credentials })
+      });
+
+      const client = await auth.getClient();
+      const tokenResponse = await client.getAccessToken();
+      
+      if (!tokenResponse.token) {
+        console.error('❌ Failed to get access token for API enabling');
+        return false;
+      }
+
+      const apisToEnable = [
+        'iam.googleapis.com',                    // IAM API for OAuth client creation
+        'identitytoolkit.googleapis.com',       // Identity Toolkit for Firebase Auth
+        'cloudresourcemanager.googleapis.com', // Resource Manager (often needed)
+        'iap.googleapis.com'                    // Identity-Aware Proxy API for OAuth consent screen
+      ];
+
+      let allSuccessful = true;
+      
+      for (const api of apisToEnable) {
+        try {
+          const enableUrl = `https://serviceusage.googleapis.com/v1/projects/${projectId}/services/${api}:enable`;
+          
+          const response = await fetch(enableUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${tokenResponse.token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({}) // Empty body for enable operation
+          });
+
+          if (response.ok || response.status === 400) {
+            // 400 might mean already enabled
+            console.log(`✅ API enabled: ${api}`);
+            
+            // Wait longer for IAP API specifically
+            if (api === 'iap.googleapis.com') {
+              console.log('⏳ Waiting extra time for IAP API to propagate...');
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            } else {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          } else {
+            const errorText = await response.text();
+            console.error(`❌ Failed to enable API ${api}:`, errorText);
+            allSuccessful = false;
+          }
+        } catch (apiError) {
+          console.error(`❌ Error enabling API ${api}:`, apiError);
+          allSuccessful = false;
+        }
+      }
+
+      if (allSuccessful) {
+        console.log('✅ All required APIs enabled successfully');
+        // Wait longer for APIs to fully propagate (especially IAP API)
+        console.log('⏳ Waiting for APIs to propagate (especially IAP API)...');
+        await new Promise(resolve => setTimeout(resolve, 15000)); // Increased to 15 seconds
+      } else {
+        console.warn('⚠️ Some APIs failed to enable - OAuth setup may fail');
+      }
+
+      return allSuccessful;
+      
+    } catch (error: any) {
+      console.error('❌ Failed to enable required APIs:', error.message);
+      return false;
+    }
   }
 
   /**
@@ -176,6 +450,16 @@ export class FirebaseProjectService {
         
         console.log('✅ Web app created:', appOutput);
 
+        // Step 3.5: Grant service account permissions on the new project
+        console.log('🔐 Granting service account permissions on new project...');
+        const permissionsGranted = await this.grantServiceAccountPermissions(projectId);
+        
+        if (permissionsGranted) {
+          console.log('✅ Service account permissions granted - OAuth creation will be possible');
+        } else {
+          console.warn('⚠️ Failed to grant service account permissions - OAuth setup may fail');
+        }
+
         // Step 4.5: Attach billing account to enable bucket creation
         console.log('💳 Setting up billing for the new project...');
         const billingAttached = await this.attachBillingAccount(projectId);
@@ -184,6 +468,16 @@ export class FirebaseProjectService {
           console.log('✅ Billing account attached - bucket creation will be enabled');
         } else {
           console.warn('⚠️ Could not attach billing - buckets may not be created');
+        }
+
+        // Step 4.6: Enable required APIs for OAuth and authentication
+        console.log('🔧 Enabling required APIs for OAuth functionality...');
+        const apisEnabled = await this.enableRequiredAPIs(projectId);
+        
+        if (apisEnabled) {
+          console.log('✅ Required APIs enabled - OAuth setup will be possible');
+        } else {
+          console.warn('⚠️ Some APIs failed to enable - OAuth setup may require manual intervention');
         }
 
         // Step 5: Get Firebase configuration

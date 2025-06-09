@@ -3,7 +3,7 @@ import { adminDb, adminStorage } from '@/lib/firebase/admin/index';
 import { Timestamp } from 'firebase-admin/firestore';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
-import { FirebaseProjectService } from '@/services/firebaseProjectService';
+import { FirebaseAPIService } from '@/services/firebaseAPIService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -255,8 +255,8 @@ export async function POST(request: NextRequest) {
     
     let dedicatedFirebaseProject = null;
     try {
-      // Create dedicated Firebase project for this chatbot
-      const firebaseResult = await FirebaseProjectService.createProjectForChatbot({
+      // Create dedicated Firebase project for this chatbot using API
+      const firebaseResult = await FirebaseAPIService.createProjectForChatbot({
         chatbotId,
         chatbotName: chatbotConfig.name,
         creatorUserId: userId || chatbotData?.userId || 'unknown'
@@ -278,6 +278,30 @@ export async function POST(request: NextRequest) {
     } catch (firebaseError) {
       console.error('❌ Firebase project creation failed:', firebaseError);
       throw new Error(`Firebase project creation failed: ${firebaseError.message}`);
+    }
+
+    // Setup OAuth 2.0 for Firebase Authentication
+    console.log('🔐 Firebase Authentication configured via API...');
+    let oauthClientConfig = null;
+    
+    try {
+      if (dedicatedFirebaseProject?.projectId) {
+        console.log('✅ Firebase Authentication configured automatically by API service');
+        console.log('ℹ️  Firebase handles OAuth internally - no separate OAuth client needed');
+        console.log('ℹ️  For advanced OAuth requirements, manual setup available at:');
+        console.log(`ℹ️  https://console.cloud.google.com/apis/credentials?project=${dedicatedFirebaseProject.projectId}`);
+        
+        // Firebase Authentication is already configured by FirebaseAPIService
+        oauthClientConfig = {
+          message: 'Firebase Auth configured via API',
+          clientId: 'firebase-managed',
+          clientSecret: 'firebase-managed',
+          configured: true
+        };
+      }
+    } catch (oauthError) {
+      console.error('❌ OAuth setup failed:', oauthError);
+      console.warn('⚠️ Continuing deployment - Firebase Auth should still work');
     }
 
     // Set environment variables on the project
@@ -460,6 +484,9 @@ export async function POST(request: NextRequest) {
     const deploymentData = await deploymentResponse.json();
     console.log('✅ Deployment created successfully:', deploymentData.id);
     console.log('🔗 Deployment URL:', deploymentData.url);
+    
+    // Firebase Authentication is configured automatically - no OAuth redirect URIs to update
+    console.log('ℹ️  Firebase Authentication configured via API - no redirect URIs to update');
     
     // Update database with deployment information
     try {
