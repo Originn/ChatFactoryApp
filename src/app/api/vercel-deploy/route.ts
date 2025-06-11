@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseAPIService } from '@/services/firebaseAPIService';
+import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -304,6 +305,46 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ Continuing deployment - Firebase Auth should still work');
     }
 
+    // Check if Firebase service account credentials are available
+    const hasValidServiceAccount = dedicatedFirebaseProject?.serviceAccount?.clientEmail && 
+                                   dedicatedFirebaseProject?.serviceAccount?.privateKey;
+    
+    console.log('🔍 Firebase service account validation:', {
+      hasFirebaseProject: !!dedicatedFirebaseProject,
+      hasConfig: !!dedicatedFirebaseProject?.config,
+      hasServiceAccount: !!dedicatedFirebaseProject?.serviceAccount,
+      hasClientEmail: !!dedicatedFirebaseProject?.serviceAccount?.clientEmail,
+      hasPrivateKey: !!dedicatedFirebaseProject?.serviceAccount?.privateKey,
+      isServiceAccountValid: hasValidServiceAccount,
+      projectId: dedicatedFirebaseProject?.config?.projectId || 'MISSING'
+    });
+
+    if (!hasValidServiceAccount) {
+      console.error('❌ CRITICAL: Firebase service account credentials are missing or incomplete!');
+      console.error('🔧 This will cause authentication failures in the deployed chatbot.');
+      console.error('📋 Expected: clientEmail and privateKey from service account creation');
+      console.error('🎯 Actual:', {
+        serviceAccount: dedicatedFirebaseProject?.serviceAccount || 'NULL',
+        clientEmail: dedicatedFirebaseProject?.serviceAccount?.clientEmail || 'MISSING',
+        privateKey: dedicatedFirebaseProject?.serviceAccount?.privateKey ? 'PRESENT' : 'MISSING'
+      });
+      
+      // Fail the deployment if we don't have valid service account credentials
+      return NextResponse.json({ 
+        error: `Firebase service account creation failed. Cannot deploy chatbot without proper authentication credentials. Service account status: ${dedicatedFirebaseProject?.serviceAccount ? 'partial' : 'missing'}`,
+        details: {
+          hasProject: !!dedicatedFirebaseProject,
+          hasServiceAccount: !!dedicatedFirebaseProject?.serviceAccount,
+          missingFields: [
+            ...(!dedicatedFirebaseProject?.serviceAccount?.clientEmail ? ['clientEmail'] : []),
+            ...(!dedicatedFirebaseProject?.serviceAccount?.privateKey ? ['privateKey'] : [])
+          ]
+        }
+      }, { status: 500 });
+    }
+
+    console.log('✅ Firebase service account credentials validated successfully');
+    
     // Set environment variables on the project
     const envVars = {
       // Chatbot-specific configuration
@@ -320,18 +361,23 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
       
       // Dedicated Firebase client configuration (public)
-      NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject?.config.apiKey || '',
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dedicatedFirebaseProject?.config.authDomain || '',
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
-      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dedicatedFirebaseProject?.config.storageBucket || '',
-      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: dedicatedFirebaseProject?.config.messagingSenderId || '',
-      NEXT_PUBLIC_FIREBASE_APP_ID: dedicatedFirebaseProject?.config.appId || '',
+      NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject.config.apiKey,
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dedicatedFirebaseProject.config.authDomain,
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dedicatedFirebaseProject.config.storageBucket,
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: dedicatedFirebaseProject.config.messagingSenderId,
+      NEXT_PUBLIC_FIREBASE_APP_ID: dedicatedFirebaseProject.config.appId,
       NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '', // Keep from main project for analytics
       
-      // Dedicated Firebase Admin SDK (Server-side, secure)
-      FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
-      FIREBASE_CLIENT_EMAIL: dedicatedFirebaseProject?.serviceAccount?.clientEmail || '',
-      FIREBASE_PRIVATE_KEY: dedicatedFirebaseProject?.serviceAccount?.privateKey || '',
+      // Dedicated Firebase Admin SDK (Server-side, secure) - NOW GUARANTEED TO BE VALID
+      FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
+      FIREBASE_CLIENT_EMAIL: dedicatedFirebaseProject.serviceAccount.clientEmail,
+      FIREBASE_PRIVATE_KEY: dedicatedFirebaseProject.serviceAccount.privateKey,
+      
+      // Main ChatFactory project credentials (for token validation)
+      CHATFACTORY_MAIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
+      CHATFACTORY_MAIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+      CHATFACTORY_MAIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
       
       // API Keys (Server-side, secure)
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
@@ -473,6 +519,86 @@ export async function POST(request: NextRequest) {
         }
         
         const deploymentData = await fallbackResponse.json();
+        
+        // CREATE DEPLOYMENT RECORD FOR FALLBACK DEPLOYMENT
+        try {
+          console.log('📋 Creating deployment record for fallback deployment...');
+          
+          const deploymentUrl = deploymentData.url ? 
+            (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+            `https://${projectName}.vercel.app`;
+          
+          const deploymentRecord = {
+            chatbotId: chatbotId,
+            userId: userId || chatbotData?.userId,
+            status: 'deployed',
+            subdomain: projectName,
+            deploymentUrl: deploymentUrl,
+            
+            // Firebase project information (if dedicated project was created)
+            firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
+            firebaseConfig: dedicatedFirebaseProject?.config || {},
+            
+            // Vercel deployment info
+            vercelProjectId: projectName,
+            vercelDeploymentId: deploymentData.id,
+            
+            branding: {
+              show: true,
+              text: 'Powered by ChatFactory',
+              link: 'https://chatfactory.ai'
+            },
+            
+            planLimitations: {
+              monthlyQueryLimit: 1000,
+              analyticsRetention: 30,
+              customDomain: false,
+              branding: true
+            },
+            
+            usage: {
+              totalQueries: 0,
+              monthlyQueries: 0,
+              lastResetAt: Timestamp.now()
+            },
+            
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+            deployedAt: Timestamp.now(),
+            
+            environmentVariables: {
+              CHATBOT_ID: chatbotId,
+              CHATBOT_NAME: chatbotConfig.name,
+              NEXT_PUBLIC_CHATBOT_ID: chatbotId,
+              NEXT_PUBLIC_CHATBOT_NAME: chatbotConfig.name,
+              NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
+            }
+          };
+
+          // Save deployment record to database
+          const deploymentRef = await adminDb.collection('deployments').add(deploymentRecord);
+          console.log('✅ Fallback deployment record created with ID:', deploymentRef.id);
+
+          // Update chatbot document with deployment info
+          await adminDb.collection('chatbots').doc(chatbotId).update({
+            status: 'active',
+            deployment: {
+              deploymentId: deploymentRef.id,
+              deploymentUrl: deploymentUrl,
+              status: 'deployed',
+              deployedAt: Timestamp.now(),
+              vercelProjectId: projectName,
+              vercelDeploymentId: deploymentData.id,
+            },
+            updatedAt: Timestamp.now()
+          });
+          console.log('✅ Chatbot document updated with fallback deployment info');
+
+        } catch (dbError) {
+          console.error('❌ Failed to create fallback deployment record:', dbError);
+          // Continue with deployment - don't fail the deployment because of DB issues
+        }
+        
         return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false, dedicatedFirebaseProject);
       }
       
@@ -484,6 +610,85 @@ export async function POST(request: NextRequest) {
     const deploymentData = await deploymentResponse.json();
     console.log('✅ Deployment created successfully:', deploymentData.id);
     console.log('🔗 Deployment URL:', deploymentData.url);
+    
+    // CREATE DEPLOYMENT RECORD IN DATABASE
+    try {
+      console.log('📋 Creating deployment record in database...');
+      
+      const deploymentUrl = deploymentData.url ? 
+        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+        `https://${projectName}.vercel.app`;
+      
+      const deploymentRecord = {
+        chatbotId: chatbotId,
+        userId: userId || chatbotData?.userId,
+        status: 'deployed',
+        subdomain: projectName,
+        deploymentUrl: deploymentUrl,
+        
+        // Firebase project information (if dedicated project was created)
+        firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
+        firebaseConfig: dedicatedFirebaseProject?.config || {},
+        
+        // Vercel deployment info
+        vercelProjectId: projectName,
+        vercelDeploymentId: deploymentData.id,
+        
+        branding: {
+          show: true,
+          text: 'Powered by ChatFactory',
+          link: 'https://chatfactory.ai'
+        },
+        
+        planLimitations: {
+          monthlyQueryLimit: 1000, // Default for free plan
+          analyticsRetention: 30,
+          customDomain: false,
+          branding: true
+        },
+        
+        usage: {
+          totalQueries: 0,
+          monthlyQueries: 0,
+          lastResetAt: Timestamp.now()
+        },
+        
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        deployedAt: Timestamp.now(),
+        
+        environmentVariables: {
+          CHATBOT_ID: chatbotId,
+          CHATBOT_NAME: chatbotConfig.name,
+          NEXT_PUBLIC_CHATBOT_ID: chatbotId,
+          NEXT_PUBLIC_CHATBOT_NAME: chatbotConfig.name,
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
+        }
+      };
+
+      // Save deployment record to database
+      const deploymentRef = await adminDb.collection('deployments').add(deploymentRecord);
+      console.log('✅ Deployment record created with ID:', deploymentRef.id);
+
+      // Update chatbot document with deployment info
+      await adminDb.collection('chatbots').doc(chatbotId).update({
+        status: 'active',
+        deployment: {
+          deploymentId: deploymentRef.id,
+          deploymentUrl: deploymentUrl,
+          status: 'deployed',
+          deployedAt: Timestamp.now(),
+          vercelProjectId: projectName,
+          vercelDeploymentId: deploymentData.id,
+        },
+        updatedAt: Timestamp.now()
+      });
+      console.log('✅ Chatbot document updated with deployment info');
+
+    } catch (dbError) {
+      console.error('❌ Failed to create deployment record:', dbError);
+      // Continue with deployment - don't fail the deployment because of DB issues
+    }
     
     // Firebase Authentication is configured automatically - no OAuth redirect URIs to update
     console.log('ℹ️  Firebase Authentication configured via API - no redirect URIs to update');
@@ -550,6 +755,106 @@ export async function POST(request: NextRequest) {
     } catch (dbError) {
       console.error('❌ Failed to update database after deployment:', dbError);
       // Don't fail the entire deployment for database update issues
+    }
+    
+    // STEP 7: Add authorized domain to Firebase project for authentication
+    if (dedicatedFirebaseProject?.projectId) {
+      const deploymentUrl = deploymentData.url ? 
+        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+        `https://${projectName}.vercel.app`;
+        
+      console.log('🔧 Adding Vercel domain to Firebase authorized domains...');
+      
+      // Add extra delay to ensure Firebase project is fully ready
+      console.log('⏳ Waiting for Firebase project to be fully ready...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      try {
+        await FirebaseAuthorizedDomainsService.ensureVercelDomainAuthorized(
+          dedicatedFirebaseProject.projectId,
+          deploymentUrl
+        );
+      } catch (domainError) {
+        console.error('❌ Failed to add authorized domain automatically:', domainError);
+        console.log('⚠️  Manual action required: Add domain to Firebase Console');
+        console.log(`   Domain to add: ${deploymentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`);
+        console.log(`   Firebase Console: https://console.firebase.google.com/project/${dedicatedFirebaseProject.projectId}/authentication/settings`);
+      }
+    }
+    
+    // SEND INVITATION EMAILS AFTER SUCCESSFUL DEPLOYMENT
+    try {
+      // Get chatbot data to check if we need to send invitations
+      const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+      const chatbotData = chatbotDoc.data();
+      
+      console.log('🔍 Email invitation debug:', {
+        requireAuth: chatbotData?.requireAuth,
+        accessMode: chatbotData?.authConfig?.accessMode,
+        invitedUsersCount: chatbotData?.authConfig?.invitedUsers?.length || 0,
+        invitedUsers: chatbotData?.authConfig?.invitedUsers || [],
+        shouldSendEmails: chatbotData?.requireAuth && 
+                         chatbotData?.authConfig?.accessMode === 'managed' && 
+                         chatbotData?.authConfig?.invitedUsers?.length > 0
+      });
+
+      // Send invitation emails if chatbot requires authentication and has invited users
+      if (chatbotData?.requireAuth && 
+          chatbotData?.authConfig?.accessMode === 'managed' && 
+          chatbotData?.authConfig?.invitedUsers?.length > 0) {
+        
+        const invitedUsers = chatbotData.authConfig.invitedUsers;
+        console.log(`📧 Sending invitations to ${invitedUsers.length} users after successful deployment...`);
+        
+        // Import ChatbotFirebaseService here to avoid circular dependency
+        const { ChatbotFirebaseService } = await import('@/services/chatbotFirebaseService');
+        
+        // Get the deployment URL for verification links
+        const deploymentUrl = deploymentData.url ? 
+          (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+          `https://${projectName}.vercel.app`;
+        
+        let successfulInvitations = 0;
+        let failedInvitations = 0;
+        
+        for (const email of invitedUsers) {
+          try {
+            const inviteResult = await ChatbotFirebaseService.inviteUser({
+              chatbotId,
+              email: email,
+              displayName: email.split('@')[0], // Use email prefix as display name
+              creatorUserId: chatbotData.userId,
+              role: 'user',
+              deploymentUrl: deploymentUrl // Pass the actual deployment URL
+            });
+
+            if (inviteResult.success) {
+              console.log(`✅ Successfully invited ${email}`);
+              successfulInvitations++;
+            } else {
+              console.error(`❌ Failed to invite ${email}:`, inviteResult.error);
+              failedInvitations++;
+            }
+          } catch (error) {
+            console.error(`❌ Error inviting ${email}:`, error);
+            failedInvitations++;
+          }
+        }
+
+        console.log(`📊 Invitation summary: ${successfulInvitations} successful, ${failedInvitations} failed`);
+        
+        if (successfulInvitations > 0) {
+          console.log(`🎉 Successfully sent ${successfulInvitations} invitation emails after deployment!`);
+        }
+        if (failedInvitations > 0) {
+          console.warn(`⚠️ Failed to send ${failedInvitations} invitation emails. Users can be invited manually from the dashboard.`);
+        }
+      } else {
+        console.log('ℹ️ No email invitations to send (authentication disabled or no invited users)');
+      }
+    } catch (emailError) {
+      console.error('❌ Error sending invitation emails after deployment:', emailError);
+      // Don't fail the entire deployment because of email issues
     }
     
     return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject);

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google-cloud/billing": "^5.0.1",
+    "@google-cloud/firestore": "^7.11.1",
     "@google-cloud/iam": "^2.2.0",
     "@google-cloud/iam-credentials": "^4.1.0",
     "@google-cloud/iap": "^4.2.0",

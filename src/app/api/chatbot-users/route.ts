@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FirebaseTenantService } from '@/services/firebaseTenantService';
+import { ChatbotFirebaseService } from '@/services/chatbotFirebaseService';
 import { adminDb } from '@/lib/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, chatbotId, email, displayName, userId } = await request.json();
+    const { action, chatbotId, email, displayName, userId, role } = await request.json();
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
@@ -28,17 +28,12 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Email is required' }, { status: 400 });
         }
 
-        const tenantId = chatbotData.authConfig?.firebaseTenantId;
-        if (!tenantId) {
-          return NextResponse.json({ error: 'Firebase tenant not found. Please redeploy the chatbot.' }, { status: 400 });
-        }
-
-        const inviteResult = await FirebaseTenantService.inviteUser({
+        const inviteResult = await ChatbotFirebaseService.inviteUser({
           chatbotId,
-          tenantId,
           email,
           displayName,
-          creatorUserId: chatbotData.userId
+          creatorUserId: chatbotData.userId,
+          role: role || 'user'
         });
 
         if (!inviteResult.success) {
@@ -47,7 +42,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: `Invitation sent to ${email}`,
+          message: `Invitation sent to ${email}. They will receive an email with verification instructions.`,
           userId: inviteResult.userId
         });
 
@@ -56,9 +51,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
 
-        const removeResult = await FirebaseTenantService.removeUser({
+        const removeResult = await ChatbotFirebaseService.removeUser({
           chatbotId,
-          tenantId: chatbotData.authConfig?.firebaseTenantId || '',
           userId
         });
 
@@ -68,14 +62,19 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'User removed successfully'
+          message: 'User access revoked successfully'
         });
 
       case 'list':
-        const invitedUsers = chatbotData.authConfig?.invitedUsers || [];
+        const usersResult = await ChatbotFirebaseService.getChatbotUsers(chatbotId);
+        
+        if (!usersResult.success) {
+          return NextResponse.json({ error: usersResult.error }, { status: 500 });
+        }
+
         return NextResponse.json({
           success: true,
-          users: invitedUsers
+          users: usersResult.users || []
         });
 
       default:
@@ -99,19 +98,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
     }
 
-    // Get chatbot and return invited users
-    const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
-    if (!chatbotDoc.exists) {
-      return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 });
+    // Get users for the chatbot from its dedicated Firebase project
+    const usersResult = await ChatbotFirebaseService.getChatbotUsers(chatbotId);
+    
+    if (!usersResult.success) {
+      return NextResponse.json({ error: usersResult.error }, { status: 500 });
     }
-
-    const chatbotData = chatbotDoc.data();
-    const invitedUsers = chatbotData?.authConfig?.invitedUsers || [];
 
     return NextResponse.json({
       success: true,
-      users: invitedUsers,
-      tenantId: chatbotData?.authConfig?.firebaseTenantId
+      users: usersResult.users || []
     });
 
   } catch (error: any) {

@@ -30,11 +30,21 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
   const loadUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
-      const response = await fetch(`/api/chatbot-users?chatbotId=${chatbot.id}`);
-      const data = await response.json();
+      // Try the regular endpoint first, fallback to temp endpoint
+      let response = await fetch(`/api/chatbot-users?chatbotId=${chatbot.id}`);
+      let data = await response.json();
+      
+      if (!data.success && data.error?.includes('Firebase project not found')) {
+        console.log('🔄 Falling back to temporary user storage...');
+        response = await fetch(`/api/chatbot-users-temp?chatbotId=${chatbot.id}`);
+        data = await response.json();
+      }
       
       if (data.success) {
         setUsers(data.users || []);
+        if (data.note) {
+          console.log('📝 Note:', data.note);
+        }
       } else {
         console.error('Failed to load users:', data.error);
       }
@@ -73,7 +83,8 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
     setEmailError('');
     
     try {
-      const response = await fetch('/api/chatbot-users', {
+      // Try the regular endpoint first, fallback to temp endpoint
+      let response = await fetch('/api/chatbot-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,13 +95,31 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
         })
       });
       
-      const data = await response.json();
+      let data = await response.json();
+      
+      if (!data.success && data.error?.includes('Firebase project not found')) {
+        console.log('🔄 Falling back to temporary user storage...');
+        response = await fetch('/api/chatbot-users-temp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'invite',
+            chatbotId: chatbot.id,
+            email: email,
+            displayName: newDisplayName.trim() || undefined
+          })
+        });
+        data = await response.json();
+      }
       
       if (data.success) {
         setNewEmail('');
         setNewDisplayName('');
         await loadUsers(); // Refresh the list
         onUpdate(); // Notify parent
+        if (data.message) {
+          console.log('📝 Message:', data.message);
+        }
       } else {
         setEmailError(data.error || 'Failed to invite user');
       }
@@ -111,7 +140,8 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
     setIsRemoving(userId);
     
     try {
-      const response = await fetch('/api/chatbot-users', {
+      // Try the regular endpoint first, fallback to temp endpoint
+      let response = await fetch('/api/chatbot-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,7 +151,21 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
         })
       });
       
-      const data = await response.json();
+      let data = await response.json();
+      
+      if (!data.success && data.error?.includes('Firebase project not found')) {
+        console.log('🔄 Falling back to temporary user storage...');
+        response = await fetch('/api/chatbot-users-temp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'remove',
+            chatbotId: chatbot.id,
+            userId: userId
+          })
+        });
+        data = await response.json();
+      }
       
       if (data.success) {
         await loadUsers(); // Refresh the list
@@ -148,7 +192,7 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
   // Get status icon and color
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'accepted':
+      case 'active':
         return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'pending':
         return <Clock className="h-4 w-4 text-yellow-600" />;
@@ -236,11 +280,11 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Plus className="h-4 w-4 mr-2" />
-            {isInviting ? 'Inviting...' : 'Invite User'}
+            {isInviting ? 'Sending Invitation...' : 'Send Invitation'}
           </Button>
           
           <p className="text-xs text-gray-500">
-            Users will receive an email with login instructions and a temporary password.
+            Users will receive an email with verification instructions to access the chatbot.
           </p>
         </div>
 
@@ -276,8 +320,11 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
                       )}
                       <div className="text-xs text-gray-400">
                         Invited {new Date(user.invitedAt.seconds * 1000).toLocaleDateString()}
-                        {user.status === 'accepted' && user.lastSignInAt && (
+                        {user.status === 'active' && user.lastSignInAt && (
                           <> • Last signed in {new Date(user.lastSignInAt.seconds * 1000).toLocaleDateString()}</>
+                        )}
+                        {user.status === 'pending' && (
+                          <> • <span className="text-amber-600">Awaiting email verification</span></>
                         )}
                       </div>
                     </div>
@@ -285,12 +332,12 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
                   
                   <div className="flex items-center space-x-2">
                     <span className={`px-2 py-1 text-xs rounded-full ${
-                      user.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                      user.status === 'active' ? 'bg-green-100 text-green-700' :
                       user.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                       'bg-red-100 text-red-700'
                     }`}>
-                      {user.status === 'accepted' ? 'Active' :
-                       user.status === 'pending' ? 'Pending' : 'Disabled'}
+                      {user.status === 'active' ? 'Active' :
+                       user.status === 'pending' ? 'Pending Verification' : 'Disabled'}
                     </span>
                     
                     <Button

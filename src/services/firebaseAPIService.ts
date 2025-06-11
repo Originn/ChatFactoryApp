@@ -23,7 +23,10 @@
 // src/services/firebaseAPIService-updated.ts
 import { adminDb } from '@/lib/firebase/admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import * as admin from 'firebase-admin';
 import { google } from 'googleapis'; // Still needed for Firebase Management API and Service Account CRUD
+import { FirebaseDbService } from '@/services/firebaseDbService';
+import { FirebaseConfigFix } from '@/services/firebaseConfigFix';
 import { 
   storageClient, 
   billingClient, 
@@ -325,6 +328,62 @@ export class FirebaseAPIService {
 
         console.log('🎉 Firebase project setup completed successfully via SDK:', projectId);
         
+        // Step: Create Firestore database in the dedicated project
+        console.log('🗄️  Creating Firestore database in dedicated project...');
+        try {
+          const dbResult = await FirebaseDbService.ensureDefaultDatabase(projectId, 'us-central1');
+          
+          if (dbResult.success) {
+            console.log('✅ Firestore database created successfully in dedicated project');
+            
+            // Step: Populate database with chatbot data
+            console.log('📝 Populating database with chatbot data...');
+            try {
+              await this.populateDedicatedDatabase(projectId, chatbotId);
+              console.log('✅ Database populated with chatbot data successfully');
+            } catch (populateError: any) {
+              console.error('❌ Failed to populate database:', populateError);
+              console.log('⚠️  Deployment will continue without initial data');
+            }
+            
+            // Update project record with database info
+            await projectRef.update({
+              hasFirestoreDatabase: true,
+              databaseCreatedAt: Timestamp.now(),
+              updatedAt: Timestamp.now()
+            });
+            
+            // Update chatbot record with database info
+            await adminDb.collection('chatbots').doc(chatbotId).update({
+              hasFirestoreDatabase: true,
+              databaseCreatedAt: Timestamp.now(),
+              updatedAt: Timestamp.now()
+            });
+            
+          } else {
+            console.error('❌ Failed to create Firestore database:', dbResult.error);
+            console.log('⚠️  Project deployment will continue without Firestore database');
+            
+            // Update project record with database failure (but don't fail the deployment)
+            await projectRef.update({
+              hasFirestoreDatabase: false,
+              databaseError: dbResult.error,
+              updatedAt: Timestamp.now()
+            });
+          }
+          
+        } catch (dbError: any) {
+          console.error('❌ Error creating Firestore database:', dbError);
+          console.log('⚠️  Project deployment will continue without Firestore database');
+          
+          // Update project record with database error (but don't fail the deployment)
+          await projectRef.update({
+            hasFirestoreDatabase: false,
+            databaseError: dbError.message,
+            updatedAt: Timestamp.now()
+          });
+        }
+        
         return { success: true, project: completeProject };
 
       } catch (sdkError: any) {
@@ -465,7 +524,7 @@ export class FirebaseAPIService {
 
   /**
    * Add Firebase to Google Cloud project (REST API - no SDK available)
-   * Now handles case where Firebase already exists (from Identity Platform initialization)
+   * Now uses direct config retrieval with proper timing
    */
   private static async addFirebaseToProject(projectId: string, displayName: string): Promise<any> {
     try {
@@ -508,6 +567,11 @@ export class FirebaseAPIService {
           auth: authClient as any
         });
         console.log('✅ Firebase web app created');
+        
+        // Wait for web app to be fully ready
+        console.log('⏳ Waiting for web app to be fully ready...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
       } catch (webAppError: any) {
         if (webAppError.message?.includes('already exists')) {
           console.log('ℹ️ Firebase web app already exists - continuing...');
@@ -516,55 +580,37 @@ export class FirebaseAPIService {
         }
       }
 
-      // Get web app configuration with retry (avoids fallback to dummy values)
-      console.log('⚙️ Retrieving Firebase configuration...');
-      const webApps = await firebase.projects.webApps.list({
-        parent: `projects/${projectId}`,
-        auth: authClient as any
-      });
-
-      if ((webApps as any).data.apps && (webApps as any).data.apps.length > 0) {
-        const latestApp = (webApps as any).data.apps[(webApps as any).data.apps.length - 1];
-        if (latestApp.name) {
-          // Retry config retrieval to avoid fallback to dummy values
-          console.log('🔄 Attempting to retrieve Firebase config (with retry for API readiness)...');
-          const maxConfigRetries = 4; // Increased from 3 to handle 20-25s cases
-          const configDelay = 5000; // 5 seconds between retries
-          
-          for (let attempt = 0; attempt < maxConfigRetries; attempt++) {
-            try {
-              const configResponse = await firebase.projects.webApps.getConfig({
-                name: `${latestApp.name}/config`,
-                auth: authClient as any
-              });
-
-              console.log('✅ Firebase configuration retrieved successfully');
-              return this.parseFirebaseConfig((configResponse as any).data, projectId);
-              
-            } catch (configError: any) {
-              console.log(`⏳ Config attempt ${attempt + 1}/${maxConfigRetries} failed:`, configError.message);
-              
-              if (attempt < maxConfigRetries - 1) {
-                console.log(`   Retrying config retrieval in ${configDelay/1000}s...`);
-                await new Promise(resolve => setTimeout(resolve, configDelay));
-              } else {
-                console.warn('⚠️ Failed to get Firebase config after all retries, using fallback');
-              }
-            }
-          }
+      // Use the direct Firebase configuration fix (the key improvement!)
+      console.log('🔧 Using direct Firebase configuration retrieval...');
+      
+      try {
+        const firebaseConfig = await FirebaseConfigFix.getFirebaseWebAppConfig(projectId);
+        
+        // Test the API key to ensure it works
+        console.log('🧪 Testing retrieved API key...');
+        const isValid = await FirebaseConfigFix.testApiKeyWorks(firebaseConfig.apiKey, projectId);
+        
+        if (!isValid) {
+          throw new Error('Retrieved API key failed validation test');
         }
+        
+        console.log('✅ API key validated successfully');
+        
+        // Configure API key restrictions for Firebase Auth
+        await this.configureAPIKeyForFirebaseAuth(firebaseConfig.apiKey, projectId, authClient);
+        
+        return firebaseConfig;
+        
+      } catch (configError: any) {
+        console.error('❌ Direct config retrieval failed:', configError.message);
+        
+        // Instead of falling back to fake API key, fail the deployment
+        throw new Error(
+          `Failed to retrieve valid Firebase configuration: ${configError.message}. ` +
+          `This usually indicates a timing or permissions issue. ` +
+          `Check that the service account has Firebase Admin permissions.`
+        );
       }
-
-      // Fallback config if we can't get the actual config
-      console.log('🔄 Using fallback Firebase configuration');
-      return {
-        apiKey: 'configured-via-api',
-        authDomain: `${projectId}.firebaseapp.com`,
-        projectId: projectId,
-        storageBucket: `${projectId}.appspot.com`,
-        messagingSenderId: 'configured-via-api',
-        appId: 'configured-via-api'
-      };
       
     } catch (firebaseError: any) {
       console.error('❌ Firebase project setup via REST API failed:', firebaseError.message);
@@ -1660,5 +1706,261 @@ export class FirebaseAPIService {
       messagingSenderId: configData.messagingSenderId || 'configured-via-api',
       appId: configData.appId || 'configured-via-api'
     };
+  }
+
+  /**
+   * Configure API key restrictions for Firebase Auth APIs
+   */
+  private static async configureAPIKeyForFirebaseAuth(apiKey: string, projectId: string, authClient: any): Promise<void> {
+    try {
+      console.log('🔑 Configuring API key restrictions for Firebase Authentication...');
+      
+      if (!apiKey || apiKey === 'configured-via-api') {
+        console.log('⚠️ Skipping API key configuration - invalid key');
+        return;
+      }
+      
+      const accessToken = (await authClient.getAccessToken()).token;
+      
+      // Get current API key configuration
+      const apiKeysResponse = await fetch(`https://apikeys.googleapis.com/v2/projects/${projectId}/locations/global/keys`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!apiKeysResponse.ok) {
+        console.warn('⚠️ Could not retrieve API keys for configuration');
+        return;
+      }
+
+      const apiKeysData = await apiKeysResponse.json();
+      
+      // Find our API key
+      let targetKey = null;
+      if (apiKeysData.keys) {
+        for (const key of apiKeysData.keys) {
+          if (key.keyString === apiKey) {
+            targetKey = key;
+            break;
+          }
+        }
+      }
+
+      if (!targetKey) {
+        console.warn('⚠️ Could not find API key to configure');
+        return;
+      }
+
+      // Configure restrictions for Firebase Auth
+      const restrictions = {
+        apiTargets: [
+          {
+            service: 'identitytoolkit.googleapis.com'
+          },
+          {
+            service: 'firebase.googleapis.com'  
+          },
+          {
+            service: 'firestore.googleapis.com'
+          }
+        ],
+        browserKeyRestrictions: {
+          allowedReferrers: [
+            'localhost/*',
+            `${projectId}.firebaseapp.com/*`,
+            `${projectId}.web.app/*`,
+            '*.vercel.app/*',
+            '*.netlify.app/*',
+            'chatfactory.ai/*',
+            '*.chatfactory.ai/*'
+          ]
+        }
+      };
+
+      // Update API key with restrictions
+      const updateResponse = await fetch(`https://apikeys.googleapis.com/v2/${targetKey.name}?updateMask=restrictions`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          restrictions: restrictions
+        })
+      });
+
+      if (updateResponse.ok) {
+        console.log('✅ API key configured successfully for Firebase Authentication');
+      } else {
+        const errorData = await updateResponse.json();
+        console.warn('⚠️ API key configuration failed:', errorData);
+      }
+      
+    } catch (error: any) {
+      console.warn('⚠️ API key configuration error:', error.message);
+      // Don't throw - this is not critical for basic functionality
+    }
+  }
+
+  /**
+   * Populate the dedicated database with chatbot data from the main ChatFactory database
+   */
+  static async populateDedicatedDatabase(projectId: string, chatbotId: string): Promise<void> {
+    try {
+      console.log(`📝 Starting database population for chatbot ${chatbotId} in project ${projectId}`);
+      
+      // First, let's wait a bit for the database to be fully ready
+      console.log('⏳ Waiting for database to be fully initialized...');
+      await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second wait
+      
+      // Get the service account key from environment
+      const serviceAccountKey = process.env.FIREBASE_PRIVATE_KEY;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      
+      if (!serviceAccountKey || !clientEmail) {
+        throw new Error('Missing Firebase service account credentials');
+      }
+      
+      // Initialize dedicated project's Firestore using explicit credentials
+      console.log('🔐 Initializing connection to dedicated project database...');
+      const dedicatedApp = admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: projectId,
+          clientEmail: clientEmail,
+          privateKey: serviceAccountKey.replace(/\\n/g, '\n'),
+        }),
+        projectId: projectId,
+      }, `dedicated-${projectId}-${Date.now()}`); // Unique app name
+      
+      const dedicatedDb = admin.firestore(dedicatedApp);
+      
+      // Test the connection first
+      console.log('🧪 Testing connection to dedicated database...');
+      try {
+        await dedicatedDb.collection('_test').doc('_connection').set({
+          test: true,
+          timestamp: admin.firestore.Timestamp.now()
+        });
+        console.log('✅ Connection to dedicated database successful');
+        
+        // Clean up test document
+        await dedicatedDb.collection('_test').doc('_connection').delete();
+      } catch (connectionError: any) {
+        console.error('❌ Failed to connect to dedicated database:', connectionError);
+        throw new Error(`Database connection failed: ${connectionError.message}`);
+      }
+      
+      // 1. Copy chatbot configuration data
+      console.log('📋 Copying chatbot configuration...');
+      const chatbotSnap = await adminDb.collection('chatbots').doc(chatbotId).get();
+      
+      if (chatbotSnap.exists) {
+        const chatbotData = chatbotSnap.data();
+        
+        // Create the chatbot document in the dedicated database
+        await dedicatedDb.collection('chatbots').doc(chatbotId).set({
+          ...chatbotData,
+          // Add metadata about this being a deployed instance
+          isDedicatedDeployment: true,
+          sourceProjectId: 'main-chatfactory',
+          deployedAt: admin.firestore.Timestamp.now(),
+          deployedToProjectId: projectId
+        });
+        
+        console.log('✅ Chatbot configuration copied successfully');
+        
+        // 2. Copy documents/knowledge base if exists
+        console.log('📄 Copying documents/knowledge base...');
+        const documentsSnap = await adminDb
+          .collection('chatbots')
+          .doc(chatbotId)
+          .collection('documents')
+          .get();
+        
+        if (!documentsSnap.empty) {
+          const batch = dedicatedDb.batch();
+          let documentCount = 0;
+          
+          documentsSnap.forEach(doc => {
+            const docRef = dedicatedDb
+              .collection('chatbots')
+              .doc(chatbotId)
+              .collection('documents')
+              .doc(doc.id);
+            batch.set(docRef, doc.data());
+            documentCount++;
+          });
+          
+          await batch.commit();
+          console.log(`✅ Copied ${documentCount} documents to dedicated database`);
+        } else {
+          console.log('ℹ️  No documents found to copy');
+        }
+        
+        // 3. Copy user configurations if exists
+        console.log('👥 Copying user configurations...');
+        const usersSnap = await adminDb
+          .collection('chatbots')
+          .doc(chatbotId)
+          .collection('users')
+          .get();
+        
+        if (!usersSnap.empty) {
+          const batch = dedicatedDb.batch();
+          let userCount = 0;
+          
+          usersSnap.forEach(doc => {
+            const userRef = dedicatedDb
+              .collection('chatbots')
+              .doc(chatbotId)
+              .collection('users')
+              .doc(doc.id);
+            batch.set(userRef, doc.data());
+            userCount++;
+          });
+          
+          await batch.commit();
+          console.log(`✅ Copied ${userCount} user configurations to dedicated database`);
+        } else {
+          console.log('ℹ️  No user configurations found to copy');
+        }
+        
+        // 4. Create initial collections that might be needed
+        console.log('🔧 Creating initial collections...');
+        
+        // Create conversations collection (for chat history)
+        await dedicatedDb.collection('conversations').doc('_placeholder').set({
+          _placeholder: true,
+          createdAt: admin.firestore.Timestamp.now()
+        });
+        
+        // Create analytics collection (for usage tracking)
+        await dedicatedDb.collection('analytics').doc('_placeholder').set({
+          _placeholder: true,
+          createdAt: admin.firestore.Timestamp.now()
+        });
+        
+        console.log('✅ Initial collections created');
+        
+      } else {
+        throw new Error(`Chatbot ${chatbotId} not found in main database`);
+      }
+      
+      // Clean up the dedicated app instance
+      await dedicatedApp.delete();
+      
+      console.log('🎉 Database population completed successfully');
+      
+    } catch (error: any) {
+      console.error('❌ Error populating dedicated database:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack?.substring(0, 500)
+      });
+      throw error;
+    }
   }
 }

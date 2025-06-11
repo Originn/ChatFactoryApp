@@ -1,0 +1,519 @@
+import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { EmailService } from '@/services/emailService';
+import * as admin from 'firebase-admin';
+
+export interface InviteUserRequest {
+  chatbotId: string;
+  email: string;
+  displayName?: string;
+  creatorUserId: string;
+  role?: 'user' | 'admin';
+}
+
+export interface RemoveUserRequest {
+  chatbotId: string;
+  userId: string;
+}
+
+export interface ServiceResult {
+  success: boolean;
+  error?: string;
+  userId?: string;
+  verificationToken?: string;
+}
+
+export interface ChatbotUserProfile {
+  id: string;
+  email: string;
+  displayName?: string;
+  chatbotId: string;
+  role: 'user' | 'admin';
+  status: 'pending' | 'active' | 'disabled';
+  invitedAt: Date;
+  invitedBy: string;
+  emailVerified: boolean;
+  lastSignInAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class FirebaseTenantService {
+  
+  /**
+   * Get dedicated Firebase admin instance for a specific chatbot
+   */
+  private static async getChatbotFirebaseAdmin(chatbotId: string): Promise<{
+    auth: admin.auth.Auth;
+    firestore: admin.firestore.Firestore;
+    projectId: string;
+  } | null> {
+    try {
+      // Get the deployment record for this chatbot
+      const deploymentsSnapshot = await adminDb
+        .collection('deployments')
+        .where('chatbotId', '==', chatbotId)
+        .where('status', '==', 'deployed')
+        .limit(1)
+        .get();
+
+      if (deploymentsSnapshot.empty) {
+        console.error(`❌ No deployed chatbot found with ID: ${chatbotId}`);
+        return null;
+      }
+
+      const deploymentData = deploymentsSnapshot.docs[0].data();
+      const firebaseProjectId = deploymentData.firebaseProjectId;
+      
+      if (!firebaseProjectId) {
+        console.error(`❌ No Firebase project ID found for chatbot: ${chatbotId}`);
+        return null;
+      }
+
+      // Check if we need to get service account credentials
+      // For now, we'll use the environment variables approach
+      // In production, you'd want to store/retrieve the service account securely
+      
+      const chatbotAppName = `chatbot-${chatbotId}`;
+      let chatbotApp: admin.app.App;
+
+      try {
+        // Try to get existing app
+        chatbotApp = admin.app(chatbotAppName);
+      } catch (error) {
+        // App doesn't exist, create it
+        // You'll need to implement secure credential storage/retrieval here
+        // For now, this assumes the main admin credentials have access to the chatbot project
+        
+        console.log(`🔥 Creating Firebase admin instance for project: ${firebaseProjectId}`);
+        
+        // This is a simplified approach - in production you'd want to use
+        // the specific service account credentials for each project
+        chatbotApp = admin.initializeApp({
+          credential: admin.credential.applicationDefault(),
+          projectId: firebaseProjectId
+        }, chatbotAppName);
+      }
+
+      return {
+        auth: chatbotApp.auth(),
+        firestore: chatbotApp.firestore(),
+        projectId: firebaseProjectId
+      };
+
+    } catch (error) {
+      console.error('❌ Error getting chatbot Firebase admin:', error);
+      return null;
+    }
+  }
+  /**
+   * Invite a user to a chatbot (creates user in the chatbot's dedicated Firebase project)
+   */
+  static async inviteUser(request: InviteUserRequest): Promise<ServiceResult> {
+    try {
+      const { email, displayName, chatbotId, creatorUserId, role = 'user' } = request;
+      
+      console.log(`📧 Inviting user ${email} to chatbot ${chatbotId}`);
+      
+      // Get the dedicated Firebase admin instance for this chatbot
+      const chatbotFirebase = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!chatbotFirebase) {
+        return {
+          success: false,
+          error: 'Chatbot Firebase project not found. Please ensure the chatbot is deployed.'
+        };
+      }
+
+      console.log(`🔥 Using Firebase project: ${chatbotFirebase.projectId}`);
+      
+      // Check if user already exists in the chatbot's Firebase Auth
+      let userRecord;
+      try {
+        userRecord = await chatbotFirebase.auth.getUserByEmail(email);
+        console.log(`✅ User already exists in chatbot project with ID: ${userRecord.uid}`);
+      } catch (error: any) {
+        if (error.code === 'auth/user-not-found') {
+          // Create new user in the chatbot's Firebase Auth
+          userRecord = await chatbotFirebase.auth.createUser({
+            email: email,
+            displayName: displayName || email.split('@')[0],
+            emailVerified: false
+          });
+          console.log(`✅ New user created in chatbot project with ID: ${userRecord.uid}`);
+        } else {
+          throw error;
+        }
+      }
+
+      // Generate email verification token
+      const verificationToken = await this.generateVerificationToken(
+        userRecord.uid, 
+        chatbotId, 
+        chatbotFirebase.firestore
+      );
+      
+      // Create chatbot user profile in the chatbot's Firestore
+      const chatbotUserProfile: ChatbotUserProfile = {
+        id: userRecord.uid,
+        email: email,
+        displayName: displayName || email.split('@')[0],
+        chatbotId: chatbotId,
+        role: role,
+        status: 'pending',
+        invitedAt: new Date(),
+        invitedBy: creatorUserId,
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Store the user profile in the chatbot's Firestore
+      await chatbotFirebase.firestore
+        .collection('users')
+        .doc(userRecord.uid)
+        .set(chatbotUserProfile);
+
+      // Send invitation email with verification link
+      await this.sendInvitationEmail(email, chatbotId, verificationToken);
+      
+      console.log(`✅ User ${email} invited to chatbot ${chatbotId} in project ${chatbotFirebase.projectId}`);
+      
+      return {
+        success: true,
+        userId: userRecord.uid,
+        verificationToken: verificationToken
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error inviting user:', error);
+      
+      if (error.code === 'auth/email-already-exists') {
+        return {
+          success: false,
+          error: 'User with this email is already registered in this chatbot'
+        };
+      }
+      
+      return {
+        success: false,
+        error: error.message || 'Failed to invite user'
+      };
+    }
+  }
+
+  /**
+   * Remove a user from a chatbot (uses chatbot's dedicated Firebase project)
+   */
+  static async removeUser(request: RemoveUserRequest): Promise<ServiceResult> {
+    try {
+      const { userId, chatbotId } = request;
+      
+      console.log(`🗑️ Removing user ${userId} from chatbot ${chatbotId}`);
+      
+      // Get the dedicated Firebase admin instance for this chatbot
+      const chatbotFirebase = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!chatbotFirebase) {
+        return {
+          success: false,
+          error: 'Chatbot Firebase project not found'
+        };
+      }
+
+      // Update user status to disabled in the chatbot's Firestore
+      await chatbotFirebase.firestore
+        .collection('users')
+        .doc(userId)
+        .update({
+          status: 'disabled',
+          updatedAt: new Date()
+        });
+
+      console.log(`✅ User ${userId} removed from chatbot ${chatbotId} in project ${chatbotFirebase.projectId}`);
+      
+      return {
+        success: true
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error removing user:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to remove user'
+      };
+    }
+  }
+
+  /**
+   * Get users for a chatbot (from chatbot's dedicated Firebase project)
+   */
+  static async getTenantUsers(chatbotId: string): Promise<{ success: boolean; users?: ChatbotUserProfile[]; error?: string }> {
+    try {
+      console.log(`📋 Getting users for chatbot ${chatbotId}`);
+      
+      // Get the dedicated Firebase admin instance for this chatbot
+      const chatbotFirebase = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!chatbotFirebase) {
+        return {
+          success: false,
+          error: 'Chatbot Firebase project not found'
+        };
+      }
+
+      const usersSnapshot = await chatbotFirebase.firestore
+        .collection('users')
+        .get();
+
+      const users: ChatbotUserProfile[] = usersSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          updatedAt: data.updatedAt?.toDate?.() || new Date(),
+          invitedAt: data.invitedAt?.toDate?.() || new Date(),
+          lastSignInAt: data.lastSignInAt?.toDate?.() || undefined
+        } as ChatbotUserProfile;
+      });
+
+      console.log(`✅ Found ${users.length} users for chatbot ${chatbotId} in project ${chatbotFirebase.projectId}`);
+
+      return {
+        success: true,
+        users: users
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error getting chatbot users:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get users'
+      };
+    }
+  }
+
+  /**
+   * Verify user email and activate their chatbot access
+   */
+  static async verifyUserEmail(
+    userId: string, 
+    chatbotId: string, 
+    verificationToken: string
+  ): Promise<ServiceResult> {
+    try {
+      // Get the dedicated Firebase admin instance for this chatbot
+      const chatbotFirebase = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!chatbotFirebase) {
+        return {
+          success: false,
+          error: 'Chatbot Firebase project not found'
+        };
+      }
+
+      // Verify the token from the chatbot's Firestore
+      const isValidToken = await this.verifyToken(
+        userId, 
+        chatbotId, 
+        verificationToken, 
+        chatbotFirebase.firestore
+      );
+      
+      if (!isValidToken) {
+        return {
+          success: false,
+          error: 'Invalid or expired verification token'
+        };
+      }
+
+      // Update Firebase Auth user as verified in the chatbot's project
+      await chatbotFirebase.auth.updateUser(userId, {
+        emailVerified: true
+      });
+
+      // Update chatbot user profile in the chatbot's Firestore
+      await chatbotFirebase.firestore
+        .collection('users')
+        .doc(userId)
+        .update({
+          status: 'active',
+          emailVerified: true,
+          updatedAt: new Date()
+        });
+
+      console.log(`✅ User ${userId} email verified for chatbot ${chatbotId} in project ${chatbotFirebase.projectId}`);
+      
+      return { success: true };
+      
+    } catch (error: any) {
+      console.error('❌ Error verifying user email:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to verify email'
+      };
+    }
+  }
+
+  /**
+   * Validate a verification token (used by API endpoints)
+   */
+  static async validateVerificationToken(
+    token: string, 
+    chatbotId: string
+  ): Promise<{ 
+    valid: boolean; 
+    userId?: string; 
+    expired?: boolean; 
+    error?: string 
+  }> {
+    try {
+      // Get the dedicated Firebase admin instance for this chatbot
+      const chatbotFirebase = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!chatbotFirebase) {
+        return {
+          valid: false,
+          error: 'Chatbot Firebase project not found'
+        };
+      }
+
+      // Check token in the chatbot's Firestore
+      const tokenDoc = await chatbotFirebase.firestore
+        .collection('verificationTokens')
+        .doc(token)
+        .get();
+
+      if (!tokenDoc.exists) {
+        return {
+          valid: false,
+          error: 'Invalid verification token'
+        };
+      }
+
+      const tokenData = tokenDoc.data();
+      const now = new Date();
+      const expiresAt = tokenData?.expiresAt?.toDate?.() || new Date(0);
+
+      if (now > expiresAt) {
+        // Token expired, delete it
+        await chatbotFirebase.firestore
+          .collection('verificationTokens')
+          .doc(token)
+          .delete();
+        
+        return {
+          valid: false,
+          expired: true,
+          error: 'Verification token has expired'
+        };
+      }
+
+      // Check if token is for the correct chatbot
+      if (tokenData?.chatbotId !== chatbotId) {
+        return {
+          valid: false,
+          error: 'Invalid verification token for this chatbot'
+        };
+      }
+
+      return {
+        valid: true,
+        userId: tokenData?.userId
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error validating verification token:', error);
+      return {
+        valid: false,
+        error: error.message || 'Failed to validate token'
+      };
+    }
+  }
+
+  // Helper methods for email verification
+  private static async generateVerificationToken(
+    userId: string, 
+    chatbotId: string, 
+    firestoreInstance: admin.firestore.Firestore
+  ): Promise<string> {
+    // Generate a secure token and store it temporarily
+    const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    // Store token with expiration (24 hours) in the chatbot's Firestore
+    await firestoreInstance
+      .collection('verificationTokens')
+      .doc(token)
+      .set({
+        userId: userId,
+        chatbotId: chatbotId,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      });
+
+    return token;
+  }
+
+  private static async verifyToken(
+    userId: string, 
+    chatbotId: string, 
+    token: string,
+    firestoreInstance: admin.firestore.Firestore
+  ): Promise<boolean> {
+    try {
+      const tokenDoc = await firestoreInstance
+        .collection('verificationTokens')
+        .doc(token)
+        .get();
+
+      if (!tokenDoc.exists) {
+        return false;
+      }
+
+      const tokenData = tokenDoc.data();
+      const now = new Date();
+      const expiresAt = tokenData?.expiresAt?.toDate?.() || new Date(0);
+
+      if (now > expiresAt) {
+        // Token expired, delete it
+        await firestoreInstance.collection('verificationTokens').doc(token).delete();
+        return false;
+      }
+
+      const isValid = tokenData?.userId === userId && tokenData?.chatbotId === chatbotId;
+      
+      if (isValid) {
+        // Delete token after successful verification
+        await firestoreInstance.collection('verificationTokens').doc(token).delete();
+      }
+
+      return isValid;
+    } catch (error) {
+      console.error('❌ Error verifying token:', error);
+      return false;
+    }
+  }
+
+  private static async sendInvitationEmail(email: string, chatbotId: string, verificationToken: string): Promise<void> {
+    try {
+      // Get chatbot details for the email
+      const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+      const chatbotData = chatbotDoc.data();
+      
+      const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/email-verification?token=${verificationToken}&chatbot=${chatbotId}`;
+      
+      // Send invitation email using EmailService
+      const result = await EmailService.sendChatbotInvitation(
+        email,
+        chatbotData?.name || 'Chatbot',
+        verificationUrl
+      );
+
+      if (result.success) {
+        console.log(`✅ Invitation email sent to ${email}`);
+      } else {
+        console.error(`❌ Failed to send email: ${result.error}`);
+        throw new Error(result.error || 'Failed to send invitation email');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error sending invitation email:', error);
+      throw error;
+    }
+  }
+}
