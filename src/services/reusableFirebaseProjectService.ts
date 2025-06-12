@@ -28,6 +28,7 @@ export class ReusableFirebaseProjectService {
         auth: false,
         oauthClients: false,
         webApps: false,
+        identityPlatform: false,
       };
 
       // 1. Clean up OAuth clients (fixes accumulation issue)
@@ -84,6 +85,18 @@ export class ReusableFirebaseProjectService {
         console.log('✅ Auth cleanup completed');
       } catch (error) {
         console.error('❌ Auth cleanup failed:', error);
+      }
+      
+      // 6. Complete Identity Platform cleanup
+      try {
+        const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
+        if (projectId) {
+          await this.cleanupIdentityPlatform(projectId);
+          cleanupResults.identityPlatform = true;
+          console.log('✅ Identity Platform cleanup completed');
+        }
+      } catch (error) {
+        console.error('❌ Identity Platform cleanup failed:', error);
       }
       
       const successCount = Object.values(cleanupResults).filter(Boolean).length;
@@ -750,6 +763,371 @@ export class ReusableFirebaseProjectService {
     } catch (error: any) {
       console.error('❌ Failed to delete specific web apps:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Complete Identity Platform cleanup - implements all methods from your specifications
+   * Deletes tenants, providers, users, domains, and configurations
+   */
+  private static async cleanupIdentityPlatform(projectId: string): Promise<void> {
+    console.log('🔐 Starting COMPLETE Identity Platform cleanup...');
+    console.log(`🎯 Target project: ${projectId}`);
+    
+    try {
+      const auth = new google.auth.GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+      });
+      
+      const authClient = await auth.getClient();
+      const accessToken = await authClient.getAccessToken();
+      
+      if (!accessToken.token) {
+        throw new Error('Failed to get access token for Identity Platform cleanup');
+      }
+
+      // 1. Delete all tenants (multi-tenant projects)
+      await this.deleteAllTenants(projectId, accessToken.token);
+      
+      // 2. Delete all identity providers (Google, Email/Password, etc.)
+      await this.deleteAllIdentityProviders(projectId, accessToken.token);
+      
+      // 3. Delete all Identity Platform users
+      await this.deleteAllIdentityPlatformUsers(projectId, accessToken.token);
+      
+      // 4. Remove authorized domains
+      await this.clearAuthorizedDomains(projectId, accessToken.token);
+      
+      // 5. Clear project configuration
+      await this.clearProjectConfiguration(projectId, accessToken.token);
+      
+      console.log('✅ Complete Identity Platform cleanup finished');
+      
+    } catch (error: any) {
+      console.error('❌ Identity Platform cleanup failed:', error);
+      console.log('ℹ️ Manual cleanup may be required via Google Cloud Console');
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all tenants (for multi-tenant Identity Platform projects)
+   */
+  private static async deleteAllTenants(projectId: string, accessToken: string): Promise<void> {
+    console.log('🏢 Deleting all Identity Platform tenants...');
+    
+    try {
+      const listUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/tenants`;
+      
+      const response = await fetch(listUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const tenants = data.tenants || [];
+        
+        console.log(`🔍 Found ${tenants.length} tenants to delete`);
+        
+        if (tenants.length === 0) {
+          console.log('ℹ️ No tenants found to delete (single-tenant project)');
+          return;
+        }
+        
+        let deletedCount = 0;
+        for (const tenant of tenants) {
+          try {
+            const deleteUrl = `https://identitytoolkit.googleapis.com/v2/${tenant.name}`;
+            
+            const deleteResponse = await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (deleteResponse.ok) {
+              console.log(`✅ Deleted tenant: ${tenant.displayName || tenant.name}`);
+              deletedCount++;
+            } else {
+              console.warn(`⚠️ Failed to delete tenant ${tenant.name}:`, deleteResponse.status);
+            }
+            
+            // Rate limit protection
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+          } catch (error) {
+            console.warn(`⚠️ Error deleting tenant ${tenant.name}:`, error);
+          }
+        }
+        
+        console.log(`✅ Deleted ${deletedCount}/${tenants.length} tenants`);
+        
+      } else if (response.status === 404) {
+        console.log('ℹ️ No tenants API endpoint found (single-tenant project)');
+      } else {
+        console.warn('⚠️ Failed to list tenants:', response.status);
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to delete tenants:', error);
+    }
+  }
+
+  /**
+   * Delete all identity providers (Google, Email/Password, Facebook, etc.)
+   */
+  private static async deleteAllIdentityProviders(projectId: string, accessToken: string): Promise<void> {
+    console.log('🔑 Deleting all identity providers...');
+    
+    // Common identity providers to check and delete
+    const commonProviders = [
+      'password',      // Email/Password
+      'google.com',    // Google
+      'facebook.com',  // Facebook
+      'github.com',    // GitHub
+      'twitter.com',   // Twitter
+      'microsoft.com', // Microsoft
+      'apple.com',     // Apple
+      'yahoo.com',     // Yahoo
+      'linkedin.com'   // LinkedIn
+    ];
+    
+    let deletedCount = 0;
+    let disabledCount = 0;
+    
+    for (const providerId of commonProviders) {
+      try {
+        console.log(`🔍 Processing provider: ${providerId}`);
+        
+        if (providerId === 'password') {
+          // Email/Password is disabled via configuration update
+          await this.disableEmailPasswordProvider(projectId, accessToken);
+          disabledCount++;
+        } else {
+          // OAuth providers are deleted
+          const deleteUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/oauthIdpConfigs/${providerId}`;
+          
+          const response = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            console.log(`✅ Deleted provider: ${providerId}`);
+            deletedCount++;
+          } else if (response.status === 404) {
+            console.log(`ℹ️ Provider ${providerId} not found (not configured)`);
+          } else {
+            console.warn(`⚠️ Failed to delete provider ${providerId}:`, response.status);
+          }
+        }
+        
+        // Rate limit protection
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.warn(`⚠️ Error processing provider ${providerId}:`, error);
+      }
+    }
+    
+    console.log(`✅ Processed providers: ${deletedCount} deleted, ${disabledCount} disabled`);
+  }
+
+  /**
+   * Disable Email/Password provider via configuration
+   */
+  private static async disableEmailPasswordProvider(projectId: string, accessToken: string): Promise<void> {
+    try {
+      const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
+      
+      const configData = {
+        signIn: {
+          email: {
+            enabled: false
+          }
+        }
+      };
+      
+      const response = await fetch(configUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(configData)
+      });
+      
+      if (response.ok) {
+        console.log('✅ Disabled Email/Password provider');
+      } else {
+        console.warn('⚠️ Failed to disable Email/Password provider:', response.status);
+      }
+      
+    } catch (error) {
+      console.warn('⚠️ Error disabling Email/Password provider:', error);
+    }
+  }
+
+  /**
+   * Delete all Identity Platform users (different from Firebase Auth users)
+   */
+  private static async deleteAllIdentityPlatformUsers(projectId: string, accessToken: string): Promise<void> {
+    console.log('👤 Deleting all Identity Platform users...');
+    
+    try {
+      // Use Firebase Admin SDK to delete all users
+      // This affects both Firebase Auth and Identity Platform users
+      let totalDeleted = 0;
+      let nextPageToken: string | undefined;
+      
+      do {
+        const listUsersResult = await adminAuth.listUsers(1000, nextPageToken);
+        
+        if (listUsersResult.users.length === 0) {
+          break;
+        }
+        
+        console.log(`🔍 Found ${listUsersResult.users.length} users in this batch`);
+        
+        // Delete users in smaller batches to avoid rate limits
+        const deletePromises = listUsersResult.users.map(user => 
+          adminAuth.deleteUser(user.uid).catch(error => {
+            console.warn(`⚠️ Could not delete user ${user.uid}:`, error);
+          })
+        );
+        
+        await Promise.all(deletePromises);
+        totalDeleted += listUsersResult.users.length;
+        
+        console.log(`✅ Deleted ${listUsersResult.users.length} users`);
+        
+        nextPageToken = listUsersResult.pageToken;
+        
+        // Rate limit protection
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } while (nextPageToken);
+      
+      console.log(`✅ Total Identity Platform users deleted: ${totalDeleted}`);
+      
+    } catch (error) {
+      console.error('❌ Failed to delete Identity Platform users:', error);
+    }
+  }
+
+  /**
+   * Clear authorized domains configuration
+   */
+  private static async clearAuthorizedDomains(projectId: string, accessToken: string): Promise<void> {
+    console.log('🌐 Clearing authorized domains...');
+    
+    try {
+      const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
+      
+      // Get current configuration
+      const getResponse = await fetch(configUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (getResponse.ok) {
+        const config = await getResponse.json();
+        
+        if (config.authorizedDomains && config.authorizedDomains.length > 0) {
+          console.log(`🔍 Found ${config.authorizedDomains.length} authorized domains`);
+          
+          // Clear authorized domains (keep only localhost for development)
+          const updatedConfig = {
+            ...config,
+            authorizedDomains: ['localhost']
+          };
+          
+          const updateResponse = await fetch(configUrl, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ authorizedDomains: ['localhost'] })
+          });
+          
+          if (updateResponse.ok) {
+            console.log('✅ Cleared authorized domains (kept localhost)');
+          } else {
+            console.warn('⚠️ Failed to clear authorized domains:', updateResponse.status);
+          }
+        } else {
+          console.log('ℹ️ No authorized domains to clear');
+        }
+      } else {
+        console.warn('⚠️ Failed to get current configuration:', getResponse.status);
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to clear authorized domains:', error);
+    }
+  }
+
+  /**
+   * Clear project configuration (reset to defaults)
+   */
+  private static async clearProjectConfiguration(projectId: string, accessToken: string): Promise<void> {
+    console.log('⚙️ Clearing project configuration...');
+    
+    try {
+      const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
+      
+      // Reset to minimal configuration
+      const defaultConfig = {
+        signIn: {
+          email: { enabled: false },
+          phoneNumber: { enabled: false },
+          anonymous: { enabled: false }
+        },
+        notification: {
+          sendEmail: { method: 'DEFAULT' },
+          sendSms: { useDeviceLocale: true }
+        },
+        quota: {
+          signUpQuotaConfig: { quota: 100, startTime: null, quotaDuration: '86400s' }
+        },
+        monitoring: {
+          requestLogging: { enabled: false }
+        },
+        multiTenant: { allowTenants: false },
+        authorizedDomains: ['localhost'],
+        subtype: 'IDENTITY_PLATFORM'
+      };
+      
+      const response = await fetch(configUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(defaultConfig)
+      });
+      
+      if (response.ok) {
+        console.log('✅ Reset project configuration to defaults');
+      } else {
+        console.warn('⚠️ Failed to reset project configuration:', response.status);
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to reset project configuration:', error);
     }
   }
 }
