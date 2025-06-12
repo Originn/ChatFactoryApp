@@ -29,6 +29,7 @@ export class ReusableFirebaseProjectService {
         oauthClients: false,
         webApps: false,
         identityPlatform: false,
+        serviceAccountKeys: false,
       };
 
       // 1. Clean up OAuth clients (fixes accumulation issue)
@@ -97,6 +98,22 @@ export class ReusableFirebaseProjectService {
         }
       } catch (error) {
         console.error('❌ Identity Platform cleanup failed:', error);
+      }
+
+      // 7. Clean up service account keys
+      try {
+        const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
+        if (projectId) {
+          const auth = new google.auth.GoogleAuth({
+            scopes: ['https://www.googleapis.com/auth/cloud-platform']
+          });
+          const authClient = await auth.getClient();
+          await this.cleanupServiceAccountKeys(projectId, authClient);
+          cleanupResults.serviceAccountKeys = true;
+          console.log('✅ Service account keys cleanup completed');
+        }
+      } catch (error) {
+        console.error('❌ Service account keys cleanup failed:', error);
       }
       
       const successCount = Object.values(cleanupResults).filter(Boolean).length;
