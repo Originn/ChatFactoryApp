@@ -1,6 +1,35 @@
+import { GoogleAuth } from 'google-auth-library';
 
 export class GoogleOAuthClientManager {
-  private static readonly IAM_API_BASE = 'https://iamcredentials.googleapis.com/v1';
+  // Use the correct API for OAuth client management
+  private static readonly OAUTH_API_BASE = 'https://iap.googleapis.com/v1';
+
+  private static async getAccessToken(): Promise<string> {
+    const credentials = this.getGoogleCloudCredentials();
+    const auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      ...(credentials && { credentials })
+    });
+
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    return tokenResponse.token!;
+  }
+
+  private static getGoogleCloudCredentials() {
+    // In production (Vercel), use JSON from environment variable
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      try {
+        return JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      } catch (error) {
+        console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', error);
+        return undefined;
+      }
+    }
+    
+    // In development, use the file path (if GOOGLE_APPLICATION_CREDENTIALS is set)
+    return undefined; // Let the library use default authentication
+  }
 
   /**
    * Update OAuth client redirect URIs
@@ -14,7 +43,7 @@ export class GoogleOAuthClientManager {
       console.log('🔄 Updating OAuth redirect URIs...');
       
       const accessToken = await this.getAccessToken();
-      const updateUrl = `${this.IAM_API_BASE}/projects/${projectId}/locations/global/oauthClients/${oauthClientId}`;
+      const updateUrl = `${this.OAUTH_API_BASE}/projects/${projectId}/locations/global/oauthClients/${oauthClientId}`;
       
       const response = await fetch(`${updateUrl}?updateMask=allowedRedirectUris`, {
         method: 'PATCH',
@@ -50,7 +79,7 @@ export class GoogleOAuthClientManager {
       console.log('🗑️ Deleting OAuth client...');
       
       const accessToken = await this.getAccessToken();
-      const deleteUrl = `${this.IAM_API_BASE}/projects/${projectId}/locations/global/oauthClients/${oauthClientId}`;
+      const deleteUrl = `${this.OAUTH_API_BASE}/projects/${projectId}/locations/global/oauthClients/${oauthClientId}`;
       
       const response = await fetch(deleteUrl, {
         method: 'DELETE',
@@ -79,7 +108,7 @@ export class GoogleOAuthClientManager {
   static async listOAuthClients(projectId: string): Promise<any[]> {
     try {
       const accessToken = await this.getAccessToken();
-      const listUrl = `${this.IAM_API_BASE}/projects/${projectId}/locations/global/oauthClients`;
+      const listUrl = `${this.OAUTH_API_BASE}/projects/${projectId}/locations/global/oauthClients`;
       
       const response = await fetch(listUrl, {
         method: 'GET',
@@ -103,5 +132,3 @@ export class GoogleOAuthClientManager {
     }
   }
 }
-
-export type { OAuthClientConfig, OAuthClientCredential };

@@ -177,6 +177,13 @@ export class FirebaseAPIServiceSDK {
         console.log('🔥 Configuring Firebase...');
         const firebaseConfig = await this.configureFirebaseProject(projectId, displayName);
 
+        // Transform buckets to expected structure
+        const structuredBuckets = {
+          documents: buckets['chatbot_documents'] || '',
+          privateImages: buckets['chatbot_private_images'] || '',
+          documentImages: buckets['chatbot_documents_images'] || ''
+        };
+
         // Step 7: Update project record with success
         const completeProject: FirebaseProject = {
           projectId,
@@ -185,7 +192,7 @@ export class FirebaseAPIServiceSDK {
           createdAt: Timestamp.now(),
           status: 'active',
           config: firebaseConfig,
-          ...(Object.keys(buckets).length > 0 && { buckets }),
+          ...(Object.keys(buckets).length > 0 && { buckets: structuredBuckets }),
           ...(serviceAccount && { serviceAccount })
         };
 

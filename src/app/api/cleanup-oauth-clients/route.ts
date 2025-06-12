@@ -36,14 +36,17 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Show details of all OAuth clients
-    const clientDetails = oauthClients.map(client => ({
+    // Show details of all OAuth clients for debugging
+    const clientDetails = oauthClients.map((client, index) => ({
+      index: index + 1,
       name: client.name,
       displayName: client.displayName,
-      clientId: client.clientId
+      clientId: client.clientId,
+      creationTime: client.creationTime,
+      description: client.description
     }));
     
-    console.log('🔍 OAuth clients to delete:', clientDetails);
+    console.log('🔍 OAuth clients found:', clientDetails);
     
     // Delete all OAuth clients
     let deletedCount = 0;

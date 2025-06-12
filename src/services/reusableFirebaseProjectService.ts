@@ -37,9 +37,14 @@ export class ReusableFirebaseProjectService {
           await this.cleanupOAuthClients(projectId);
           cleanupResults.oauthClients = true;
           console.log('✅ OAuth clients cleanup completed');
+        } else {
+          console.warn('⚠️ REUSABLE_FIREBASE_PROJECT_ID not set - skipping OAuth cleanup');
         }
       } catch (error) {
         console.error('❌ OAuth clients cleanup failed:', error);
+        // Don't throw - continue with other cleanup tasks
+        // But store the error for reporting
+        cleanupResults.oauthClients = false;
       }
 
       // 2. Clean up duplicate web apps
@@ -104,26 +109,73 @@ export class ReusableFirebaseProjectService {
    * Clean up OAuth clients (removes the accumulating "Web client (auto created by Google Service)" entries)
    */
   private static async cleanupOAuthClients(projectId: string): Promise<void> {
-    console.log('🔐 Cleaning up OAuth clients...');
+    console.log('🔐 Starting OAuth clients cleanup...');
+    console.log(`🎯 Target project: ${projectId}`);
     
     try {
-      // Delete all OAuth clients to prevent accumulation
+      // First, list all OAuth clients to see what we're dealing with
       const oauthClients = await GoogleOAuthClientManager.listOAuthClients(projectId);
-      console.log(`🔍 Found ${oauthClients.length} OAuth clients to delete`);
+      console.log(`🔍 Found ${oauthClients.length} OAuth clients`);
       
+      // Log details of each client for debugging
+      oauthClients.forEach((client, index) => {
+        console.log(`📋 OAuth Client ${index + 1}:`, {
+          name: client.name,
+          displayName: client.displayName,
+          clientId: client.clientId,
+          creationTime: client.creationTime
+        });
+      });
+      
+      if (oauthClients.length === 0) {
+        console.log('✅ No OAuth clients found - cleanup not needed');
+        return;
+      }
+      
+      let deletedCount = 0;
+      let failedCount = 0;
+      
+      // Attempt to delete each OAuth client
       for (const client of oauthClients) {
         try {
-          await GoogleOAuthClientManager.deleteOAuthClient(projectId, client.name);
-          console.log(`🗑️ Deleted OAuth client: ${client.displayName || client.name}`);
+          console.log(`🗑️ Attempting to delete OAuth client: ${client.displayName || client.name || client.clientId}`);
+          
+          // Try different possible client identifiers
+          const clientIdentifier = client.name || client.clientId;
+          if (!clientIdentifier) {
+            console.warn(`⚠️ No valid identifier found for OAuth client:`, client);
+            failedCount++;
+            continue;
+          }
+          
+          const success = await GoogleOAuthClientManager.deleteOAuthClient(projectId, clientIdentifier);
+          
+          if (success) {
+            console.log(`✅ Deleted OAuth client: ${client.displayName || clientIdentifier}`);
+            deletedCount++;
+          } else {
+            console.error(`❌ Failed to delete OAuth client: ${client.displayName || clientIdentifier}`);
+            failedCount++;
+          }
+          
+          // Add small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
         } catch (error) {
-          console.warn(`⚠️ Could not delete OAuth client ${client.name}:`, error);
+          console.error(`❌ Error deleting OAuth client ${client.name}:`, error);
+          failedCount++;
         }
       }
       
-      console.log('✅ OAuth client cleanup completed - next deployment will create fresh clients');
+      console.log(`🏁 OAuth cleanup completed: ${deletedCount} deleted, ${failedCount} failed`);
+      
+      if (failedCount > 0) {
+        throw new Error(`OAuth cleanup partially failed: ${failedCount} out of ${oauthClients.length} clients could not be deleted`);
+      }
       
     } catch (error) {
-      console.error('❌ Failed to cleanup OAuth clients:', error);
+      console.error('❌ OAuth clients cleanup failed:', error);
+      // Re-throw to let the calling code know cleanup failed
       throw error;
     }
   }

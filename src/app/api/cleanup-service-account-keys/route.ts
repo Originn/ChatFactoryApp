@@ -26,15 +26,13 @@ export async function POST(request: NextRequest) {
       scopes: ['https://www.googleapis.com/auth/cloud-platform']
     });
     
-    const authClient = await auth.getClient();
-    const iam = google.iam('v1');
+    const iam = google.iam({ version: 'v1', auth });
     
     // List all service accounts in the project
     console.log('🔍 Listing service accounts...');
     
     const serviceAccountsResponse = await iam.projects.serviceAccounts.list({
-      name: `projects/${targetProjectId}`,
-      auth: authClient
+      name: `projects/${targetProjectId}`
     });
     
     const serviceAccounts = serviceAccountsResponse.data.accounts || [];
@@ -61,8 +59,7 @@ export async function POST(request: NextRequest) {
         
         // List keys for this service account
         const keysResponse = await iam.projects.serviceAccounts.keys.list({
-          name: serviceAccount.name,
-          auth: authClient
+          name: serviceAccount.name
         });
         
         const keys = keysResponse.data.keys || [];
@@ -94,16 +91,15 @@ export async function POST(request: NextRequest) {
         for (const key of keysToDelete) {
           try {
             await iam.projects.serviceAccounts.keys.delete({
-              name: key.name,
-              auth: authClient
+              name: key.name
             });
             deletedCount++;
             totalKeysDeleted++;
-            console.log(`✅ Deleted key: ${key.keyId}`);
+            console.log(`✅ Deleted key: ${key.name?.split('/').pop()}`);
           } catch (keyError: any) {
-            console.warn(`⚠️ Could not delete key ${key.keyId}:`, keyError.message);
+            console.warn(`⚠️ Could not delete key ${key.name?.split('/').pop()}:`, keyError.message);
             deleteErrors.push({
-              keyId: key.keyId,
+              keyId: key.name?.split('/').pop(),
               error: keyError.message
             });
           }
@@ -172,13 +168,11 @@ export async function GET(request: NextRequest) {
       scopes: ['https://www.googleapis.com/auth/cloud-platform']
     });
     
-    const authClient = await auth.getClient();
-    const iam = google.iam('v1');
+    const iam = google.iam({ version: 'v1', auth });
     
     // List all service accounts
     const serviceAccountsResponse = await iam.projects.serviceAccounts.list({
-      name: `projects/${projectId}`,
-      auth: authClient
+      name: `projects/${projectId}`
     });
     
     const serviceAccounts = serviceAccountsResponse.data.accounts || [];
@@ -190,8 +184,7 @@ export async function GET(request: NextRequest) {
       try {
         // Get keys for this service account
         const keysResponse = await iam.projects.serviceAccounts.keys.list({
-          name: serviceAccount.name,
-          auth: authClient
+          name: serviceAccount.name
         });
         
         const keys = keysResponse.data.keys || [];
@@ -213,7 +206,7 @@ export async function GET(request: NextRequest) {
           totalKeys: keys.length,
           isProblematic,
           keyDetails: userManagedKeys.map(key => ({
-            keyId: key.keyId,
+            keyId: key.name?.split('/').pop(),
             validAfterTime: key.validAfterTime,
             validBeforeTime: key.validBeforeTime
           }))

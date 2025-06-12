@@ -166,12 +166,9 @@ function EmailVerificationContent() {
       
       if (actualToken) {
         // Use the new custom token flow (direct password setup)
-          email: email || 'not-provided-in-url'
-        });
         
         // For custom token flow, we validate via our API endpoint first
         try {
-          console.log('🔍 Validating token via API...');
           const response = await fetch('/api/auth/validate-token', {
             method: 'POST',
             headers: {

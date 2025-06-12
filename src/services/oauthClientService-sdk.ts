@@ -128,11 +128,11 @@ export class OAuthClientServiceSDK {
    */
   static async listBrands(projectId: string): Promise<any[]> {
     try {
-      const [brands] = await iapClient.listBrands({
+      const [response] = await iapClient.listBrands({
         parent: `projects/${projectId}`
       });
       
-      return brands || [];
+      return response?.brands || [];
     } catch (error: any) {
       console.warn('⚠️ Failed to list brands via SDK:', error.message);
       return [];

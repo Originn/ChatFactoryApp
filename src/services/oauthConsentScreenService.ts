@@ -259,5 +259,3 @@ export class OAuthConsentScreenService {
     }
   }
 }
-
-export type { OAuthConsentScreenConfig, Brand };
