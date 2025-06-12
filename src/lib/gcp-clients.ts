@@ -8,7 +8,7 @@ import { IdentityAwareProxyOAuthServiceClient } from '@google-cloud/iap';
 import { getGCPCredentials } from './gcp-auth';
 
 // Get credentials once for all clients
-const credentials = getGCPCredentials();
+const credentials = getGCPCredentials() as any;
 
 // Initialize SDK clients with shared credentials
 // These are optimized for serverless environments with connection reuse

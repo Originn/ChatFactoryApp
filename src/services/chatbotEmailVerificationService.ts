@@ -16,6 +16,7 @@ import {
   confirmPasswordReset,
   User
 } from 'firebase/auth';
+import { Firestore } from 'firebase/firestore';
 
 export interface ChatbotFirebaseConfig {
   apiKey: string;
@@ -42,6 +43,7 @@ export interface PasswordSetupResult {
 export class ChatbotEmailVerificationService {
   private static firebaseApp: FirebaseApp | null = null;
   private static auth: Auth | null = null;
+  private static db: Firestore | null = null;
   private static config: ChatbotFirebaseConfig | null = null;
 
   /**
@@ -80,6 +82,11 @@ export class ChatbotEmailVerificationService {
 
       // Initialize Auth
       this.auth = getAuth(this.firebaseApp);
+      
+      // Initialize Firestore
+      const { getFirestore } = await import('firebase/firestore');
+      this.db = getFirestore(this.firebaseApp);
+      
       this.config = config;
       
       console.log('✅ Firebase initialized successfully for chatbot');
@@ -219,6 +226,123 @@ export class ChatbotEmailVerificationService {
       return {
         success: false,
         error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Verify custom token and set up password (direct flow - bypasses Firebase hosted pages)
+   */
+  static async verifyCustomTokenAndSetupPassword(token: string, newPassword: string): Promise<PasswordSetupResult> {
+    try {
+      if (!this.auth || !this.db) {
+        throw new Error('Firebase not initialized');
+      }
+
+      console.log('🔧 Verifying custom token for password setup:', token);
+
+      // Get the token data from Firestore using client SDK
+      const { getDoc, doc, updateDoc } = await import('firebase/firestore');
+      
+      const tokenDocRef = doc(this.db, 'passwordResetTokens', token);
+      const tokenDoc = await getDoc(tokenDocRef);
+      
+      if (!tokenDoc.exists()) {
+        return {
+          success: false,
+          error: 'Invalid or expired setup link. Please request a new invitation.'
+        };
+      }
+
+      const tokenData = tokenDoc.data();
+      
+      // Check if token is expired
+      if (tokenData?.expiresAt?.toDate() < new Date()) {
+        return {
+          success: false,
+          error: 'This setup link has expired. Please request a new invitation.'
+        };
+      }
+
+      // Check if token is already used
+      if (tokenData?.used) {
+        return {
+          success: false,
+          error: 'This setup link has already been used. Please request a new invitation.'
+        };
+      }
+
+      const email = tokenData?.email;
+      const tempPassword = tokenData?.tempPassword; // We'll need to store this
+      
+      if (!email) {
+        return {
+          success: false,
+          error: 'Invalid setup link. Please request a new invitation.'
+        };
+      }
+
+      console.log('✅ Custom token verified for email:', email);
+
+      // Since we can't use Admin SDK on client side, we'll use a different approach
+      // We'll create an API endpoint to handle the password update
+      const response = await fetch('/api/auth/setup-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: token,
+          newPassword: newPassword,
+          email: email
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: result.error || 'Failed to set up password'
+        };
+      }
+
+      // Mark the token as used in both projects
+      await updateDoc(tokenDocRef, {
+        used: true,
+        usedAt: new Date()
+      });
+
+      // Also mark as used in main project (for admin consistency)
+      try {
+        const response = await fetch('/api/auth/mark-token-used', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token })
+        });
+      } catch (markError) {
+        console.warn('⚠️ Could not mark token as used in main project:', markError);
+        // Continue anyway - the dedicated project token is marked as used
+      }
+
+      // Now sign in the user with their new password
+      const { signInWithEmailAndPassword } = await import('firebase/auth');
+      const userCredential = await signInWithEmailAndPassword(this.auth, email, newPassword);
+      
+      console.log('✅ User signed in successfully with new password');
+
+      return {
+        success: true,
+        user: userCredential.user
+      };
+
+    } catch (error: any) {
+      console.error('❌ Custom token verification failed:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to verify setup link'
       };
     }
   }

@@ -27,61 +27,70 @@ function EmailVerificationContent() {
   const [passwordError, setPasswordError] = useState('');
   const [isSettingPassword, setIsSettingPassword] = useState(false);
   
-  // URL Parameters
+  // URL Parameters - trying both possible parameter names
   const oobCode = searchParams.get('oobCode'); // Firebase action code
   const mode = searchParams.get('mode'); // Firebase action mode
-  const chatbotId = searchParams.get('chatbot');
-  const continueUrl = searchParams.get('continueUrl');
+  const customToken = searchParams.get('token'); // Custom token for direct password setup
+  const chatbotId = searchParams.get('chatbot') || searchParams.get('chatbotId'); // Try both
+  const continueUrl = searchParams.get('continueUrl') || searchParams.get('continue'); // Try both
   const email = searchParams.get('email'); // For general verification
 
+  console.log('🔍 EmailVerificationContent loaded with params:', {
+    oobCode: oobCode ? 'present' : 'missing',
+    mode,
+    customToken: customToken ? `present (${customToken.length} chars)` : 'missing',
+    chatbotId,
+    continueUrl: continueUrl ? 'present' : 'missing',
+    email,
+    url: typeof window !== 'undefined' ? window.location.href : 'server-side',
+    allSearchParams: typeof window !== 'undefined' ? Object.fromEntries(searchParams.entries()) : 'server-side'
+  });
+
   useEffect(() => {
+    console.log('🔍 URL Parameters received:', {
+      oobCode,
+      mode, 
+      customToken,
+      chatbotId,
+      continueUrl,
+      email,
+      allParams: Object.fromEntries(searchParams.entries())
+    });
+    
     initializeAndVerify();
-  }, [oobCode, mode, chatbotId]);
+  }, [oobCode, mode, customToken, chatbotId]);
 
   const initializeAndVerify = async () => {
     try {
-      // Handle general email verification (legacy)
-      if (email && !oobCode && !chatbotId) {
-        setStatus('verified');
-        setMessage('Please check your email for verification instructions.');
-        return;
-      }
+      console.log('🔍 Email verification debug - Full URL:', window.location.href);
+      console.log('🔍 All URL search params:', Object.fromEntries(searchParams.entries()));
+      console.log('🔍 Specific token check:', {
+        tokenParam: searchParams.get('token'),
+        tokenLength: searchParams.get('token')?.length || 0
+      });
 
-      // Validate required parameters for chatbot verification
-      if (!oobCode || !chatbotId) {
-        setStatus('error');
-        setMessage('Invalid verification link. Please check your email for the correct link.');
-        return;
-      }
-
-      // Initialize Firebase for this specific chatbot
-      console.log('🔧 Initializing Firebase for chatbot:', chatbotId);
-      await ChatbotEmailVerificationService.initializeChatbotFirebase(chatbotId);
-      console.log('✅ Firebase initialized successfully');
-
-      // Get chatbot name for display
-      try {
-        const response = await fetch(`/api/chatbot/${chatbotId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setChatbotName(data.name || 'the chatbot');
-        }
-      } catch (nameError) {
-        console.warn('Could not fetch chatbot name:', nameError);
-        setChatbotName('the chatbot');
-      }
-
-      // Handle different Firebase auth modes
-      if (mode === 'verifyEmail') {
-        await handleEmailVerification();
-      } else if (mode === 'resetPassword') {
+      // Simple validation first - just check if we have what we need
+      if (customToken && chatbotId) {
+        console.log('✅ Have custom token and chatbot ID - proceeding to password setup');
         setStatus('password-setup');
-        setMessage('Please set your new password below.');
-      } else {
-        // Default to email verification
-        await handleEmailVerification();
+        setMessage('Please choose your password to complete registration.');
+        return;
+      } else if (chatbotId && searchParams.get('token')) {
+        console.log('✅ Have token via searchParams and chatbot ID - proceeding to password setup');
+        setStatus('password-setup');  
+        setMessage('Please choose your password to complete registration.');
+        return;
       }
 
+      console.log('❌ Missing required parameters:', {
+        hasCustomToken: !!customToken,
+        hasChatbotId: !!chatbotId,
+        hasTokenViaSearchParams: !!searchParams.get('token')
+      });
+
+      setStatus('error');
+      setMessage('Invalid verification link. Please check your email for the correct link.');
+      
     } catch (error: any) {
       console.error('❌ Initialization error:', error);
       setStatus('error');
@@ -92,21 +101,20 @@ function EmailVerificationContent() {
   const handleEmailVerification = async () => {
     try {
       if (!oobCode) {
-        throw new Error('No verification code provided');
+        throw new Error('No setup code provided');
       }
 
-      console.log('🔧 Processing Firebase action with mode:', mode);
+      console.log('🔧 Processing Firebase password setup with mode:', mode);
       
+      // For the new flow, we always expect resetPassword mode
       if (mode === 'resetPassword') {
-        // This is a password reset link (for first-time password setup)
-        console.log('🔧 Password reset mode detected - ready for password setup');
+        console.log('🔧 Password setup mode detected - ready for one-time password setup');
         setStatus('password-setup');
-        setMessage('Please set your password to complete registration.');
+        setMessage('Please choose your password to complete registration.');
       } else {
-        // This is an email verification link (legacy flow)
-        console.log('🔧 Email verification mode detected');
+        // Legacy email verification flow (fallback)
+        console.log('🔧 Legacy email verification mode detected');
         
-        // Verify the email using the action code
         const result = await ChatbotEmailVerificationService.verifyEmail(oobCode);
         
         if (result.success) {
@@ -120,7 +128,7 @@ function EmailVerificationContent() {
         } else {
           if (result.error?.includes('expired')) {
             setStatus('expired');
-            setMessage('This verification link has expired. Please request a new invitation.');
+            setMessage('This setup link has expired. Please request a new invitation.');
           } else {
             setStatus('error');
             setMessage(result.error || 'Email verification failed');
@@ -128,9 +136,9 @@ function EmailVerificationContent() {
         }
       }
     } catch (error: any) {
-      console.error('❌ Email verification error:', error);
+      console.error('❌ Setup process error:', error);
       setStatus('error');
-      setMessage('Email verification failed. Please try again.');
+      setMessage('Setup process failed. Please try again.');
     }
   };
 
@@ -157,7 +165,128 @@ function EmailVerificationContent() {
 
       setIsSettingPassword(true);
 
-      // Extract email from continue URL or prompt user
+      // Check which flow to use
+      const actualToken = customToken || searchParams.get('token');
+      
+      if (actualToken) {
+        // Use the new custom token flow (direct password setup)
+        console.log('🔧 Using custom token flow for direct password setup');
+        console.log('🔍 Custom token details:', {
+          token: actualToken.substring(0, 10) + '...',
+          tokenLength: actualToken.length,
+          email: email || 'not-provided-in-url'
+        });
+        
+        // For custom token flow, we validate via our API endpoint first
+        try {
+          console.log('🔍 Validating token via API...');
+          const response = await fetch('/api/auth/validate-token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              token: actualToken,
+              chatbotId: chatbotId
+            })
+          });
+
+          const validation = await response.json();
+          console.log('🔍 Token validation response:', validation);
+
+          if (!response.ok) {
+            console.error('❌ Token validation failed:', validation.error);
+            setPasswordError(validation.error || 'Invalid setup link');
+            setIsSettingPassword(false);
+            return;
+          }
+
+          // Extract email from validation response
+          const userEmail = validation.email;
+          console.log('✅ Token validated, setting up password for:', userEmail);
+          
+          const result = await fetch('/api/auth/setup-password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              token: actualToken,
+              newPassword: password,
+              email: userEmail
+            })
+          });
+
+          const setupResult = await result.json();
+          console.log('🔍 Password setup result:', setupResult);
+
+          if (result.ok && setupResult.success) {
+            console.log('✅ Password setup successful');
+            setStatus('verified');
+            setMessage('Your password has been set successfully!');
+            
+            // Mark token as used
+            try {
+              await fetch('/api/auth/mark-token-used', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token: actualToken })
+              });
+            } catch (markError) {
+              console.warn('⚠️ Could not mark token as used:', markError);
+            }
+            
+            // Redirect after a short delay
+            setTimeout(() => {
+              if (continueUrl) {
+                window.location.href = continueUrl;
+              } else {
+                handleContinue();
+              }
+            }, 2000);
+          } else {
+            console.error('❌ Password setup failed:', setupResult.error);
+            setPasswordError(setupResult.error || 'Failed to set password');
+          }
+
+        } catch (error) {
+          console.error('❌ Custom token password setup failed:', error);
+          setPasswordError('An error occurred while setting up your password. Please try again.');
+        }
+        
+        setIsSettingPassword(false);
+        return;
+      }
+
+      // Firebase oobCode flows (legacy and fallback)
+      if (mode === 'resetPassword' && oobCode) {
+        // Firebase password reset flow
+        console.log('🔧 Using Firebase password reset flow');
+        const result = await ChatbotEmailVerificationService.resetPassword(oobCode, password);
+        
+        if (result.success) {
+          setStatus('verified');
+          setMessage('Your password has been set successfully!');
+          
+          // Redirect after a short delay
+          setTimeout(() => {
+            if (continueUrl) {
+              window.location.href = continueUrl;
+            } else {
+              handleContinue();
+            }
+          }, 2000);
+        } else {
+          setPasswordError(result.error || 'Failed to set password');
+        }
+        
+        setIsSettingPassword(false);
+        return;
+      }
+
+      // Legacy flow - extract email from continue URL or use current user
       let userEmail = '';
       if (continueUrl) {
         const urlParams = new URLSearchParams(continueUrl.split('?')[1] || '');
@@ -165,7 +294,7 @@ function EmailVerificationContent() {
       }
       
       if (!userEmail) {
-        // Try to get email from the current user or show error
+        // Try to get email from the current user
         const currentUser = ChatbotEmailVerificationService.getCurrentUser();
         if (currentUser?.email) {
           userEmail = currentUser.email;
@@ -176,20 +305,14 @@ function EmailVerificationContent() {
         }
       }
 
-      let result;
-      if (mode === 'resetPassword' && oobCode) {
-        // Handle password reset (first-time password setup)
-        console.log('🔧 Using password reset flow for first-time setup');
-        result = await ChatbotEmailVerificationService.resetPassword(oobCode, password);
-      } else {
-        // Handle regular password setup (legacy flow)
-        console.log('🔧 Using regular password setup flow');
-        result = await ChatbotEmailVerificationService.setupPassword(userEmail, password);
-      }
+      // Legacy password setup flow
+      console.log('🔧 Using legacy password setup flow');
+      const result = await ChatbotEmailVerificationService.setupPassword(userEmail, password);
 
+      // Legacy password setup result handling
       if (result.success) {
         setStatus('verified');
-        setMessage('Password set successfully! You can now access the chatbot.');
+        setMessage('Your password has been set successfully!');
         
         // Redirect after a short delay
         setTimeout(() => {
@@ -275,8 +398,8 @@ function EmailVerificationContent() {
         return (
           <div className="text-center">
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
-            <h2 className="mt-4 text-xl font-semibold">Verifying your email...</h2>
-            <p className="mt-2 text-gray-600">Please wait while we verify your email address.</p>
+            <h2 className="mt-4 text-xl font-semibold">Setting up your account...</h2>
+            <p className="mt-2 text-gray-600">Please wait while we prepare your password setup.</p>
           </div>
         );
 
@@ -286,7 +409,7 @@ function EmailVerificationContent() {
             <div className="text-center">
               <CheckCircle className="mx-auto h-12 w-12 text-green-600" />
               <h2 className="mt-4 text-xl font-semibold text-green-800">
-                {mode === 'resetPassword' ? 'Ready to Set Password!' : 'Email Verified!'}
+                Ready to Set Your Password!
               </h2>
               <p className="mt-2 text-gray-600">{message}</p>
             </div>
@@ -346,10 +469,10 @@ function EmailVerificationContent() {
                 {isSettingPassword ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Setting Password...
+                    Creating Your Account...
                   </>
                 ) : (
-                  'Set Password'
+                  'Complete Setup'
                 )}
               </Button>
             </div>
@@ -360,15 +483,15 @@ function EmailVerificationContent() {
         return (
           <div className="text-center">
             <CheckCircle className="mx-auto h-12 w-12 text-green-600" />
-            <h2 className="mt-4 text-xl font-semibold text-green-800">Success!</h2>
-            <p className="mt-2 text-gray-600">{message}</p>
+            <h2 className="mt-4 text-xl font-semibold text-green-800">Account Setup Complete!</h2>
+            <p className="mt-2 text-gray-600">Your password has been set successfully.</p>
             {chatbotName && (
               <p className="mt-2 text-sm text-gray-500">
                 You now have access to <strong>{chatbotName}</strong>
               </p>
             )}
             <Button onClick={handleContinue} className="mt-6">
-              Continue to Chatbot
+              Access Chatbot
             </Button>
           </div>
         );
@@ -433,18 +556,12 @@ function EmailVerificationContent() {
         <Card className="w-full max-w-md shadow-lg border-blue-100">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-gray-900">
-              {mode === 'resetPassword' ? 'Set Up Your Password' : 'Email Verification'}
+              Set Your Password
             </CardTitle>
             <CardDescription>
               {chatbotName ? 
-                (mode === 'resetPassword' ? 
-                  `Setting up your password for ${chatbotName}` : 
-                  `Verifying access to ${chatbotName}`
-                ) : 
-                (mode === 'resetPassword' ? 
-                  'Setting up your password' : 
-                  'Verifying your email address'
-                )
+                `Complete your registration for ${chatbotName}` : 
+                'Complete your registration'
               }
             </CardDescription>
           </CardHeader>

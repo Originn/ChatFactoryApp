@@ -138,8 +138,7 @@ export class FirebaseAPIServiceSDK {
         console.log('🏗️ Creating Google Cloud project via SDK:', projectId);
         
         const organizationId = process.env.GOOGLE_CLOUD_ORGANIZATION_ID;
-        const [operation] = await resourceManagerClient.createProject({
-          projectId: projectId,
+        const result = await resourceManagerClient.createProject({
           project: {
             displayName,
             projectId,
@@ -148,6 +147,7 @@ export class FirebaseAPIServiceSDK {
             })
           }
         });
+        const operation = result[0];
 
         console.log('✅ Google Cloud project creation initiated via SDK');
         

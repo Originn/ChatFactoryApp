@@ -183,7 +183,7 @@ export default function FirebaseDebugPage() {
                       <span className="font-medium text-sm">{key}:</span>
                       <div className="flex items-center gap-2">
                         <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                          {value || 'MISSING'}
+                          {String(value) || 'MISSING'}
                         </code>
                         {value && (
                           <Button

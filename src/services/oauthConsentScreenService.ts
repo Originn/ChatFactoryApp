@@ -191,12 +191,6 @@ export class OAuthConsentScreenService {
                 error: `OAuth consent screen requires Google Workspace organization. This project (${config.projectId}) is not part of a Google Workspace organization. For Firebase Authentication to work properly, please either: 1) Create the project under a Google Workspace organization, or 2) Set up OAuth consent screen manually at https://console.cloud.google.com/apis/credentials/consent?project=${config.projectId}. Note: Firebase Authentication can work without IAP OAuth consent screens for most use cases.`
               };
             }
-              
-              return {
-                success: false,
-                error: `Failed to create OAuth consent screen: Request contains invalid arguments. This commonly occurs when: 1) The project is not part of a Google Workspace organization, 2) The support email format is invalid, or 3) Required organization permissions are missing. Please verify the project setup and try creating the OAuth consent screen manually at https://console.cloud.google.com/apis/credentials/consent?project=${config.projectId}`
-              };
-            }
             
             // Other error - don't retry
             console.error('❌ Failed to create OAuth consent screen:', JSON.stringify(errorData, null, 2));

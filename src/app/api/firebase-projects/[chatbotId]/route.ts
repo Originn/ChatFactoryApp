@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { FirebaseProjectService } from '@/services/firebaseProjectService';
+import { ReusableFirebaseProjectService } from '@/services/reusableFirebaseProjectService';
+
+// REUSABLE FIREBASE PROJECT CONFIGURATION
+const USE_REUSABLE_FIREBASE_PROJECT = process.env.USE_REUSABLE_FIREBASE_PROJECT === 'true';
 
 export async function GET(
   request: NextRequest,
@@ -83,24 +87,94 @@ export async function POST(
     }
 
     if (action === 'delete') {
-      console.log('🗑️ Deleting Firebase project via API for chatbot:', chatbotId);
+      console.log('🗑️ Processing Firebase project deletion for chatbot:', chatbotId);
+      console.log('🔍 Reusable Firebase project mode:', USE_REUSABLE_FIREBASE_PROJECT ? 'ENABLED' : 'DISABLED');
       
-      const result = await FirebaseProjectService.deleteProject(chatbotId);
-
-      if (result.success) {
-        return NextResponse.json({
-          success: true,
-          automated: result.automated,
-          message: result.automated ? 
-            'Firebase project deleted successfully using GCP SDK' : 
-            'Firebase project marked for deletion - manual cleanup may be required',
-          details: result.error || undefined
-        });
+      if (USE_REUSABLE_FIREBASE_PROJECT) {
+        console.log('🧹 Using reusable Firebase project cleanup instead of deletion');
+        
+        // Check if this is a request for complete factory reset
+        const { factoryReset } = await request.json().catch(() => ({}));
+        
+        if (factoryReset) {
+          console.log('🏭 FACTORY RESET requested - wiping entire project!');
+          
+          try {
+            const resetResult = await ReusableFirebaseProjectService.factoryResetProject();
+            
+            if (resetResult.success) {
+              return NextResponse.json({
+                success: true,
+                message: 'Complete factory reset completed successfully',
+                details: resetResult.details,
+                resetMode: true,
+                warning: 'ALL data, users, and credentials have been wiped from the project'
+              });
+            } else {
+              return NextResponse.json({
+                success: false,
+                error: `Factory reset failed: ${resetResult.message}`,
+                details: resetResult.details
+              }, { status: 500 });
+            }
+          } catch (resetError: any) {
+            console.error('❌ Error during factory reset:', resetError);
+            return NextResponse.json({
+              success: false,
+              error: `Factory reset error: ${resetError.message}`
+            }, { status: 500 });
+          }
+          
+        } else {
+          console.log('🧹 Regular chatbot cleanup (preserves other data)');
+          
+          try {
+            // Use the cleanup service for reusable Firebase projects  
+            const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(chatbotId, userId);
+            
+            if (cleanupResult.success) {
+              return NextResponse.json({
+                success: true,
+                message: 'Reusable Firebase project cleaned successfully',
+                details: cleanupResult.details,
+                cleanupMode: true
+              });
+            } else {
+              return NextResponse.json({
+                success: false,
+                error: `Reusable Firebase project cleanup failed: ${cleanupResult.message}`,
+                details: cleanupResult.details
+              }, { status: 500 });
+            }
+          } catch (cleanupError: any) {
+            console.error('❌ Error during reusable Firebase project cleanup:', cleanupError);
+            return NextResponse.json({
+              success: false,
+              error: `Reusable Firebase project cleanup error: ${cleanupError.message}`
+            }, { status: 500 });
+          }
+        }
+        
       } else {
-        return NextResponse.json({
-          success: false,
-          error: result.error
-        }, { status: 500 });
+        console.log('🗑️ Using regular Firebase project deletion');
+        
+        const result = await FirebaseProjectService.deleteProject(chatbotId);
+
+        if (result.success) {
+          return NextResponse.json({
+            success: true,
+            automated: result.automated,
+            message: result.automated ? 
+              'Firebase project deleted successfully using GCP SDK' : 
+              'Firebase project marked for deletion - manual cleanup may be required',
+            details: result.error || undefined
+          });
+        } else {
+          return NextResponse.json({
+            success: false,
+            error: result.error
+          }, { status: 500 });
+        }
       }
     }
 

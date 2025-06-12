@@ -11,6 +11,10 @@ const REPO_OWNER = 'Originn';
 const REPO_NAME = 'ChatFactoryTemplate';  // Your chatbot template repository
 const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 
+// REUSABLE FIREBASE PROJECT CONFIGURATION
+const USE_REUSABLE_FIREBASE_PROJECT = process.env.USE_REUSABLE_FIREBASE_PROJECT === 'true';
+const REUSABLE_FIREBASE_PROJECT_ID = process.env.REUSABLE_FIREBASE_PROJECT_ID || '';
+
 // SIMPLIFIED: Always deploy from main branch to production
 // No staging/preview workflow needed - direct to production deployment
 
@@ -251,34 +255,77 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle authentication setup for separate Firebase projects
-    console.log('🔥 Creating dedicated Firebase project for chatbot...');
+    // Handle authentication setup for Firebase projects
+    console.log('🔄 Reusable Firebase project mode:', USE_REUSABLE_FIREBASE_PROJECT ? 'ENABLED' : 'DISABLED');
+    if (USE_REUSABLE_FIREBASE_PROJECT) {
+      console.log('🔥 Using reusable Firebase project:', REUSABLE_FIREBASE_PROJECT_ID);
+    }
     
     let dedicatedFirebaseProject = null;
-    try {
-      // Create dedicated Firebase project for this chatbot using API
-      const firebaseResult = await FirebaseAPIService.createProjectForChatbot({
-        chatbotId,
-        chatbotName: chatbotConfig.name,
-        creatorUserId: userId || chatbotData?.userId || 'unknown'
-      });
-
-      if (!firebaseResult.success) {
-        console.error('❌ Failed to create Firebase project:', firebaseResult.error);
-        throw new Error(`Failed to create Firebase project: ${firebaseResult.error}`);
-      }
-
-      if (!firebaseResult.project) {
-        console.error('❌ Firebase project creation succeeded but no project returned');
-        throw new Error('Firebase project creation succeeded but no project data returned');
-      }
-
-      dedicatedFirebaseProject = firebaseResult.project;
-      console.log('✅ Dedicated Firebase project created:', dedicatedFirebaseProject.projectId);
+    
+    if (USE_REUSABLE_FIREBASE_PROJECT) {
+      console.log('🔧 Setting up reusable Firebase project for chatbot...');
       
-    } catch (firebaseError) {
-      console.error('❌ Firebase project creation failed:', firebaseError);
-      throw new Error(`Firebase project creation failed: ${firebaseError.message}`);
+      // Validate required configuration
+      if (!REUSABLE_FIREBASE_PROJECT_ID) {
+        throw new Error('REUSABLE_FIREBASE_PROJECT_ID is required when USE_REUSABLE_FIREBASE_PROJECT=true');
+      }
+      
+      try {
+        // Use the existing Firebase setup logic but target the existing project
+        const firebaseResult = await FirebaseAPIService.setupExistingProjectForChatbot({
+          projectId: REUSABLE_FIREBASE_PROJECT_ID,
+          chatbotId,
+          chatbotName: chatbotConfig.name,
+          creatorUserId: userId || chatbotData?.userId || 'unknown'
+        });
+
+        if (!firebaseResult.success) {
+          console.error('❌ Failed to set up existing Firebase project:', firebaseResult.error);
+          throw new Error(`Failed to set up existing Firebase project: ${firebaseResult.error}`);
+        }
+
+        if (!firebaseResult.project) {
+          console.error('❌ Firebase project setup succeeded but no project returned');
+          throw new Error('Firebase project setup succeeded but no project data returned');
+        }
+
+        dedicatedFirebaseProject = firebaseResult.project;
+        console.log('✅ Existing Firebase project configured for chatbot:', dedicatedFirebaseProject.projectId);
+        
+      } catch (firebaseError) {
+        console.error('❌ Firebase project setup failed:', firebaseError);
+        throw new Error(`Firebase project setup failed: ${firebaseError.message}`);
+      }
+      
+    } else {
+      console.log('🔥 Creating dedicated Firebase project for chatbot...');
+      
+      try {
+        // Create dedicated Firebase project for this chatbot using API
+        const firebaseResult = await FirebaseAPIService.createProjectForChatbot({
+          chatbotId,
+          chatbotName: chatbotConfig.name,
+          creatorUserId: userId || chatbotData?.userId || 'unknown'
+        });
+
+        if (!firebaseResult.success) {
+          console.error('❌ Failed to create Firebase project:', firebaseResult.error);
+          throw new Error(`Failed to create Firebase project: ${firebaseResult.error}`);
+        }
+
+        if (!firebaseResult.project) {
+          console.error('❌ Firebase project creation succeeded but no project returned');
+          throw new Error('Firebase project creation succeeded but no project data returned');
+        }
+
+        dedicatedFirebaseProject = firebaseResult.project;
+        console.log('✅ Dedicated Firebase project created:', dedicatedFirebaseProject.projectId);
+        
+      } catch (firebaseError) {
+        console.error('❌ Firebase project creation failed:', firebaseError);
+        throw new Error(`Firebase project creation failed: ${firebaseError.message}`);
+      }
     }
 
     // Setup OAuth 2.0 for Firebase Authentication

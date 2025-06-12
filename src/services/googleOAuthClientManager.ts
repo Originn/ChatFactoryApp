@@ -1,4 +1,7 @@
 
+export class GoogleOAuthClientManager {
+  private static readonly IAM_API_BASE = 'https://iamcredentials.googleapis.com/v1';
+
   /**
    * Update OAuth client redirect URIs
    */

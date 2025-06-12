@@ -1,6 +1,13 @@
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { EmailService } from '@/services/emailService';
 import { FirebaseDbService } from '@/services/firebaseDbService';
+import { 
+  generateSecureToken, 
+  generateSecureTemporaryPassword, 
+  generateVerificationUrl, 
+  getEmailBaseUrl,
+  createTokenData
+} from '@/utils/emailVerificationUtils';
 import * as admin from 'firebase-admin';
 
 export interface InviteUserRequest {
@@ -21,6 +28,7 @@ export interface ServiceResult {
   success: boolean;
   error?: string;
   userId?: string;
+  dedicatedUserId?: string;
   verificationToken?: string;
 }
 
@@ -627,6 +635,9 @@ export class ChatbotFirebaseService {
    */
   private static async sendInvitationEmail(email: string, chatbotId: string, verificationToken: string, deploymentUrl?: string): Promise<void> {
     try {
+      // Get base URL using utility function
+      const baseUrl = getEmailBaseUrl(deploymentUrl);
+      
       // Get chatbot details from main docsai project
       const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
       const chatbotData = chatbotDoc.data();
@@ -636,8 +647,11 @@ export class ChatbotFirebaseService {
       if (!firebaseInstances?.dedicated) {
         console.log('⚠️ No dedicated Firebase project, using custom verification flow');
         // Fallback to custom verification
-        const baseUrl = deploymentUrl || process.env.NEXT_PUBLIC_APP_URL;
-        const verificationUrl = `${baseUrl}/email-verification?token=${verificationToken}&chatbot=${chatbotId}`;
+        const verificationUrl = generateVerificationUrl(
+          { baseUrl, chatbotId, deploymentUrl },
+          verificationToken,
+          'verify'
+        );
         
         const result = await EmailService.sendChatbotInvitation(
           email,
@@ -654,39 +668,103 @@ export class ChatbotFirebaseService {
         return;
       }
 
-      // Use Firebase's built-in password reset link generation (for first-time password setup)
-      console.log(`🔥 Generating Firebase password reset link for dedicated project: ${firebaseInstances.dedicated.projectId}`);
+      // Create user account with temporary password, then send password reset link
+      console.log(`🔥 Creating user account in dedicated project: ${firebaseInstances.dedicated.projectId}`);
       
-      // Configure ActionCodeSettings for the Vercel deployment - use actual deployment URL
-      const baseUrl = deploymentUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://chatfactory.ai';
-      const actionCodeSettings = {
-        url: `${baseUrl}/email-verification?chatbot=${chatbotId}`,
-        handleCodeInApp: false // Will open in browser first, then redirect to app
-      };
+      // Generate a secure temporary password (user will reset it immediately)
+      const tempPassword = generateSecureTemporaryPassword();
+      
+      try {
+        // Create the user account with temporary password
+        const userDisplayName = email.split('@')[0]; // Generate display name from email
+        const userRecord = await firebaseInstances.dedicated.auth.createUser({
+          email: email,
+          password: tempPassword,
+          emailVerified: true, // Mark as verified since we're sending them a reset link
+          displayName: userDisplayName
+        });
+        
+        console.log(`✅ User account created in dedicated project: ${userRecord.uid}`);
+        
+        // Create a verification token for your custom flow
+        const customToken = generateSecureToken();
+        const tokenData = createTokenData(userRecord.uid, chatbotId, email);
+        
+        // Store the token in main project for admin access and dedicated project for user access
+        await adminDb.collection('passwordResetTokens').doc(customToken).set(tokenData);
 
-      console.log(`🔗 Using password setup URL: ${actionCodeSettings.url}`);
+        // Also store in dedicated project for client-side access
+        await firebaseInstances.dedicated.firestore
+          .collection('passwordResetTokens')
+          .doc(customToken)
+          .set(tokenData);
+        
+        // Create direct link to your custom page with the token
+        const directPasswordSetupLink = generateVerificationUrl(
+          { baseUrl, chatbotId, deploymentUrl },
+          customToken,
+          'setup'
+        );
 
-      // Generate Firebase password reset link (this is the correct flow for first-time password setup)
-      const passwordResetLink = await firebaseInstances.dedicated.auth.generatePasswordResetLink(
-        email,
-        actionCodeSettings
-      );
+        console.log(`✅ Direct password setup link created: ${directPasswordSetupLink}`);
 
-      console.log(`✅ Firebase password reset link generated: ${passwordResetLink}`);
+        // Send email with direct link to your custom page
+        const result = await EmailService.sendChatbotInvitation(
+          email,
+          chatbotData?.name || 'Chatbot',
+          directPasswordSetupLink,
+          'Admin'
+        );
 
-      // Send email using your email service with the Firebase link
-      const result = await EmailService.sendChatbotInvitation(
-        email,
-        chatbotData?.name || 'Chatbot',
-        passwordResetLink,
-        'Admin' // inviterName
-      );
+        if (result.success) {
+          console.log(`✅ Invitation email sent to ${email} with one-time password setup link`);
+        } else {
+          console.error(`❌ Failed to send email: ${result.error}`);
+          // Clean up the created user if email failed
+          try {
+            await firebaseInstances.dedicated.auth.deleteUser(userRecord.uid);
+            console.log(`🧹 Cleaned up user account after email failure`);
+          } catch (cleanupError) {
+            console.warn(`⚠️ Could not clean up user account: ${cleanupError}`);
+          }
+          throw new Error(result.error || 'Failed to send invitation email');
+        }
+        
+      } catch (createError: any) {
+        console.error(`❌ Failed to create user account: ${createError}`);
+        
+        if (createError.code === 'auth/email-already-exists') {
+          // User already exists - just send them a password reset link
+          console.log(`ℹ️ User ${email} already exists, sending new password setup link`);
+          
+          // Create a new custom token for existing user
+          const newCustomToken = generateSecureToken();
+          const existingUserTokenData = createTokenData('existing-user', chatbotId, email);
+          
+          // Store the token for existing user
+          await adminDb.collection('passwordResetTokens').doc(newCustomToken).set(existingUserTokenData);
 
-      if (result.success) {
-        console.log(`✅ Invitation email sent to ${email} with Firebase password reset link`);
-      } else {
-        console.error(`❌ Failed to send email: ${result.error}`);
-        throw new Error(result.error || 'Failed to send invitation email');
+          const directPasswordSetupLink = generateVerificationUrl(
+            { baseUrl, chatbotId, deploymentUrl },
+            newCustomToken,
+            'setup'
+          );
+
+          const result = await EmailService.sendChatbotInvitation(
+            email,
+            chatbotData?.name || 'Chatbot',
+            directPasswordSetupLink,
+            'Admin'
+          );
+
+          if (result.success) {
+            console.log(`✅ Password reset email sent to existing user ${email}`);
+          } else {
+            throw new Error(result.error || 'Failed to send password reset email');
+          }
+        } else {
+          throw createError;
+        }
       }
       
     } catch (error: any) {

@@ -84,7 +84,7 @@ export class EmailService {
 
       if (error) {
         console.error('❌ Resend API error:', error);
-        throw new Error(`Resend API error: ${error.statusCode} ${JSON.stringify(error)}`);
+        throw new Error(`Resend API error: ${(error as any).statusCode || 'Unknown'} ${JSON.stringify(error)}`);
       }
 
       console.log('✅ Email sent successfully via Resend:', data?.id);
@@ -115,31 +115,47 @@ export class EmailService {
           <h2 style="color: #333;">You've been invited!</h2>
           <p>Hello,</p>
           <p>You've been invited to access <strong>${chatbotName}</strong>${inviterName ? ` by ${inviterName}` : ''}.</p>
-          <p>To complete your registration and set up your password, please click the button below:</p>
+          <p><strong>Getting started is easy - just one step:</strong></p>
+          <p>Click the button below to set your password and get immediate access:</p>
           
           <div style="text-align: center; margin: 30px 0;">
             <a href="${passwordSetupUrl}" 
                style="display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
-              Set Up Password & Access Chatbot
+              Set Password & Access Now
             </a>
           </div>
           
+          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 0; color: #495057; font-size: 14px;">
+              <strong>What happens next:</strong><br>
+              1. Click the button above<br>
+              2. Create your password<br>
+              3. Start chatting immediately!
+            </p>
+          </div>
+          
           <p style="color: #666; font-size: 14px;">
-            This link will expire in 24 hours. If you didn't expect this invitation, you can safely ignore this email.
+            This setup link will expire in 24 hours. No complicated verification steps - just set your password and you're ready to go!
           </p>
           
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
           <p style="color: #999; font-size: 12px;">
-            This email was sent by ChatFactory. If you have questions, please contact the person who invited you.
+            This email was sent by ChatFactory. If you didn't expect this invitation, you can safely ignore this email.
           </p>
         </div>
       `,
       text: `
         You've been invited to ${chatbotName}!
         
-        To set up your password and access the chatbot, visit: ${passwordSetupUrl}
+        Getting started is easy - just one step:
+        Set your password and get immediate access: ${passwordSetupUrl}
         
-        This link will expire in 24 hours.
+        What happens next:
+        1. Click the link above
+        2. Create your password
+        3. Start chatting immediately!
+        
+        This setup link will expire in 24 hours.
       `
     };
 

@@ -44,6 +44,13 @@ export interface CreateFirebaseProjectRequest {
   creatorUserId: string;
 }
 
+export interface SetupExistingProjectRequest {
+  projectId: string;
+  chatbotId: string;
+  chatbotName: string;
+  creatorUserId: string;
+}
+
 export interface FirebaseProject {
   projectId: string;
   displayName: string;
@@ -51,6 +58,7 @@ export interface FirebaseProject {
   creatorUserId: string; // For audit/debug purposes
   createdAt: Timestamp;
   status: 'creating' | 'active' | 'failed' | 'deleted';
+  isReusableProject?: boolean; // Flag for reusable projects
   config: {
     apiKey: string;
     authDomain: string;
@@ -76,6 +84,8 @@ export interface FirebaseProject {
     customOAuthConfigured?: boolean;
     error?: string;
   };
+  oauthClientId?: string;
+  firebaseAppId?: string;
 }
 
 export class FirebaseAPIService {
@@ -265,9 +275,29 @@ export class FirebaseAPIService {
         // Step 6: Skip OAuth setup - Firebase handles this automatically
         console.log('🔐 Skipping separate OAuth setup - Firebase handles Google Sign-In automatically');
 
-        // Step 7: Create service account (REST API - no SDK for CRUD operations)
-        console.log('🔑 Creating service account via REST API...');
-        const serviceAccount = await this.createServiceAccountREST(projectId);
+        // Step 7: Get default Firebase service account (created automatically)
+        console.log('🔑 Getting default Firebase Admin SDK service account...');
+        let serviceAccount = await this.getDefaultFirebaseServiceAccount(projectId);
+        
+        // If both default and custom service account creation failed, use main project as temporary fallback
+        if (!serviceAccount) {
+          console.warn('⚠️ Both default and custom service account creation failed');
+          console.log('🔄 Using main project service account as temporary fallback...');
+          
+          serviceAccount = {
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+            privateKey: process.env.FIREBASE_PRIVATE_KEY || ''
+          };
+          
+          if (serviceAccount.clientEmail && serviceAccount.privateKey) {
+            console.log('✅ Using main project service account as fallback');
+            console.log('⚠️ WARNING: This is a temporary solution - dedicated service account creation needs to be fixed');
+            console.log('🔍 Fallback service account:', serviceAccount.clientEmail);
+          } else {
+            console.error('❌ Main project service account credentials are also missing!');
+            serviceAccount = null;
+          }
+        }
 
         // Step 8: Configure Firebase Authentication with Google provider (simplified)
         console.log('🔐 Configuring Firebase Authentication with Google provider...');
@@ -410,6 +440,175 @@ export class FirebaseAPIService {
   }
 
   /**
+   * Set up an existing Google Cloud project with Firebase services for a chatbot
+   * This is used for reusable Firebase projects in development mode
+   */
+  static async setupExistingProjectForChatbot(
+    request: SetupExistingProjectRequest
+  ): Promise<{ success: boolean; project?: FirebaseProject; error?: string }> {
+    try {
+      const { projectId, chatbotId, chatbotName, creatorUserId } = request;
+      
+      console.log('🔧 Setting up existing Firebase project for chatbot:', { projectId, chatbotId });
+      
+      // Test permissions first
+      console.log('🧪 Testing service account permissions...');
+      const permissionTest = await this.testPermissions();
+      
+      if (!permissionTest.success) {
+        const errorMessage = `Service account lacks required permissions: ${permissionTest.missing.join(', ')}`;
+        console.error('❌ Permission check failed:', errorMessage);
+        return { success: false, error: errorMessage };
+      }
+      
+      console.log('✅ Permission check passed - proceeding with project setup');
+      
+      const displayName = `${chatbotName} Chatbot (Reusable)`;
+
+      // Store project record for this chatbot configuration
+      const projectRef = adminDb.collection(this.FIREBASE_PROJECTS_COLLECTION).doc(`${projectId}-${chatbotId}`);
+      await projectRef.set({
+        projectId,
+        displayName,
+        chatbotId,
+        creatorUserId,
+        isReusableProject: true,
+        originalProjectId: projectId,
+        createdAt: Timestamp.now(),
+        status: 'configuring'
+      });
+
+      try {
+        // Skip project creation - project already exists
+        console.log('✅ Using existing Google Cloud project:', projectId);
+        
+        // Get project number for API operations
+        console.log('🔍 Getting project number...');
+        const projectNumber = await this.getProjectNumber(projectId);
+
+        // Step 1: Enable required APIs (same as new project creation)
+        console.log('🔧 Ensuring required APIs are enabled...');
+        await this.enableRequiredAPIsSDK(projectId, projectNumber);
+
+        // Step 2: Set up Firebase services (same as new project creation)
+        console.log('🔥 Setting up Firebase services...');
+        
+        // Initialize Identity Platform (this also adds Firebase to the project)
+        console.log('🆔 Setting up Identity Platform...');
+        await this.initialiseIdentityPlatform(projectNumber);
+        
+        // Add Firebase to project and get configuration
+        console.log('🔥 Adding Firebase to project...');
+        const firebaseConfig = await this.addFirebaseToProject(projectId, displayName);
+        
+        // Step 2.5: Configure Firebase Authentication with Google and Email/Password providers
+        console.log('🔐 Configuring Firebase Authentication...');
+        const authConfig = await this.setupFirebaseAuthentication(projectId, projectNumber);
+        
+        // Step 2.7: Deploy Firestore security rules
+        console.log('🛡️ Deploying Firestore security rules...');
+        try {
+          await this.deployFirestoreSecurityRules(projectId);
+          console.log('✅ Firestore security rules deployed successfully');
+        } catch (rulesError: any) {
+          console.warn('⚠️ Failed to deploy Firestore security rules:', rulesError.message);
+          console.log('💡 You may need to manually configure Firestore rules in the Firebase Console');
+        }
+        
+        // Step 3: Create service account for this chatbot
+        console.log('🔑 Creating service account...');
+        const serviceAccountResult = await this.createServiceAccountREST(projectId);
+        
+        if (!serviceAccountResult) {
+          throw new Error('Failed to create service account');
+        }
+
+        // Step 4: Set up OAuth (if not already configured)
+        console.log('🔐 Setting up OAuth configuration...');
+        let oauthClientId = '';
+        try {
+          const oauthClient = await this.createOAuthWebClient(projectNumber, projectId);
+          if (oauthClient && oauthClient.clientId) {
+            oauthClientId = oauthClient.clientId;
+            console.log('✅ OAuth client configured');
+          }
+        } catch (oauthError: any) {
+          console.warn('⚠️ OAuth setup failed (may already be configured):', oauthError.message);
+          // Continue without OAuth - the project may already have it configured
+        }
+
+        // Step 5: Create storage buckets (if not already exist)
+        console.log('🪣 Setting up storage buckets...');
+        await this.createStorageBucketsSDK(projectId);
+
+        // Construct complete project object
+        const completeProject: FirebaseProject = {
+          projectId,
+          displayName,
+          chatbotId,
+          creatorUserId,
+          isReusableProject: true,
+          config: firebaseConfig,
+          serviceAccount: {
+            clientEmail: serviceAccountResult.clientEmail,
+            privateKey: serviceAccountResult.privateKey,
+          },
+          oauthClientId,
+          firebaseAppId: firebaseConfig.appId,
+          createdAt: Timestamp.now(),
+          status: 'active',
+          ...(authConfig && { authConfig })
+        };
+
+        // Update project record with success
+        await projectRef.update({
+          status: 'active',
+          config: firebaseConfig,
+          serviceAccount: {
+            clientEmail: serviceAccountResult.clientEmail,
+            // Don't store private key in Firestore for security
+          },
+          firebaseAppId: firebaseConfig.appId,
+          oauthClientId,
+          completedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          ...(authConfig?.success && { 
+            authConfig: {
+              success: authConfig.success,
+              providers: authConfig.providers,
+              authType: authConfig.authType,
+              customOAuthConfigured: authConfig.customOAuthConfigured
+            }
+          })
+        });
+
+        console.log('✅ Existing Firebase project successfully configured for chatbot');
+        return { success: true, project: completeProject };
+
+      } catch (setupError: any) {
+        console.error('❌ Firebase project setup failed:', setupError.message);
+        
+        // Update project record with failure
+        await projectRef.update({
+          status: 'failed',
+          error: setupError.message,
+          failedAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        });
+        
+        return { 
+          success: false, 
+          error: `Firebase project setup failed: ${setupError.message}` 
+        };
+      }
+
+    } catch (error: any) {
+      console.error('❌ Error in setupExistingProjectForChatbot:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Enable required APIs using Service Usage SDK
    */
   private static async enableRequiredAPIsSDK(projectId: string, projectNumber: string): Promise<void> {
@@ -421,7 +620,8 @@ export class FirebaseAPIService {
       'cloudbilling.googleapis.com',
       'iam.googleapis.com',
       'iap.googleapis.com',              // Required for OAuth brand creation
-      'iamcredentials.googleapis.com'    // Required for service-account key operations
+      'iamcredentials.googleapis.com',   // Required for service-account key operations
+      'firebaserules.googleapis.com'     // Required for Firestore security rules
       // Removed 'cloudresourcemanager.googleapis.com' - already enabled by project creation
     ];
 
@@ -619,52 +819,232 @@ export class FirebaseAPIService {
   }
 
   /**
+   * Get default Firebase Admin SDK service account (created automatically by Firebase)
+   */
+  private static async getDefaultFirebaseServiceAccount(projectId: string): Promise<{ clientEmail: string; privateKey: string } | null> {
+    try {
+      console.log('🔍 Looking for default Firebase Admin SDK service account...');
+      console.log('🔍 Project ID:', projectId);
+      
+      const authClient = await getAuthClient();
+      if (!authClient) {
+        console.error('❌ Failed to get auth client for default service account detection');
+        return null;
+      }
+      
+      const iam = google.iam('v1');
+      
+      // List service accounts to find the default Firebase one
+      console.log('📋 Listing service accounts in project...');
+      const response = await iam.projects.serviceAccounts.list({
+        name: `projects/${projectId}`,
+        auth: authClient as any
+      });
+      
+      const serviceAccounts = response.data.accounts || [];
+      console.log(`📋 Found ${serviceAccounts.length} service accounts in project`);
+      
+      if (serviceAccounts.length > 0) {
+        console.log('🔍 Available service accounts:');
+        serviceAccounts.forEach((sa, index) => {
+          console.log(`  ${index + 1}. ${sa.email} (${sa.displayName || 'No display name'})`);
+        });
+      }
+      
+      // Find the default Firebase Admin SDK service account
+      const firebaseServiceAccount = serviceAccounts.find(account => 
+        account.email && (
+          account.email.includes('firebase-adminsdk-') ||
+          account.email.includes('@appspot.gserviceaccount.com') ||
+          account.displayName?.includes('Firebase Admin SDK')
+        )
+      );
+      
+      if (!firebaseServiceAccount) {
+        console.log('❌ Default Firebase Admin SDK service account not found');
+        console.log('🔍 This might be expected - Firebase service accounts are created on first use');
+        console.log('📋 Available service accounts:');
+        serviceAccounts.forEach(sa => console.log(`  - ${sa.email}`));
+        
+        // Try to create the default Firebase service account using Firebase Management API
+        console.log('🔧 Attempting to initialize default Firebase service account...');
+        try {
+          const defaultServiceAccount = await this.initializeDefaultFirebaseServiceAccount(projectId);
+          if (defaultServiceAccount) {
+            console.log('✅ Successfully initialized default Firebase service account');
+            return defaultServiceAccount;
+          }
+        } catch (initError: any) {
+          console.warn('⚠️ Failed to initialize default Firebase service account:', initError.message);
+        }
+        
+        return null;
+      }
+      
+      console.log('✅ Found default Firebase service account:', firebaseServiceAccount.email);
+      
+      // Create a key for the default Firebase service account
+      const maxRetries = 3;
+      let keyResponse: any = null;
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          console.log(`🔑 Creating key for default Firebase service account (attempt ${attempt + 1}/${maxRetries})...`);
+          
+          keyResponse = await iam.projects.serviceAccounts.keys.create({
+            name: `projects/${projectId}/serviceAccounts/${firebaseServiceAccount.email}`,
+            requestBody: {
+              privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE',
+              keyAlgorithm: 'KEY_ALG_RSA_2048'
+            },
+            auth: authClient as any
+          });
+          
+          console.log('✅ Service account key created for default Firebase service account');
+          break; // Success!
+          
+        } catch (keyError: any) {
+          console.log('🔍 Key creation error for default service account:', {
+            attempt: attempt + 1,
+            code: keyError.code,
+            message: keyError.message
+          });
+          
+          if (attempt < maxRetries - 1) {
+            const delay = Math.min(20000 + (attempt * 10000), 40000);
+            console.log(`⚠️ Key creation attempt ${attempt + 1}/${maxRetries} failed, retrying in ${delay/1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            throw keyError;
+          }
+        }
+      }
+      
+      if (keyResponse && keyResponse.data && keyResponse.data.privateKeyData) {
+        const keyData = JSON.parse(Buffer.from(keyResponse.data.privateKeyData, 'base64').toString());
+        
+        console.log('✅ Default Firebase service account key processed successfully');
+        console.log('🔍 Default service account details:', {
+          clientEmail: keyData.client_email,
+          projectId: keyData.project_id,
+          hasPrivateKey: !!keyData.private_key
+        });
+        
+        return {
+          clientEmail: keyData.client_email,
+          privateKey: keyData.private_key
+        };
+      }
+      
+      console.error('❌ No private key data received for default Firebase service account');
+      return null;
+      
+    } catch (error: any) {
+      console.error('❌ Failed to get default Firebase service account:', {
+        message: error.message,
+        code: error.code,
+        status: error.status
+      });
+      console.log('💡 Falling back to custom service account creation...');
+      
+      // Fallback to custom service account creation if default doesn't work
+      return await this.createServiceAccountREST(projectId);
+    }
+  }
+
+  /**
+   * Initialize default Firebase service account using Firebase Admin SDK
+   */
+  private static async initializeDefaultFirebaseServiceAccount(projectId: string): Promise<{ clientEmail: string; privateKey: string } | null> {
+    try {
+      console.log('🔧 Initializing default Firebase service account via Firebase Management API...');
+      
+      // This would require Firebase Management API calls, which is complex
+      // For now, return null to fall back to custom service account
+      console.log('ℹ️ Default Firebase service account initialization not implemented');
+      console.log('💡 This is expected - falling back to custom service account creation');
+      
+      return null;
+    } catch (error: any) {
+      console.error('❌ Failed to initialize default Firebase service account:', error.message);
+      return null;
+    }
+  }
+
+  /**
    * Create service account (REST API - no SDK for CRUD operations)
    */
   private static async createServiceAccountREST(projectId: string): Promise<{ clientEmail: string; privateKey: string } | null> {
     try {
-      console.log('🔑 Creating service account via REST API (no SDK for CRUD)...');
+      console.log('🔑 Creating custom service account via REST API...');
+      console.log('🔍 Project ID:', projectId);
       
       const authClient = await getAuthClient();
+      if (!authClient) {
+        console.error('❌ Failed to get auth client');
+        return null;
+      }
+      console.log('✅ Auth client obtained successfully');
+      
       const iam = google.iam('v1');
       
       const serviceAccountId = `${projectId.replace(/-/g, '')}-admin`.substring(0, 30);
       const serviceAccountEmail = `${serviceAccountId}@${projectId}.iam.gserviceaccount.com`;
       
-      // Create service account
+      console.log('🔍 Service account details:', {
+        id: serviceAccountId,
+        email: serviceAccountEmail,
+        project: projectId
+      });
+      
+      // Create service account with detailed error handling
       try {
-        await iam.projects.serviceAccounts.create({
+        console.log('🔨 Creating service account...');
+        const createResponse = await iam.projects.serviceAccounts.create({
           name: `projects/${projectId}`,
           requestBody: {
             accountId: serviceAccountId,
             serviceAccount: {
               displayName: `${projectId} Admin Service Account`,
-              description: 'Service account for admin operations'
+              description: 'Service account for Firebase Admin operations'
             }
           },
           auth: authClient as any
         });
-        console.log('✅ Service account created via REST API:', serviceAccountEmail);
         
-        // IMPORTANT: Wait for the service account to propagate before creating a key
-        // IAM propagation can take "a few minutes" - stretch to 30s and 3 retries
-        console.log('⏳ Waiting for service account to propagate (extended wait)...');
-        await new Promise(resolve => setTimeout(resolve, 30000)); // 30-second wait (up from 10s)
+        console.log('✅ Service account created successfully:', serviceAccountEmail);
+        console.log('📋 Create response:', createResponse.data?.email || 'No email in response');
         
       } catch (createError: any) {
-        if (createError.code === 409) {
+        console.log('🔍 Service account creation error details:', {
+          code: createError.code,
+          status: createError.status,
+          message: createError.message,
+          details: createError.errors || createError.details
+        });
+        
+        if (createError.code === 409 || createError.status === 409) {
           console.log('ℹ️ Service account already exists:', serviceAccountEmail);
         } else {
-          throw createError;
+          console.error('❌ Service account creation failed with error:', createError.message);
+          throw createError; // Re-throw non-conflict errors
         }
       }
       
-      // Create and download key with improved retry logic (IAM propagation can take 90s+ on new orgs)
-      const maxRetries = 4; // Increased from 3
+      // Wait for service account to propagate
+      console.log('⏳ Waiting for service account to propagate (30s)...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+      
+      // Create service account key with enhanced retry and error handling
+      console.log('🔑 Creating service account key...');
+      const maxRetries = 4;
       let keyResponse: any = null;
+      let lastError: any = null;
       
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
+          console.log(`🔍 Key creation attempt ${attempt + 1}/${maxRetries}...`);
+          
           keyResponse = await iam.projects.serviceAccounts.keys.create({
             name: `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`,
             requestBody: {
@@ -674,35 +1054,138 @@ export class FirebaseAPIService {
             auth: authClient as any
           });
           
-          console.log('✅ Service account key created via REST API');
+          console.log('✅ Service account key created successfully');
+          console.log('📋 Key response status:', keyResponse.status);
           break; // Success!
           
         } catch (keyError: any) {
+          lastError = keyError;
+          console.log('🔍 Key creation error details:', {
+            attempt: attempt + 1,
+            code: keyError.code,
+            status: keyError.status,
+            message: keyError.message,
+            details: keyError.errors || keyError.details
+          });
+          
           if (attempt < maxRetries - 1) {
-            // Exponential backoff: 30s, 45s, 60s for new org IAM propagation
             const delay = Math.min(30000 + (attempt * 15000), 60000);
             console.log(`⚠️ Key creation attempt ${attempt + 1}/${maxRetries} failed, retrying in ${delay/1000}s...`);
-            console.log(`   IAM propagation can take up to 90s on new organizations`);
+            console.log(`   Error: ${keyError.message}`);
             await new Promise(resolve => setTimeout(resolve, delay));
           } else {
-            throw keyError; // Final attempt failed
+            console.error('❌ All key creation attempts failed');
+            throw keyError;
           }
         }
       }
       
-      if (keyResponse && (keyResponse as any).data.privateKeyData) {
-        const keyData = JSON.parse(Buffer.from((keyResponse as any).data.privateKeyData, 'base64').toString());
-        
-        return {
-          clientEmail: keyData.client_email,
-          privateKey: keyData.private_key
-        };
+      // Process the key response
+      if (keyResponse && keyResponse.data && keyResponse.data.privateKeyData) {
+        console.log('🔍 Processing private key data...');
+        try {
+          const keyData = JSON.parse(Buffer.from(keyResponse.data.privateKeyData, 'base64').toString());
+          
+          console.log('✅ Service account key processed successfully');
+          console.log('🔍 Key details:', {
+            clientEmail: keyData.client_email,
+            projectId: keyData.project_id,
+            hasPrivateKey: !!keyData.private_key,
+            privateKeyLength: keyData.private_key?.length || 0
+          });
+          
+          // Add Firebase Admin permissions to the custom service account
+          console.log('🔐 Adding Firebase Admin permissions to custom service account...');
+          try {
+            await this.addFirebaseAdminPermissions(projectId, serviceAccountEmail);
+            console.log('✅ Firebase Admin permissions added to custom service account');
+          } catch (permissionError: any) {
+            console.warn('⚠️ Failed to add Firebase permissions, but continuing:', permissionError.message);
+            // Continue anyway - the service account might still work for basic operations
+          }
+          
+          return {
+            clientEmail: keyData.client_email,
+            privateKey: keyData.private_key
+          };
+        } catch (parseError: any) {
+          console.error('❌ Failed to parse private key data:', parseError.message);
+          throw parseError;
+        }
+      } else {
+        console.error('❌ No private key data in response');
+        console.log('🔍 Key response structure:', {
+          hasData: !!keyResponse?.data,
+          hasPrivateKeyData: !!keyResponse?.data?.privateKeyData,
+          responseKeys: keyResponse?.data ? Object.keys(keyResponse.data) : 'no data'
+        });
+        throw new Error('No private key data received from Google IAM API');
       }
       
-      return null;
     } catch (serviceAccountError: any) {
-      console.warn('⚠️ Service account creation via REST API failed:', serviceAccountError.message);
+      console.error('❌ Service account creation via REST API failed:', {
+        message: serviceAccountError.message,
+        code: serviceAccountError.code,
+        status: serviceAccountError.status,
+        details: serviceAccountError.errors || serviceAccountError.details || 'No additional details'
+      });
+      console.error('❌ Full error object:', serviceAccountError);
       return null;
+    }
+  }
+
+  /**
+   * Add Firebase Admin permissions to a service account
+   */
+  private static async addFirebaseAdminPermissions(projectId: string, serviceAccountEmail: string): Promise<void> {
+    try {
+      const authClient = await getAuthClient();
+      
+      // Use Resource Manager to set IAM policy
+      const [policy] = await resourceManagerClient.getIamPolicy({
+        resource: `projects/${projectId}`
+      });
+      
+      // Firebase Admin roles needed for the service account
+      const firebaseRoles = [
+        'roles/firebase.admin',
+        'roles/firebaseauth.admin',
+        'roles/iam.serviceAccountTokenCreator'
+      ];
+      
+      const bindings = policy.bindings || [];
+      
+      // Add the service account to each Firebase role
+      firebaseRoles.forEach(role => {
+        let binding = bindings.find(b => b.role === role);
+        if (!binding) {
+          binding = {
+            role: role,
+            members: []
+          };
+          bindings.push(binding);
+        }
+        
+        const memberString = `serviceAccount:${serviceAccountEmail}`;
+        if (!binding.members?.includes(memberString)) {
+          binding.members = binding.members || [];
+          binding.members.push(memberString);
+        }
+      });
+      
+      // Update the IAM policy
+      await resourceManagerClient.setIamPolicy({
+        resource: `projects/${projectId}`,
+        policy: {
+          ...policy,
+          bindings
+        }
+      });
+      
+      console.log('✅ Firebase Admin permissions granted to service account');
+    } catch (error: any) {
+      console.error('❌ Failed to grant Firebase Admin permissions:', error.message);
+      throw error;
     }
   }
 
@@ -1960,6 +2443,151 @@ export class FirebaseAPIService {
         code: error.code,
         stack: error.stack?.substring(0, 500)
       });
+      throw error;
+    }
+  }
+
+  /**
+   * Deploy Firestore security rules for the chatbot project
+   */
+  private static async deployFirestoreSecurityRules(projectId: string): Promise<void> {
+    try {
+      const accessToken = await this.getFirebaseAccessToken();
+      
+      // Define security rules for chatbot functionality
+      const securityRules = `
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read and write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow authenticated users to read and write their own conversations
+    match /conversations/{conversationId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || request.auth.uid == data.userId);
+    }
+    
+    // Allow authenticated users to read chatbot configuration
+    match /chatbots/{chatbotId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only server can write chatbot config
+    }
+    
+    // Allow authenticated users to read and write messages in their conversations
+    match /messages/{messageId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || request.auth.uid == data.userId);
+    }
+    
+    // Allow authenticated users to read documents (knowledge base)
+    match /documents/{documentId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only server can write documents
+    }
+    
+    // Allow authenticated users to read and write their own analytics data
+    match /analytics/{analyticsId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || request.auth.uid == data.userId);
+    }
+    
+    // Allow authenticated users to access chatbot-specific collections
+    match /chatbots/{chatbotId}/users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Only server can manage user access
+    }
+    
+    match /chatbots/{chatbotId}/documents/{documentId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only server can manage documents
+    }
+    
+    match /chatbots/{chatbotId}/conversations/{conversationId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || request.auth.uid == data.userId);
+    }
+    
+    // Default deny rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+      `.trim();
+
+      // Deploy rules using Firebase Management API
+      const rulesUrl = `https://firebaserules.googleapis.com/v1/projects/${projectId}/rulesets`;
+      
+      const rulesResponse = await fetch(rulesUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source: {
+            files: [
+              {
+                name: 'firestore.rules',
+                content: securityRules,
+              },
+            ],
+          },
+        }),
+      });
+
+      if (!rulesResponse.ok) {
+        const errorText = await rulesResponse.text();
+        throw new Error(`Failed to create ruleset: ${rulesResponse.status} ${errorText}`);
+      }
+
+      const rulesetData = await rulesResponse.json();
+      const rulesetName = rulesetData.name;
+
+      // Release the rules to make them active
+      const releaseUrl = `https://firebaserules.googleapis.com/v1/projects/${projectId}/releases`;
+      
+      const releaseResponse = await fetch(releaseUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `projects/${projectId}/releases/cloud.firestore`,
+          rulesetName: rulesetName,
+        }),
+      });
+
+      if (!releaseResponse.ok) {
+        const errorText = await releaseResponse.text();
+        const errorData = JSON.parse(errorText);
+        
+        // Handle "already exists" error gracefully for recycled projects
+        if (releaseResponse.status === 409 && errorData.error?.message?.includes('already exists')) {
+          console.log('ℹ️ Firestore security rules already exist - skipping deployment');
+          console.log('💡 Rules may need manual update in Firebase Console if changes are needed');
+          return; // Exit gracefully without throwing
+        }
+        
+        throw new Error(`Failed to release rules: ${releaseResponse.status} ${errorText}`);
+      }
+
+      console.log('✅ Firestore security rules deployed and activated successfully');
+      
+    } catch (error: any) {
+      console.error('❌ Error deploying Firestore security rules:', error);
+      
+      // Handle specific error codes gracefully for recycled projects
+      if (error.message?.includes('409') && error.message?.includes('already exists')) {
+        console.log('⚠️ Failed to deploy Firestore security rules: rules already exist');
+        console.log('💡 You may need to manually configure Firestore rules in the Firebase Console');
+        return; // Don't throw - let deployment continue
+      }
+      
       throw error;
     }
   }

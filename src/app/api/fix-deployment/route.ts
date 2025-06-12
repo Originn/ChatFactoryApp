@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       chatbotId,
       deployments,
-      hasDeployedStatus: deployments.some(d => d.status === 'deployed'),
+      hasDeployedStatus: deployments.some(d => (d as any).status === 'deployed'),
       canCreateDeployment: deployments.length === 0
     });
 
