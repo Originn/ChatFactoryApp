@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseProjectService } from '@/services/firebaseProjectService';
+import { ReusableFirebaseProjectService } from '@/services/reusableFirebaseProjectService';
+
+const USE_REUSABLE_FIREBASE_PROJECT = process.env.USE_REUSABLE_FIREBASE_PROJECT === 'true';
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -27,17 +30,29 @@ export async function DELETE(request: NextRequest) {
       if (!result.success) results.errors.push(`Vectorstore: ${result.error}`);
     }
 
-    // Delete GCP/Firebase project if requested (default: true)
+    // Delete or clean up Firebase project if requested (default: true)
     if (deleteFirebaseProject) {
-      console.log('🗑️ Deleting GCP/Firebase project...');
-      const result = await FirebaseProjectService.deleteProject(chatbotId);
-      results.firebaseProjectDeleted = result.success;
-      results.firebaseProjectAutomated = result.automated || false;
-      if (!result.success) {
-        results.errors.push(`Firebase Project: ${result.error}`);
-      } else if (!result.automated) {
-        // If deletion succeeded but wasn't automated, add as warning
-        results.errors.push(`Firebase Project: ${result.error || 'Manual deletion required'}`);
+      if (USE_REUSABLE_FIREBASE_PROJECT) {
+        console.log('🧹 Cleaning up reusable Firebase project data...');
+        const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(
+          chatbotId,
+          userId || ''
+        );
+        results.firebaseProjectDeleted = cleanupResult.success;
+        if (!cleanupResult.success) {
+          results.errors.push(`Reusable Firebase cleanup: ${cleanupResult.message}`);
+        }
+      } else {
+        console.log('🗑️ Deleting GCP/Firebase project...');
+        const result = await FirebaseProjectService.deleteProject(chatbotId);
+        results.firebaseProjectDeleted = result.success;
+        results.firebaseProjectAutomated = result.automated || false;
+        if (!result.success) {
+          results.errors.push(`Firebase Project: ${result.error}`);
+        } else if (!result.automated) {
+          // If deletion succeeded but wasn't automated, add as warning
+          results.errors.push(`Firebase Project: ${result.error || 'Manual deletion required'}`);
+        }
       }
     }
 
