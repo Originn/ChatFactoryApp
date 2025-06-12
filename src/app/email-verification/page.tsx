@@ -104,16 +104,12 @@ function EmailVerificationContent() {
         throw new Error('No setup code provided');
       }
 
-      console.log('🔧 Processing Firebase password setup with mode:', mode);
-      
       // For the new flow, we always expect resetPassword mode
       if (mode === 'resetPassword') {
-        console.log('🔧 Password setup mode detected - ready for one-time password setup');
         setStatus('password-setup');
         setMessage('Please choose your password to complete registration.');
       } else {
         // Legacy email verification flow (fallback)
-        console.log('🔧 Legacy email verification mode detected');
         
         const result = await ChatbotEmailVerificationService.verifyEmail(oobCode);
         
@@ -170,10 +166,6 @@ function EmailVerificationContent() {
       
       if (actualToken) {
         // Use the new custom token flow (direct password setup)
-        console.log('🔧 Using custom token flow for direct password setup');
-        console.log('🔍 Custom token details:', {
-          token: actualToken.substring(0, 10) + '...',
-          tokenLength: actualToken.length,
           email: email || 'not-provided-in-url'
         });
         
