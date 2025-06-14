@@ -1,4 +1,5 @@
 import { adminDb, adminStorage, adminAuth } from '@/lib/firebase/admin/index';
+import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { GoogleOAuthClientManager } from './googleOAuthClientManager';
 import { google } from 'googleapis';
@@ -999,43 +1000,55 @@ export class ReusableFirebaseProjectService {
    */
   private static async deleteAllIdentityPlatformUsers(projectId: string, accessToken: string): Promise<void> {
     console.log('👤 Deleting all Identity Platform users...');
-    
+
     try {
-      // Use Firebase Admin SDK to delete all users
-      // This affects both Firebase Auth and Identity Platform users
+      const appName = `ip-cleanup-${projectId}`;
+      let app: admin.app.App;
+
+      try {
+        app = admin.app(appName);
+      } catch {
+        app = admin.initializeApp({
+          credential: admin.credential.applicationDefault(),
+          projectId
+        }, appName);
+      }
+
+      const auth = app.auth();
+
       let totalDeleted = 0;
       let nextPageToken: string | undefined;
-      
+
       do {
-        const listUsersResult = await adminAuth.listUsers(1000, nextPageToken);
-        
+        const listUsersResult = await auth.listUsers(1000, nextPageToken);
+
         if (listUsersResult.users.length === 0) {
           break;
         }
-        
+
         console.log(`🔍 Found ${listUsersResult.users.length} users in this batch`);
-        
-        // Delete users in smaller batches to avoid rate limits
-        const deletePromises = listUsersResult.users.map(user => 
-          adminAuth.deleteUser(user.uid).catch(error => {
+
+        const deletePromises = listUsersResult.users.map(user =>
+          auth.deleteUser(user.uid).catch(error => {
             console.warn(`⚠️ Could not delete user ${user.uid}:`, error);
           })
         );
-        
+
         await Promise.all(deletePromises);
         totalDeleted += listUsersResult.users.length;
-        
+
         console.log(`✅ Deleted ${listUsersResult.users.length} users`);
-        
+
         nextPageToken = listUsersResult.pageToken;
-        
-        // Rate limit protection
+
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
       } while (nextPageToken);
-      
+
       console.log(`✅ Total Identity Platform users deleted: ${totalDeleted}`);
-      
+
+      await app.delete();
+
     } catch (error) {
       console.error('❌ Failed to delete Identity Platform users:', error);
     }
