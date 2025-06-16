@@ -1,8 +1,34 @@
 import { GoogleAuth } from 'google-auth-library';
 
 export class GoogleOAuthClientManager {
-  // Use the correct API for OAuth client management
-  private static readonly OAUTH_API_BASE = 'https://iap.googleapis.com/v1';
+  // Use the IAM OAuth API for client management
+  private static readonly OAUTH_API_BASE = 'https://iam.googleapis.com/v1';
+
+  /**
+   * Get numeric project number from project ID
+   */
+  private static async getProjectNumber(projectId: string, accessToken: string): Promise<string | null> {
+    try {
+      const res = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${projectId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        console.warn(`⚠️ Could not get project number for ${projectId}`);
+        return null;
+      }
+
+      const data = await res.json();
+      return data.projectNumber || null;
+    } catch (err) {
+      console.warn(`⚠️ Error fetching project number for ${projectId}:`, err);
+      return null;
+    }
+  }
 
   private static async getAccessToken(): Promise<string> {
     const credentials = this.getGoogleCloudCredentials();
@@ -43,7 +69,9 @@ export class GoogleOAuthClientManager {
       console.log('🔄 Updating OAuth redirect URIs...');
       
       const accessToken = await this.getAccessToken();
-      const updateUrl = `${this.OAUTH_API_BASE}/projects/${projectId}/locations/global/oauthClients/${oauthClientId}`;
+      const projectNumber = await this.getProjectNumber(projectId, accessToken);
+      const target = projectNumber || projectId;
+      const updateUrl = `${this.OAUTH_API_BASE}/projects/${target}/locations/global/oauthClients/${oauthClientId}`;
       
       const response = await fetch(`${updateUrl}?updateMask=allowedRedirectUris`, {
         method: 'PATCH',
@@ -79,7 +107,9 @@ export class GoogleOAuthClientManager {
       console.log('🗑️ Deleting OAuth client...');
       
       const accessToken = await this.getAccessToken();
-      const deleteUrl = `${this.OAUTH_API_BASE}/projects/${projectId}/locations/global/oauthClients/${oauthClientId}`;
+      const projectNumber = await this.getProjectNumber(projectId, accessToken);
+      const target = projectNumber || projectId;
+      const deleteUrl = `${this.OAUTH_API_BASE}/projects/${target}/locations/global/oauthClients/${oauthClientId}`;
       
       const response = await fetch(deleteUrl, {
         method: 'DELETE',
@@ -108,7 +138,9 @@ export class GoogleOAuthClientManager {
   static async listOAuthClients(projectId: string): Promise<any[]> {
     try {
       const accessToken = await this.getAccessToken();
-      const listUrl = `${this.OAUTH_API_BASE}/projects/${projectId}/locations/global/oauthClients`;
+      const projectNumber = await this.getProjectNumber(projectId, accessToken);
+      const target = projectNumber || projectId;
+      const listUrl = `${this.OAUTH_API_BASE}/projects/${target}/locations/global/oauthClients`;
       
       const response = await fetch(listUrl, {
         method: 'GET',
