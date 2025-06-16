@@ -829,9 +829,35 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // STEP 8: Configure OAuth Consent Screen for Open Signup chatbots
+    try {
+      const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+      const chatbotData = chatbotDoc.data();
+      
+      if (chatbotData?.requireAuth && 
+          chatbotData?.authConfig?.accessMode === 'open' && 
+          dedicatedFirebaseProject?.projectId) {
+        
+        console.log('🔧 Open Signup chatbot detected - OAuth consent screen setup required');
+        
+        const { GoogleOAuthConsentScreenService } = await import('@/services/googleOAuthConsentScreenService');
+        
+        const configured = await GoogleOAuthConsentScreenService.configureExternalConsentScreen(
+          dedicatedFirebaseProject.projectId,
+          chatbotData?.name || 'AI Chatbot'
+        );
+        
+        if (!configured) {
+          console.log('⚠️  Manual OAuth setup required for Google sign-in to work');
+          console.log(`   Setup URL: ${GoogleOAuthConsentScreenService.getOAuthConsentScreenUrl(dedicatedFirebaseProject.projectId)}`);
+        }
+      }
+    } catch (oauthError) {
+      console.error('❌ OAuth consent screen configuration failed:', oauthError);
+    }
+    
     // SEND INVITATION EMAILS AFTER SUCCESSFUL DEPLOYMENT
     try {
-      // Get chatbot data to check if we need to send invitations
       const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
       const chatbotData = chatbotDoc.data();
       
