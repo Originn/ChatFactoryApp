@@ -505,6 +505,10 @@ export class FirebaseAPIService {
         console.log('🔐 Configuring Firebase Authentication...');
         const authConfig = await this.setupFirebaseAuthentication(projectId, projectNumber);
         
+        // Extract OAuth client ID from auth configuration
+        const oauthClientId = authConfig?.clientId || 'firebase-default';
+        console.log(`🔑 OAuth Client ID: ${oauthClientId}`);
+        
         // Step 2.7: Deploy Firestore security rules
         console.log('🛡️ Deploying Firestore security rules...');
         try {
@@ -523,19 +527,8 @@ export class FirebaseAPIService {
           throw new Error('Failed to create service account');
         }
 
-        // Step 4: Set up OAuth (if not already configured)
-        console.log('🔐 Setting up OAuth configuration...');
-        let oauthClientId = '';
-        try {
-          const oauthClient = await this.createOAuthWebClient(projectNumber, projectId);
-          if (oauthClient && oauthClient.clientId) {
-            oauthClientId = oauthClient.clientId;
-            console.log('✅ OAuth client configured');
-          }
-        } catch (oauthError: any) {
-          console.warn('⚠️ OAuth setup failed (may already be configured):', oauthError.message);
-          // Continue without OAuth - the project may already have it configured
-        }
+        // OAuth is already configured in setupFirebaseAuthentication above - no need to duplicate
+        console.log('ℹ️ OAuth configuration already handled by Firebase Authentication setup');
 
         // Step 5: Create storage buckets (if not already exist)
         console.log('🪣 Setting up storage buckets...');
@@ -1630,7 +1623,13 @@ export class FirebaseAPIService {
         if (clientsData.oauthClients && clientsData.oauthClients.length > 0) {
           const existingClient = clientsData.oauthClients[0];
           const existingId = existingClient.name.split('/').pop()!;
-          console.log('✅ Found existing OAuth web client, retrieving or creating secret...');
+          console.log(`✅ Found ${clientsData.oauthClients.length} existing OAuth client(s), will reuse the first one`);
+          
+          // 🔑 CRITICAL FIX: Always reuse existing OAuth clients to prevent duplicates
+          if (clientsData.oauthClients.length > 1) {
+            console.warn(`⚠️ Found ${clientsData.oauthClients.length} OAuth clients - you may have duplicates`);
+            console.log('💡 Consider cleaning up duplicate OAuth clients');
+          }
           
           // First, try to list existing credentials
           const credsUrl = `${IAM_BASE}/${existingClient.name}/credentials`;
@@ -1689,12 +1688,35 @@ export class FirebaseAPIService {
           }
           
           console.warn('⚠️ Failed to retrieve or create credential for existing client, falling back to default provider');
-          // Return existing ID but signal OAuth is not configured to avoid 409 collision
+          // 🔑 CRITICAL: Return existing client info to prevent duplicate creation
+          // Even if credentials fail, DO NOT create a new OAuth client
           return {
             clientId: existingId,
             clientSecret: '', // Empty secret signals fallback to default provider
             customOAuthConfigured: false
           };
+        }
+        
+        // 🔑 CRITICAL: If we found ANY existing clients, don't create new ones
+        console.log('ℹ️ Existing OAuth clients found - will not create duplicates');
+        return null; // Use Firebase default provider
+      }
+
+      // 🔑 DOUBLE-CHECK: List clients again to prevent race condition duplicates
+      console.log('🔍 Final check for existing OAuth clients before creation...');
+      const finalCheckResponse = await fetch(listClientsUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (finalCheckResponse.ok) {
+        const finalCheckData = await finalCheckResponse.json();
+        if (finalCheckData.oauthClients && finalCheckData.oauthClients.length > 0) {
+          console.log('⚠️ OAuth clients were created during execution - preventing duplicate creation');
+          return null; // Use Firebase default provider
         }
       }
 
