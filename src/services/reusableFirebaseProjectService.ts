@@ -761,15 +761,21 @@ export class ReusableFirebaseProjectService {
       
       for (const app of matchingApps) {
         try {
-          console.log(`🗑️ Deleting web app: ${app.displayName} (${app.appId})`);
+          console.log(`🗑️ IMMEDIATELY deleting web app: ${app.displayName} (${app.appId})`);
           
+          // 🔑 CRITICAL FIX: Use immediate deletion to prevent pending deletion quota issues
           await firebase.projects.webApps.remove({
             name: app.name,
-            auth: authClient as any
+            auth: authClient as any,
+            requestBody: {
+              immediate: true,        // 🔥 Bypass 30-day grace period
+              allowMissing: true,     // Don't fail if already deleted
+              validateOnly: false     // Actually perform the deletion
+            }
           });
           
           deletedCount++;
-          console.log(`✅ Deleted web app: ${app.displayName}`);
+          console.log(`✅ PERMANENTLY deleted web app: ${app.displayName} (no pending state)`);
           
         } catch (deleteError: any) {
           console.warn(`⚠️ Could not delete web app ${app.displayName}:`, deleteError.message);

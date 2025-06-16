@@ -77,11 +77,17 @@ export async function POST(request: NextRequest) {
     
     for (const app of appsToDelete) {
       try {
-        console.log(`🗑️ Deleting duplicate web app: ${app.displayName} (${app.appId})`);
+        console.log(`🗑️ IMMEDIATELY deleting duplicate web app: ${app.displayName} (${app.appId})`);
         
+        // 🔑 CRITICAL FIX: Use immediate deletion to prevent pending deletion quota issues
         await firebase.projects.webApps.remove({
           name: app.name,
-          auth: authClient as any
+          auth: authClient as any,
+          requestBody: {
+            immediate: true,        // 🔥 Bypass 30-day grace period
+            allowMissing: true,     // Don't fail if already deleted
+            validateOnly: false     // Actually perform the deletion
+          }
         });
         
         deletedCount++;
