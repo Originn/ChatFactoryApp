@@ -406,7 +406,7 @@ export default function ChatbotDetailPage() {
     }
   };
 
-  // Deploy with specified vector store
+  // Simplified deployWithVectorStore function without excessive loading states
   const deployWithVectorStore = async (indexName: string, displayName: string) => {
     if (!chatbot || !user) return;
     
@@ -416,7 +416,6 @@ export default function ChatbotDetailPage() {
     try {
       console.log('🚀 Deploying with vector store:', displayName, '(' + indexName + ')');
       
-      // Call our API route that handles Vercel deployment
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
         headers: {
@@ -439,25 +438,7 @@ export default function ChatbotDetailPage() {
         throw new Error(data.error || 'Failed to deploy chatbot');
       }
       
-      // Update the chatbot directly in Firestore with deployment info
-      const chatbotRef = doc(db, "chatbots", chatbot.id);
-      await updateDoc(chatbotRef, {
-        status: 'active',
-        deployedUrl: data.url,
-        vercelProjectId: data.projectName,
-        vercelDeploymentId: data.deploymentId,
-        deploymentTimestamp: serverTimestamp(),
-        // Add vector store info
-        vectorstore: {
-          indexName: indexName,
-          displayName: displayName,
-          provider: 'pinecone',
-          status: 'ready'
-        },
-        updatedAt: serverTimestamp()
-      });
-      
-      // Update local state
+      // Update local state immediately - no waiting
       setChatbot({
         ...chatbot,
         status: 'active',
@@ -465,8 +446,8 @@ export default function ChatbotDetailPage() {
           ...chatbot.deployment,
           deploymentUrl: data.url,
           status: 'deployed',
-          deployedAt: new Date() as any, // Will be converted to Timestamp by Firestore
-        }
+          deployedAt: new Date() as any,
+        },
       });
       
       // Update vector store state
@@ -474,12 +455,12 @@ export default function ChatbotDetailPage() {
       setVectorStoreName(displayName);
       setVectorStoreIndexName(indexName);
       
-      setSuccessMessage(`Chatbot "${chatbot.name}" was deployed successfully with "${displayName}" knowledge base! It's now available at: ${data.url}`);
+      setSuccessMessage(`✅ Chatbot "${chatbot.name}" deployed successfully! Available at: ${data.url}`);
       
-      // Refresh the page after 3 seconds to show updated status
+      // Quick refresh to show updated UI - reduced time
       setTimeout(() => {
         window.location.reload();
-      }, 3000);
+      }, 1500); // Reduced from 3000ms
       
     } catch (err: any) {
       console.error("Error deploying chatbot:", err);
@@ -682,24 +663,54 @@ export default function ChatbotDetailPage() {
                       <CardContent>
                         <div className="flex items-center">
                           <span className={`h-3 w-3 rounded-full ${
+                            // Show deployed status if we have a deployment URL
+                            chatbot.deployment?.deploymentUrl ? 'bg-green-500' :
                             chatbot.status === 'active' ? 'bg-green-500' :
                             chatbot.status === 'preview' ? 'bg-blue-500' :
                             chatbot.status === 'draft' ? 'bg-yellow-500' : 'bg-gray-500'
                           } mr-2`}></span>
                           <div className="text-xl font-bold capitalize">
-                            {chatbot.status}
+                            {/* Show "deployed" if we have a deployment URL, regardless of status */}
+                            {chatbot.deployment?.deploymentUrl ? 'deployed' : chatbot.status}
                           </div>
                         </div>
+                        {/* Always show the deployment URL if available */}
                         {chatbot.deployment?.deploymentUrl && (
                           <div className="mt-2 text-xs text-gray-500">
-                            <a 
-                              href={chatbot.deployment.deploymentUrl.startsWith('http') ? chatbot.deployment.deploymentUrl : `https://${chatbot.deployment.deploymentUrl}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              {chatbot.deployment.deploymentUrl}
-                            </a>
+                            <div className="space-y-1">
+                              <div>
+                                <span className="font-medium">Vercel URL:</span>
+                                <br />
+                                <a 
+                                  href={
+                                    chatbot.deployment.deploymentUrl.startsWith('http') 
+                                      ? chatbot.deployment.deploymentUrl
+                                      : `https://${chatbot.deployment.deploymentUrl}`
+                                  } 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {chatbot.deployment.deploymentUrl}
+                                </a>
+                              </div>
+                              <div>
+                                <span className="font-medium">Custom Domain:</span>
+                                <br />
+                                {chatbot.domain ? (
+                                  <a 
+                                    href={`https://${chatbot.domain}`}
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    {chatbot.domain}
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-400">N/A</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </CardContent>

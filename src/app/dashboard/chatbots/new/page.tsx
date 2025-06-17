@@ -22,7 +22,6 @@ export default function NewChatbotPage() {
     // Basic Info
     name: '',
     description: '',
-    domain: '',
     requireAuth: false, // New: Authentication requirement
     accessMode: 'open' as 'open' | 'managed', // Access control mode
     invitedUsers: [] as string[], // Email addresses to invite
@@ -164,10 +163,10 @@ export default function NewChatbotPage() {
     }
   };
 
-  const deployPreview = async (indexName: string, displayName: string) => {
+  const deployChatbot = async (indexName: string, displayName: string) => {
     if (!user || !newChatbotId) return;
 
-    setIsDeployingPreview(true);
+    setIsDeployingPreview(true);  // TODO: Rename this state variable
     try {
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
@@ -177,17 +176,17 @@ export default function NewChatbotPage() {
           chatbotName: formData.name.trim(),
           userId: user.uid,
           vectorstore: { indexName, displayName },
-          target: 'preview',
+          target: 'production',  // Changed from 'preview' to 'production'
         }),
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to deploy preview');
+        throw new Error(data.error || 'Failed to deploy chatbot');
       }
 
       await updateDoc(doc(db, 'chatbots', newChatbotId), {
-        status: 'preview',
+        status: 'deployed',  // Changed from 'preview' to match production deployment
         deployedUrl: data.url,
         vercelProjectId: data.projectName,
         vercelDeploymentId: data.deploymentId,
@@ -223,7 +222,7 @@ export default function NewChatbotPage() {
       });
       const result = await res.json();
       if (result.success) {
-        deployPreview(result.indexName, displayName);
+        deployChatbot(result.indexName, displayName);
       } else {
         throw new Error(result.error || 'Failed to create vectorstore');
       }
@@ -289,7 +288,6 @@ export default function NewChatbotPage() {
         userId: user.uid,
         name: formData.name.trim(),
         description: formData.description.trim(),
-        domain: formData.domain.trim(),
         requireAuth: formData.requireAuth, // Authentication requirement setting
         authConfig: formData.requireAuth ? {
           accessMode: formData.accessMode,
@@ -500,24 +498,22 @@ export default function NewChatbotPage() {
                     </p>
                   </div>
                   
-                  <div className="space-y-2">
-                    <label htmlFor="domain" className="text-sm font-medium">Custom Domain (Optional)</label>
-                    <div className="flex">
-                      <Input
-                        id="domain"
-                        name="domain"
-                        value={formData.domain}
-                        onChange={handleChange}
-                        placeholder="your-chatbot"
-                        className="rounded-r-none"
-                      />
-                      <span className="inline-flex items-center rounded-r-md border border-l-0 border-slate-200 bg-gray-50 px-3 text-gray-500 sm:text-sm">
-                        .chatfactory.yourdomain.com
-                      </span>
+                  {/* Custom Domain Info */}
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium text-blue-900">Custom Domain</h4>
+                        <p className="text-sm text-blue-800 mt-1">
+                          After creating your chatbot, you can configure a custom domain (like chat.yourcompany.com) 
+                          in the chatbot settings. We'll provide DNS instructions and handle the technical setup automatically.
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-500">
-                      Set a custom subdomain for accessing your chatbot.
-                    </p>
                   </div>
                   
                   {/* Authentication Option */}

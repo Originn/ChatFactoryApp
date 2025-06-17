@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:domains": "node test-custom-domains.js",
+    "test:domains:verbose": "DEBUG=1 node test-custom-domains.js"
   },
   "dependencies": {
     "@google-cloud/billing": "^5.0.1",
@@ -47,8 +49,10 @@
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "autoprefixer": "^10.4.21",
+    "chalk": "^4.1.2",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.1.0",
+    "node-fetch": "^2.7.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.6.0"

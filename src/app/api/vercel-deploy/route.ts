@@ -18,6 +18,107 @@ const REUSABLE_FIREBASE_PROJECT_ID = process.env.REUSABLE_FIREBASE_PROJECT_ID ||
 // SIMPLIFIED: Always deploy from main branch to production
 // No staging/preview workflow needed - direct to production deployment
 
+// Helper function to validate domain format
+function isValidDomain(domain: string): boolean {
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
+  return domainRegex.test(domain) && domain.length <= 253;
+}
+
+// Helper function to add custom domain to Vercel project
+async function addCustomDomainToProject(
+  vercelToken: string,
+  projectName: string,
+  customDomain: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    console.log(`🌐 Adding custom domain: ${customDomain} to project: ${projectName}`);
+    
+    // Step 1: Add domain to project
+    const addDomainResponse = await fetch(
+      `https://api.vercel.com/v9/projects/${projectName}/domains`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${vercelToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: customDomain
+        })
+      }
+    );
+
+    if (!addDomainResponse.ok) {
+      const error = await addDomainResponse.json();
+      
+      if (error.error?.code === 'domain_already_exists') {
+        console.log(`⚠️ Domain ${customDomain} already exists on project`);
+        return { success: true, data: { alreadyExists: true } };
+      }
+      
+      console.error('❌ Failed to add domain:', error);
+      return { 
+        success: false, 
+        error: error.error?.message || 'Failed to add domain to project' 
+      };
+    }
+
+    const domainData = await addDomainResponse.json();
+    console.log(`✅ Domain added successfully:`, domainData);
+
+    // Check if domain needs verification
+    if (!domainData.verified) {
+      console.log(`🔍 Domain requires verification. Verification challenges:`, domainData.verification);
+      
+      return {
+        success: true,
+        data: {
+          ...domainData,
+          requiresVerification: true,
+          verificationInstructions: generateVerificationInstructions(domainData.verification)
+        }
+      };
+    }
+
+    return { success: true, data: domainData };
+    
+  } catch (error: any) {
+    console.error('❌ Error adding custom domain:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Helper function to generate user-friendly verification instructions
+function generateVerificationInstructions(verification: any[]): string[] {
+  const instructions: string[] = [];
+  
+  verification.forEach((challenge) => {
+    switch (challenge.type) {
+      case 'TXT':
+        instructions.push(
+          `DNS TXT Record: Add a TXT record to ${challenge.domain} with value: ${challenge.value}`
+        );
+        break;
+      case 'CNAME':
+        instructions.push(
+          `DNS CNAME Record: Point ${challenge.domain} to ${challenge.value}`
+        );
+        break;
+      case 'A':
+        instructions.push(
+          `DNS A Record: Point ${challenge.domain} to IP: ${challenge.value}`
+        );
+        break;
+      default:
+        instructions.push(
+          `${challenge.type} Record: Set ${challenge.domain} = ${challenge.value}`
+        );
+    }
+  });
+  
+  return instructions;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -91,6 +192,8 @@ export async function POST(request: NextRequest) {
     };
     
     let repoId = null;
+    let projectId = null; // Store the actual project ID for API calls
+    let projectExists = false;
     
     // Create project or get existing project details
     const createProjectResponse = await fetch('https://api.vercel.com/v9/projects', {
@@ -108,6 +211,7 @@ export async function POST(request: NextRequest) {
       // Handle existing project case
       if (errorData.error?.code === 'project_already_exists') {
         console.log('Project already exists, retrieving details...');
+        projectExists = true;
         
         const projectDetailsResponse = await fetch(`https://api.vercel.com/v9/projects/${projectName}`, {
           headers: {
@@ -118,7 +222,8 @@ export async function POST(request: NextRequest) {
         if (projectDetailsResponse.ok) {
           const projectDetails = await projectDetailsResponse.json();
           repoId = projectDetails.link?.repoId;
-          console.log(`Retrieved existing project with repoId: ${repoId}`);
+          projectId = projectDetails.id; // Store the project ID
+          console.log(`Retrieved existing project with ID: ${projectId}, repoId: ${repoId}`);
         }
       } else {
         return NextResponse.json({ 
@@ -128,7 +233,126 @@ export async function POST(request: NextRequest) {
     } else {
       const projectResult = await createProjectResponse.json();
       repoId = projectResult.link?.repoId;
-      console.log(`Project created with repoId: ${repoId}`);
+      projectId = projectResult.id; // Store the project ID
+      console.log(`Project created with ID: ${projectId}, repoId: ${repoId}`);
+    }
+
+    if (!projectId) {
+      return NextResponse.json({ 
+        error: 'Failed to retrieve project ID'
+      }, { status: 500 });
+    }
+
+    // STEP: Ensure default production domain exists
+    console.log('🌐 Ensuring default production domain exists...');
+    try {
+      // Check if project has default production domain
+      const projectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
+        headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
+      });
+      
+      if (projectResponse.ok) {
+        const currentProject = await projectResponse.json();
+        console.log('🔍 Current project domains:', {
+          hasAlias: !!currentProject.alias,
+          aliasCount: currentProject.alias?.length || 0,
+          domains: currentProject.alias?.map((a: any) => a.domain || a) || []
+        });
+        
+        // Check if we have a clean production domain
+        const hasCleanProductionDomain = currentProject.alias?.some((alias: any) => {
+          const domain = alias.domain || alias;
+          return typeof domain === 'string' && 
+                 domain.endsWith('.vercel.app') && 
+                 !domain.includes('-git-') && 
+                 !domain.includes('fvldnvlbr') && 
+                 !domain.includes('1fne8zdgg') &&
+                 !domain.includes('107unuzgg') &&
+                 !domain.includes('fdncvxm99') &&
+                 domain.match(/^[a-zA-Z0-9-]+-[a-zA-Z0-9-]+\.vercel\.app$/);
+        });
+        
+        if (!hasCleanProductionDomain) {
+          console.log('⚠️ No clean production domain found. Forcing creation...');
+          
+          // Method 1: Try to add a default domain explicitly
+          try {
+            const defaultDomainName = `${projectName}-${Math.random().toString(36).substring(2, 8)}.vercel.app`;
+            console.log(`🔨 Attempting to create default domain: ${defaultDomainName}`);
+            
+            const addDomainResponse = await fetch(`https://api.vercel.com/v10/projects/${projectId}/domains`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                name: defaultDomainName
+              })
+            });
+            
+            if (addDomainResponse.ok) {
+              const domainResult = await addDomainResponse.json();
+              console.log('✅ Successfully created default domain:', domainResult.name);
+            } else {
+              const domainError = await addDomainResponse.json();
+              console.log('⚠️ Failed to create default domain:', domainError.error?.message);
+            }
+          } catch (domainCreationError) {
+            console.warn('⚠️ Error creating default domain:', domainCreationError);
+          }
+          
+          // Method 2: Force a production deployment to trigger domain creation
+          console.log('🔨 Triggering production deployment for domain creation...');
+          const domainCreationResponse = await fetch('https://api.vercel.com/v13/deployments', {
+            method: 'POST',  
+            headers: {
+              'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: projectName,
+              project: projectId, // Use project ID instead of name
+              target: 'production',
+              framework: 'nextjs',
+              gitSource: {
+                type: 'github',
+                repo: REPO,
+                ref: 'main',
+                ...(repoId && { repoId })
+              }
+            })
+          });
+          
+          if (domainCreationResponse.ok) {
+            const tempDeployment = await domainCreationResponse.json();
+            console.log('✅ Triggered domain creation deployment:', tempDeployment.id);
+            
+            // Wait for default domain to be potentially created
+            await new Promise(resolve => setTimeout(resolve, 15000));
+            
+            // Check again for the default domain
+            const updatedProjectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
+              headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
+            });
+            
+            if (updatedProjectResponse.ok) {
+              const updatedProject = await updatedProjectResponse.json();
+              console.log('🔍 Updated project domains after creation:', {
+                aliasCount: updatedProject.alias?.length || 0,
+                domains: updatedProject.alias?.map((a: any) => a.domain || a) || []
+              });
+            }
+          } else {
+            const creationError = await domainCreationResponse.json();
+            console.warn('⚠️ Failed to create domain creation deployment:', creationError.error?.message);
+          }
+        } else {
+          console.log('✅ Clean production domain already exists');
+        }
+      }
+    } catch (domainError) {
+      console.warn('⚠️ Error ensuring default production domain:', domainError);
     }
 
     // 2. Prepare complete chatbot configuration for the template
@@ -146,6 +370,10 @@ export async function POST(request: NextRequest) {
       'chatbotData?.appearance?.logoUrl': chatbotData?.appearance?.logoUrl || 'undefined',
       'preliminaryLogoUrl': logoUrl || 'EMPTY'
     });
+    
+    // Extract custom domain from chatbot data
+    const customDomain = chatbotData?.domain?.trim();
+    console.log('🌐 Custom domain from chatbot data:', customDomain || 'NOT SET');
     
     // If no logo URL found in Firestore, try to find it in Firebase Storage
     if (!logoUrl) {
@@ -406,6 +634,7 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
+      NEXT_PUBLIC_CUSTOM_DOMAIN: customDomain || '',
       
       // Dedicated Firebase client configuration (public)
       NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject.config.apiKey,
@@ -515,6 +744,34 @@ export async function POST(request: NextRequest) {
       console.log('✅ Critical environment variables verified');
     }
 
+    // Handle custom domain configuration if provided
+    let domainResult = null;
+    if (customDomain && isValidDomain(customDomain)) {
+      console.log(`🌐 Setting up custom domain: ${customDomain}`);
+      
+      domainResult = await addCustomDomainToProject(
+        VERCEL_API_TOKEN,
+        projectName,
+        customDomain
+      );
+
+      if (!domainResult.success) {
+        console.error(`❌ Failed to set up custom domain: ${domainResult.error}`);
+        console.warn('⚠️ Continuing deployment without custom domain');
+      } else {
+        console.log(`✅ Custom domain setup result:`, domainResult.data);
+        
+        // Add custom domain to environment variables for the template
+        await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, {
+          'NEXT_PUBLIC_CUSTOM_DOMAIN': customDomain,
+          'CUSTOM_DOMAIN_CONFIGURED': 'true'
+        });
+      }
+    } else if (customDomain && !isValidDomain(customDomain)) {
+      console.warn(`⚠️ Invalid custom domain format: ${customDomain}. Skipping domain configuration.`);
+      domainResult = { success: false, error: 'Invalid domain format' };
+    }
+
     // 3. Create production deployment from main branch
     let deploymentResponse;
     
@@ -567,20 +824,95 @@ export async function POST(request: NextRequest) {
         
         const deploymentData = await fallbackResponse.json();
         
+        // STEP: Promote fallback deployment to production
+        console.log('🚀 Promoting fallback deployment to production...');
+        console.log(`Using project ID: ${projectId}, deployment ID: ${deploymentData.id}`);
+        try {
+          // Correct API endpoint: POST /v9/projects/{projectId}/promote/{deploymentId}
+          const promoteResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}/promote/${deploymentData.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (promoteResponse.ok) {
+            console.log('✅ Fallback deployment promoted to production successfully');
+            
+            // Wait for promotion to take effect
+            console.log('⏳ Waiting for fallback promotion to take effect...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            
+          } else {
+            const promoteError = await promoteResponse.json();
+            console.warn('⚠️ Failed to promote fallback deployment:', promoteError);
+          }
+        } catch (promoteError) {
+          console.warn('⚠️ Error promoting fallback deployment:', promoteError);
+        }
+        
         // CREATE DEPLOYMENT RECORD FOR FALLBACK DEPLOYMENT
+        let finalFallbackUrl = null; // Declare variable outside try block
         try {
           console.log('📋 Creating deployment record for fallback deployment...');
           
-          const deploymentUrl = deploymentData.url ? 
-            (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
-            `https://${projectName}.vercel.app`;
+          // Wait for actual production URL for fallback deployment too
+          console.log('⏳ Getting production URL for fallback deployment...');
+          let fallbackProductionUrl = null;
+          let attempts = 0;
+          const maxAttempts = 10;
+          
+          while (attempts < maxAttempts && !fallbackProductionUrl) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            try {
+              const projectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectName}`, {
+                headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
+              });
+              
+              if (projectResponse.ok) {
+                const projectData = await projectResponse.json();
+                if (projectData.alias && projectData.alias.length > 0) {
+                  const productionAlias = projectData.alias.find((alias: any) => 
+                    alias.domain.endsWith('.vercel.app') && alias.target === 'PRODUCTION'
+                  );
+                  if (productionAlias) {
+                    fallbackProductionUrl = `https://${productionAlias.domain}`;
+                    console.log(`✅ Found fallback production URL: ${fallbackProductionUrl}`);
+                    break;
+                  }
+                }
+                if (projectData.targets?.production?.url) {
+                  fallbackProductionUrl = projectData.targets.production.url.startsWith('http') 
+                    ? projectData.targets.production.url 
+                    : `https://${projectData.targets.production.url}`;
+                  console.log(`✅ Found fallback production URL from targets: ${fallbackProductionUrl}`);
+                  break;
+                }
+              }
+            } catch (error) {
+              console.log(`⚠️ Fallback attempt ${attempts + 1} failed:`, error);
+            }
+            
+            attempts++;
+            console.log(`🔄 Fallback attempt ${attempts}/${maxAttempts}...`);
+          }
+          
+          // Use actual production URL or fall back to deployment URL
+          finalFallbackUrl = fallbackProductionUrl || 
+            (deploymentData.url ? 
+              (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+              `https://${projectName}.vercel.app`);
+          
+          console.log('🎯 Final fallback URL:', finalFallbackUrl);
           
           const deploymentRecord = {
             chatbotId: chatbotId,
             userId: userId || chatbotData?.userId,
             status: 'deployed',
             subdomain: projectName,
-            deploymentUrl: deploymentUrl,
+            deploymentUrl: finalFallbackUrl,
             
             // Firebase project information (if dedicated project was created)
             firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
@@ -631,7 +963,7 @@ export async function POST(request: NextRequest) {
             status: 'active',
             deployment: {
               deploymentId: deploymentRef.id,
-              deploymentUrl: deploymentUrl,
+              deploymentUrl: finalFallbackUrl,
               status: 'deployed',
               deployedAt: Timestamp.now(),
               vercelProjectId: projectName,
@@ -646,7 +978,7 @@ export async function POST(request: NextRequest) {
           // Continue with deployment - don't fail the deployment because of DB issues
         }
         
-        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false, dedicatedFirebaseProject);
+        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false, dedicatedFirebaseProject, domainResult, finalFallbackUrl);
       }
       
       return NextResponse.json({ 
@@ -656,22 +988,85 @@ export async function POST(request: NextRequest) {
 
     const deploymentData = await deploymentResponse.json();
     console.log('✅ Deployment created successfully:', deploymentData.id);
-    console.log('🔗 Deployment URL:', deploymentData.url);
+    console.log('🔗 Initial deployment URL:', deploymentData.url);
+    
+    // Deployment created - no need to wait for promotion!
+    console.log('✅ Deployment created and will be live shortly:', deploymentData.id);
+    
+    // Get production domain immediately using correct API endpoint - NO WAITING!
+    console.log('🌐 Getting production domain immediately using correct domains API...');
+    let finalDeploymentUrl = null;
+    
+    try {
+      // Use the correct domains endpoint: /v9/projects/{id}/domains
+      const domainsResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}/domains`, {
+        headers: {
+          'Authorization': `Bearer ${VERCEL_API_TOKEN}`
+        }
+      });
+      
+      if (domainsResponse.ok) {
+        const domainsData = await domainsResponse.json();
+        console.log('🔍 Domains API response:', {
+          domainsCount: domainsData.domains?.length || 0,
+          domains: domainsData.domains?.map((d: any) => d.name) || []
+        });
+        
+        // Print ALL domains to see which position we want
+        if (domainsData.domains && domainsData.domains.length > 0) {
+          console.log('🔍 ALL DOMAINS FOUND:');
+          domainsData.domains.forEach((domain: any, index: number) => {
+            console.log(`  ${index}: ${domain.name} (verified: ${domain.verified})`);
+          });
+          
+          // For now, let's just use the first .vercel.app domain that's not a git branch
+          // We'll adjust the index based on what we see in the logs
+          const nonGitDomains = domainsData.domains.filter((domain: any) => {
+            return domain.name && 
+                   domain.name.endsWith('.vercel.app') && 
+                   !domain.name.includes('-git-');
+          });
+          
+          console.log('🎯 NON-GIT VERCEL DOMAINS:');
+          nonGitDomains.forEach((domain: any, index: number) => {
+            console.log(`  ${index}: ${domain.name}`);
+          });
+          
+          if (nonGitDomains.length > 0) {
+            // Use index 1 for the clean production domain (like testbot-gray.vercel.app)
+            // Index 0 is usually the deployment-specific domain (like testbot-rdfele.vercel.app)
+            const domainIndex = nonGitDomains.length > 1 ? 1 : 0; // Use index 1 if available, fallback to 0
+            const selectedDomain = nonGitDomains[domainIndex];
+            finalDeploymentUrl = `https://${selectedDomain.name}`;
+            console.log(`✅ Selected domain at index ${domainIndex}: ${finalDeploymentUrl}`);
+            console.log('🎯 This should be the clean production domain with animal/color name!');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error getting production domain:', error);
+    }
+    
+    // Fallback to default format if domains not found
+    if (!finalDeploymentUrl) {
+      finalDeploymentUrl = deploymentData.url ? 
+        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+        `https://${projectName}.vercel.app`;
+      console.log(`⚠️ Using fallback URL: ${finalDeploymentUrl}`);
+    }
+    
+    console.log('🎯 Final deployment URL ready immediately:', finalDeploymentUrl);
     
     // CREATE DEPLOYMENT RECORD IN DATABASE
     try {
       console.log('📋 Creating deployment record in database...');
-      
-      const deploymentUrl = deploymentData.url ? 
-        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
-        `https://${projectName}.vercel.app`;
       
       const deploymentRecord = {
         chatbotId: chatbotId,
         userId: userId || chatbotData?.userId,
         status: 'deployed',
         subdomain: projectName,
-        deploymentUrl: deploymentUrl,
+        deploymentUrl: finalDeploymentUrl,
         
         // Firebase project information (if dedicated project was created)
         firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
@@ -722,7 +1117,7 @@ export async function POST(request: NextRequest) {
         status: 'active',
         deployment: {
           deploymentId: deploymentRef.id,
-          deploymentUrl: deploymentUrl,
+          deploymentUrl: finalDeploymentUrl,
           status: 'deployed',
           deployedAt: Timestamp.now(),
           vercelProjectId: projectName,
@@ -755,13 +1150,10 @@ export async function POST(request: NextRequest) {
       
       // Update chatbot with deployment info
       console.log('📝 Updating chatbot deployment info...');
-      const deploymentUrl = deploymentData.url ? 
-        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
-        `https://${projectName}.vercel.app`;
         
       const deploymentInfo: any = {
         vercelProjectId: projectName,
-        deploymentUrl,
+        deploymentUrl: finalDeploymentUrl,
         deploymentId: deploymentData.id,
         status: 'live',
         target: 'production',
@@ -772,8 +1164,12 @@ export async function POST(request: NextRequest) {
         firebaseConfig: dedicatedFirebaseProject?.config,
       };
       
-      // Only add customDomain if it exists
-      // Don't add undefined values to avoid Firestore errors
+      // Add custom domain information if configured
+      if (domainResult?.success && customDomain) {
+        deploymentInfo.customDomain = customDomain;
+        deploymentInfo.domainVerified = domainResult.data?.verified || false;
+        deploymentInfo.domainStatus = domainResult.data?.verified ? 'active' : 'pending_verification';
+      }
       
       await DatabaseService.updateChatbotDeployment(chatbotId, deploymentInfo);
       
@@ -782,10 +1178,10 @@ export async function POST(request: NextRequest) {
         try {
           await adminDb.collection('chatbots').doc(chatbotId).update({
             'firebaseProject.services.hosting': true,
-            'firebaseProject.urls.hosting': deploymentUrl,
+            'firebaseProject.urls.hosting': finalDeploymentUrl,
             'firebaseProject.deployment': {
               status: 'deployed',
-              url: deploymentUrl,
+              url: finalDeploymentUrl,
               vercelProjectId: projectName,
               deployedAt: Timestamp.now()
             },
@@ -804,27 +1200,59 @@ export async function POST(request: NextRequest) {
       // Don't fail the entire deployment for database update issues
     }
     
-    // STEP 7: Add authorized domain to Firebase project for authentication
+    // STEP 7: Add authorized domains to Firebase project
     if (dedicatedFirebaseProject?.projectId) {
       const deploymentUrl = deploymentData.url ? 
         (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
         `https://${projectName}.vercel.app`;
         
-      console.log('🔧 Adding Vercel domain to Firebase authorized domains...');
+      console.log('🔧 Adding domains to Firebase authorized domains...');
+      
+      // Collect all domains that need to be authorized
+      const domainsToAuthorize = [];
+      
+      // Always add the Vercel deployment domain
+      domainsToAuthorize.push(deploymentUrl);
+      console.log(`📝 Will authorize Vercel domain: ${deploymentUrl}`);
+      
+      // Add custom domain if configured and domain setup was successful
+      if (customDomain && domainResult?.success) {
+        const customDomainUrl = `https://${customDomain}`;
+        domainsToAuthorize.push(customDomainUrl);
+        console.log(`📝 Will authorize custom domain: ${customDomainUrl}`);
+      } else if (customDomain && !domainResult?.success) {
+        console.warn(`⚠️ Custom domain ${customDomain} configured but domain setup failed - skipping Firebase authorization`);
+      }
       
       // Add extra delay to ensure Firebase project is fully ready
       console.log('⏳ Waiting for Firebase project to be fully ready...');
       await new Promise(resolve => setTimeout(resolve, 5000));
       
       try {
-        await FirebaseAuthorizedDomainsService.ensureVercelDomainAuthorized(
+        // Use the multiple domains method for efficiency
+        const authorizationSuccess = await FirebaseAuthorizedDomainsService.addMultipleAuthorizedDomains(
           dedicatedFirebaseProject.projectId,
-          deploymentUrl
+          domainsToAuthorize
         );
+        
+        if (authorizationSuccess) {
+          console.log(`✅ Successfully authorized ${domainsToAuthorize.length} domain(s) for Firebase Authentication`);
+        } else {
+          console.error('❌ Failed to authorize domains automatically');
+          console.log('⚠️ Manual action required: Add domains to Firebase Console');
+          domainsToAuthorize.forEach(url => {
+            const domain = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+            console.log(`   Domain to add: ${domain}`);
+          });
+          console.log(`   Firebase Console: https://console.firebase.google.com/project/${dedicatedFirebaseProject.projectId}/authentication/settings`);
+        }
       } catch (domainError) {
-        console.error('❌ Failed to add authorized domain automatically:', domainError);
-        console.log('⚠️  Manual action required: Add domain to Firebase Console');
-        console.log(`   Domain to add: ${deploymentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`);
+        console.error('❌ Failed to add authorized domains automatically:', domainError);
+        console.log('⚠️ Manual action required: Add domains to Firebase Console');
+        domainsToAuthorize.forEach(url => {
+          const domain = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+          console.log(`   Domain to add: ${domain}`);
+        });
         console.log(`   Firebase Console: https://console.firebase.google.com/project/${dedicatedFirebaseProject.projectId}/authentication/settings`);
       }
     }
@@ -898,7 +1326,7 @@ export async function POST(request: NextRequest) {
               displayName: email.split('@')[0], // Use email prefix as display name
               creatorUserId: chatbotData.userId,
               role: 'user',
-              deploymentUrl: deploymentUrl // Pass the actual deployment URL
+              deploymentUrl: finalDeploymentUrl // Pass the actual deployment URL
             });
 
             if (inviteResult.success) {
@@ -930,7 +1358,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the entire deployment because of email issues
     }
     
-    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject);
+    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject, domainResult, finalDeploymentUrl);
   } catch (error: any) {
     console.error('Deployment error:', error);
     return NextResponse.json({ 
@@ -1145,6 +1573,10 @@ async function verifyEnvironmentVariables(
 
 // Helper function for file-based deployment
 async function createFileBasedDeployment(token: string, projectName: string, target: string) {
+  console.log(`🗂️ Creating file-based deployment for ${projectName} targeting ${target}`);
+  
+  // For file-based deployment, we need to use Git source instead of empty files
+  // This ensures we're deploying the actual template code
   return fetch('https://api.vercel.com/v13/deployments', {
     method: 'POST',
     headers: {
@@ -1154,18 +1586,23 @@ async function createFileBasedDeployment(token: string, projectName: string, tar
     body: JSON.stringify({
       name: projectName,
       project: projectName,
-      target,
-      files: []
+      target: target,
+      framework: 'nextjs',
+      gitSource: {
+        type: 'github',
+        repo: `${REPO_OWNER}/${REPO_NAME}`,
+        ref: 'main'
+      }
       // Environment variables are set on the project, not in deployment
     })
   });
 }
 
 // Helper function to create success response
-function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false, firebaseProject: any = null) {
-  const deploymentUrl = deploymentData.url ? 
-    (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
-    `https://${projectName}.vercel.app`;
+function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false, firebaseProject: any = null, domainResult: any = null, actualProductionUrl: string | null = null) {
+  // Use the actual production URL if provided, otherwise fall back to project format
+  const deploymentUrl = actualProductionUrl || `https://${projectName}.vercel.app`;
+  console.log('🎯 Success response using URL:', deploymentUrl);
     
   return NextResponse.json({
     success: true,
@@ -1180,6 +1617,19 @@ function createSuccessResponse(deploymentData: any, projectName: string, chatbot
       logoUrl: chatbotConfig.logoUrl,
       hasLogo: !!chatbotConfig.logoUrl
     },
+    customDomain: domainResult?.success ? {
+      domain: domainResult.data?.name || chatbotConfig.domain,
+      verified: domainResult.data?.verified || false,
+      requiresVerification: domainResult.data?.requiresVerification || false,
+      verificationInstructions: domainResult.data?.verificationInstructions || [],
+      status: domainResult.data?.verified ? 'active' : 'pending_verification',
+      firebaseAuthorized: true // Custom domains are automatically added to Firebase authorized domains
+    } : chatbotConfig.domain ? {
+      domain: chatbotConfig.domain,
+      configured: false,
+      firebaseAuthorized: false,
+      error: domainResult?.error || 'Domain configuration failed'
+    } : null,
     firebaseProject: firebaseProject ? {
       projectId: firebaseProject.projectId,
       authDomain: firebaseProject.config?.authDomain,

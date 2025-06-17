@@ -11,6 +11,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
+// Import custom domain components
+import CustomDomainManager from "@/components/chatbot/CustomDomainManager";
+
 // Define the Chatbot type
 interface Chatbot {
   id: string;
@@ -22,6 +25,15 @@ interface Chatbot {
   updatedAt: any;
   userId: string;
   documents?: any[];
+  deployment?: {
+    vercelProjectId?: string;
+    deploymentUrl?: string;
+    firebaseProjectId?: string;
+    status?: 'deployed' | 'deploying' | 'failed';
+  };
+  firebaseProject?: {
+    projectId?: string;
+  };
   aiConfig?: {
     embeddingModel: string;
     llmModel: string;
@@ -75,7 +87,7 @@ export default function EditChatbotPage() {
   });
   
   // UI state
-  const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'behavior' | 'appearance'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'domain' | 'ai' | 'behavior' | 'appearance'>('basic');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +162,16 @@ export default function EditChatbotPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
     
     // Clear success message when user makes changes
+    if (success) {
+      setSuccess(null);
+    }
+  };
+
+  // Handle domain changes from CustomDomainManager
+  const handleDomainChange = (newDomain: string) => {
+    setFormData(prev => ({ ...prev, domain: newDomain }));
+    
+    // Clear success message when domain changes
     if (success) {
       setSuccess(null);
     }
@@ -323,6 +345,16 @@ export default function EditChatbotPage() {
                           Basic Info
                         </button>
                         <button
+                          onClick={() => setActiveTab('domain')}
+                          className={`${
+                            activeTab === 'domain'
+                              ? 'border-blue-500 text-blue-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                        >
+                          Custom Domain
+                        </button>
+                        <button
                           onClick={() => setActiveTab('ai')}
                           className={`${
                             activeTab === 'ai'
@@ -393,26 +425,6 @@ export default function EditChatbotPage() {
                             </div>
                             
                             <div className="space-y-2">
-                              <label htmlFor="domain" className="text-sm font-medium">Custom Domain (Optional)</label>
-                              <div className="flex">
-                                <Input
-                                  id="domain"
-                                  name="domain"
-                                  value={formData.domain}
-                                  onChange={handleChange}
-                                  placeholder="your-chatbot"
-                                  className="rounded-r-none"
-                                />
-                                <span className="inline-flex items-center rounded-r-md border border-l-0 border-slate-200 bg-gray-50 px-3 text-gray-500 sm:text-sm">
-                                  .docsai.yourdomain.com
-                                </span>
-                              </div>
-                              <p className="text-xs text-gray-500">
-                                Set a custom subdomain for accessing your chatbot.
-                              </p>
-                            </div>
-                            
-                            <div className="space-y-2">
                               <label htmlFor="status" className="text-sm font-medium">Status</label>
                               <select
                                 id="status"
@@ -429,6 +441,24 @@ export default function EditChatbotPage() {
                                 Control whether users can access your chatbot.
                               </p>
                             </div>
+                          </div>
+                        )}
+                        
+                        {/* Custom Domain Tab */}
+                        {activeTab === 'domain' && (
+                          <div className="space-y-6">
+                            <CustomDomainManager
+                              chatbotId={chatbotId}
+                              chatbotName={formData.name || originalChatbot?.name || 'Your Chatbot'}
+                              currentDomain={formData.domain}
+                              vercelProjectId={originalChatbot?.deployment?.vercelProjectId}
+                              firebaseProjectId={
+                                originalChatbot?.deployment?.firebaseProjectId || 
+                                originalChatbot?.firebaseProject?.projectId
+                              }
+                              deploymentUrl={originalChatbot?.deployment?.deploymentUrl}
+                              onDomainChange={handleDomainChange}
+                            />
                           </div>
                         )}
                         

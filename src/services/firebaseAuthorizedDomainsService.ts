@@ -177,6 +177,72 @@ export class FirebaseAuthorizedDomainsService {
     console.log(`🔧 Ensuring domain ${domain} is authorized for project ${projectId}`);
     return await this.addAuthorizedDomain(projectId, domain);
   }
+
+  /**
+   * Ensure both Vercel and custom domains are authorized
+   */
+  static async ensureDomainsAuthorized(
+    projectId: string, 
+    vercelUrl: string, 
+    customDomain?: string
+  ): Promise<{ success: boolean; vercelDomain: boolean; customDomain: boolean }> {
+    const result = {
+      success: false,
+      vercelDomain: false,
+      customDomain: false
+    };
+
+    // Always authorize the Vercel domain
+    result.vercelDomain = await this.ensureVercelDomainAuthorized(projectId, vercelUrl);
+
+    // Authorize custom domain if provided
+    if (customDomain) {
+      const customDomainUrl = customDomain.startsWith('http') ? customDomain : `https://${customDomain}`;
+      result.customDomain = await this.ensureVercelDomainAuthorized(projectId, customDomainUrl);
+      console.log(`🔧 Custom domain ${customDomain} authorization: ${result.customDomain ? 'Success' : 'Failed'}`);
+    } else {
+      result.customDomain = true; // No custom domain to authorize
+    }
+
+    result.success = result.vercelDomain && result.customDomain;
+    
+    console.log(`📊 Domain authorization summary:`, {
+      vercelDomain: result.vercelDomain,
+      customDomain: customDomain ? result.customDomain : 'N/A',
+      overallSuccess: result.success
+    });
+
+    return result;
+  }
+
+  /**
+   * Get list of currently authorized domains for a project
+   */
+  static async getAuthorizedDomains(projectId: string): Promise<string[]> {
+    try {
+      const accessToken = await this.getAccessToken();
+      
+      const configUrl = `${this.API_BASE}/projects/${projectId}/config`;
+      const configResponse = await fetch(configUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      if (!configResponse.ok) {
+        console.error('❌ Failed to get project config');
+        return [];
+      }
+
+      const config = await configResponse.json();
+      return config.authorizedDomains || [];
+      
+    } catch (error) {
+      console.error('❌ Error getting authorized domains:', error);
+      return [];
+    }
+  }
 }
 
 // Usage examples:

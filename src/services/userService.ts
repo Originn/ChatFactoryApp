@@ -111,13 +111,21 @@ export class UserService {
     const userProfile = await this.getUserProfile(uid);
     
     if (userProfile) {
-      await updateDoc(userRef, {
+      const updateData: any = {
         'metadata.lastLoginAt': Timestamp.now(),
         'metadata.loginCount': userProfile.metadata.loginCount + 1,
-        'metadata.ipAddress': ipAddress,
-        'metadata.userAgent': userAgent,
         updatedAt: Timestamp.now()
-      });
+      };
+
+      // Only include ipAddress and userAgent if they have values
+      if (ipAddress) {
+        updateData['metadata.ipAddress'] = ipAddress;
+      }
+      if (userAgent) {
+        updateData['metadata.userAgent'] = userAgent;
+      }
+
+      await updateDoc(userRef, updateData);
     }
   }
 
