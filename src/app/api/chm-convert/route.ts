@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const CHM_CONVERTER_URL = process.env.CHM_CONVERTER_URL || 'https://chm-converter-931513743743.us-central1.run.app';
+import { CHMService } from '@/services/chmService';
+import { adminDb } from '@/lib/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,61 +21,56 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`📄 Processing CHM conversion: ${file.name} for chatbot: ${chatbotId}`);
+    console.log(`📄 Processing CHM file: ${file.name} for chatbot: ${chatbotId}`);
 
-    // Create FormData for CHM converter service
-    const chmFormData = new FormData();
-    chmFormData.append('file', file);
-
-    // Call CHM converter service
-    const response = await fetch(`${CHM_CONVERTER_URL}/convert`, {
-      method: 'POST',
-      body: chmFormData,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ CHM conversion failed:`, errorText);
+    // Get Firebase project ID for this chatbot from database
+    const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+    if (!chatbotDoc.exists) {
       return NextResponse.json({ 
-        error: `CHM conversion failed: ${response.statusText}` 
-      }, { status: 500 });
+        error: 'Chatbot not found' 
+      }, { status: 404 });
     }
 
-    const result = await response.json();
+    const chatbotData = chatbotDoc.data();
+    const firebaseProjectId = chatbotData?.firebaseProjectId || chatbotData?.deployment?.firebaseProjectId;
     
-    if (result.status === 'completed') {
-      console.log(`✅ CHM conversion completed: ${result.job_id}`);
+    if (!firebaseProjectId) {
+      return NextResponse.json({ 
+        error: 'Firebase project not configured for this chatbot' 
+      }, { status: 404 });
+    }
+
+    console.log(`🔥 Using Firebase project: ${firebaseProjectId}`);
+
+    // Process the CHM file completely (convert, store, vectorize)
+    const result = await CHMService.processCHMDocument(
+      file,
+      chatbotId,
+      userId,
+      firebaseProjectId
+    );
+
+    if (result.success) {
+      console.log(`✅ CHM processing completed: ${result.vectorCount} vectors created`);
       
       return NextResponse.json({
         success: true,
-        message: 'CHM conversion completed successfully',
-        job_id: result.job_id,
-        download_url: `${CHM_CONVERTER_URL}${result.download_url}`,
-        file_size: result.file_size,
-        pdf_file: result.pdf_file
-      });
-    } else if (result.status === 'queued') {
-      console.log(`⏳ CHM conversion queued: ${result.job_id}`);
-      
-      return NextResponse.json({
-        success: true,
-        status: 'queued',
-        message: 'CHM conversion queued for processing',
-        job_id: result.job_id,
-        queue_position: result.queue_position,
-        estimated_time_seconds: result.estimated_time_seconds,
-        status_url: `${CHM_CONVERTER_URL}/status/${result.job_id}`
+        message: result.message,
+        vectorCount: result.vectorCount,
+        pdfUrl: result.pdfUrl,
+        fileName: file.name.replace('.chm', '.pdf')
       });
     } else {
+      console.error(`❌ CHM processing failed:`, result.error);
       return NextResponse.json({ 
-        error: 'CHM conversion returned unknown status' 
+        error: result.error 
       }, { status: 500 });
     }
 
   } catch (error) {
     console.error('CHM conversion API error:', error);
     return NextResponse.json({ 
-      error: 'Internal server error during CHM conversion' 
+      error: 'Internal server error during CHM processing' 
     }, { status: 500 });
   }
 }
@@ -91,24 +86,15 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check job status
-    const response = await fetch(`${CHM_CONVERTER_URL}/status/${jobId}`);
-    
-    if (!response.ok) {
-      return NextResponse.json({ 
-        error: 'Failed to check conversion status' 
-      }, { status: 500 });
-    }
-
-    const status = await response.json();
+    // Check job status with CHM converter service
+    const status = await CHMService.checkConversionStatus(jobId);
     
     return NextResponse.json({
-      success: true,
+      success: status.success,
       status: status.status,
-      message: status.message,
+      message: status.status === 'completed' ? 'Conversion completed' : 'Still processing',
       ...(status.download_url && { 
-        download_url: `${CHM_CONVERTER_URL}${status.download_url}`,
-        file_size: status.file_size 
+        download_available: true
       })
     });
 

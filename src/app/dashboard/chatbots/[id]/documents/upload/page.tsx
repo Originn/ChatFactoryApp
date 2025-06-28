@@ -79,14 +79,14 @@ export default function ChatbotDocumentUploadPage() {
       const result = await response.json();
 
       if (result.success) {
-        if (result.status === 'queued') {
-          // Start polling for status
-          pollCHMStatus(fileItem.id, result.job_id);
-        } else {
-          setUploadedFiles(prev => prev.map(f => 
-            f.id === fileItem.id ? { ...f, status: 'completed' } : f
-          ));
-        }
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileItem.id ? { 
+            ...f, 
+            status: 'completed',
+            progress: 100
+          } : f
+        ));
+        console.log(`✅ CHM processed: ${result.vectorCount} vectors created, PDF stored at: ${result.pdfUrl}`);
       } else {
         throw new Error(result.error);
       }
@@ -101,44 +101,27 @@ export default function ChatbotDocumentUploadPage() {
     }
   };
 
-  const pollCHMStatus = async (fileId: string, jobId: string) => {
-    const maxAttempts = 60; // 5 minutes with 5-second intervals
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/chm-convert?jobId=${jobId}`);
-        const result = await response.json();
-
-        if (result.success && result.status === 'completed') {
-          setUploadedFiles(prev => prev.map(f => 
-            f.id === fileId ? { ...f, status: 'completed' } : f
-          ));
-          return;
-        }
-
-        if (result.status === 'failed') {
-          throw new Error(result.message || 'Conversion failed');
-        }
-
-        attempts++;
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 5000); // Poll every 5 seconds
-        } else {
-          throw new Error('Conversion timeout');
-        }
-      } catch (error) {
-        setUploadedFiles(prev => prev.map(f => 
-          f.id === fileId ? { 
-            ...f, 
-            status: 'error', 
-            error: error instanceof Error ? error.message : 'Polling failed'
-          } : f
-        ));
-      }
-    };
-
-    poll();
+  const getFileStatusDisplay = (file: UploadedFile) => {
+    switch (file.status) {
+      case 'pending':
+        return { text: 'Ready to upload', color: 'text-gray-500' };
+      case 'uploading':
+        return { text: 'Uploading...', color: 'text-blue-500' };
+      case 'converting':
+        return { 
+          text: file.type === 'chm' ? 'Converting CHM to PDF & storing...' : 'Processing...', 
+          color: 'text-yellow-500' 
+        };
+      case 'completed':
+        return { 
+          text: file.type === 'chm' ? 'CHM converted & vectorized' : 'Completed', 
+          color: 'text-green-500' 
+        };
+      case 'error':
+        return { text: `Error: ${file.error}`, color: 'text-red-500' };
+      default:
+        return { text: 'Unknown', color: 'text-gray-500' };
+    }
   };
 
   const processRegularFile = async (fileItem: UploadedFile) => {
@@ -205,23 +188,6 @@ export default function ChatbotDocumentUploadPage() {
 
   const removeFile = (id: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== id));
-  };
-
-  const getFileStatusDisplay = (file: UploadedFile) => {
-    switch (file.status) {
-      case 'pending':
-        return { text: 'Ready to upload', color: 'text-gray-500' };
-      case 'uploading':
-        return { text: 'Uploading...', color: 'text-blue-500' };
-      case 'converting':
-        return { text: 'Converting CHM...', color: 'text-yellow-500' };
-      case 'completed':
-        return { text: 'Completed', color: 'text-green-500' };
-      case 'error':
-        return { text: `Error: ${file.error}`, color: 'text-red-500' };
-      default:
-        return { text: 'Unknown', color: 'text-gray-500' };
-    }
   };
 
   return (
