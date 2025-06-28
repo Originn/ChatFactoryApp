@@ -1202,11 +1202,13 @@ export async function POST(request: NextRequest) {
     
     // STEP 7: Add authorized domains to Firebase project
     if (dedicatedFirebaseProject?.projectId) {
-      const deploymentUrl = deploymentData.url ? 
-        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
-        `https://${projectName}.vercel.app`;
+      // Use the finalDeploymentUrl that was carefully determined earlier
+      // This ensures we get the correct production domain (like testbot-gray.vercel.app)
+      // instead of the initial deployment-specific URL
+      const deploymentUrl = finalDeploymentUrl;
         
       console.log('🔧 Adding domains to Firebase authorized domains...');
+      console.log(`🎯 Using final deployment URL: ${deploymentUrl}`);
       
       // Collect all domains that need to be authorized
       const domainsToAuthorize = [];

@@ -1,0 +1,9 @@
+# Cloud-Native Requirements for CHM to PDF conversion
+beautifulsoup4==4.12.2
+PyPDF2==3.0.1
+chardet>=3.0.0
+pychm>=0.8.6
+weasyprint>=61.0
+# Additional dependencies for cloud deployment
+google-cloud-storage>=2.10.0  # For cloud storage integration
+concurrent.futures  # For parallel processing (built-in Python 3.2+)
