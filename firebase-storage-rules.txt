@@ -1,0 +1,70 @@
+// Firebase Storage Security Rules for CHM PDF Public/Private Access Control
+// Place this in your Firebase Storage Rules (Firebase Console > Storage > Rules)
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Public PDFs - anyone can read
+    match /public_pdfs/{chatbotId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only backend can write
+    }
+    
+    // Private PDFs - only owner can access
+    match /private_pdfs/{userId}/{chatbotId}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Only backend can write
+    }
+    
+    // Legacy chatbot_documents path (for backward compatibility)
+    // Check metadata to determine access level
+    match /chatbot_documents/{chatbotId}/{fileName} {
+      allow read: if resource.metadata.isPublic == 'true' 
+                  || (request.auth != null && request.auth.uid == resource.metadata.userId);
+      allow write: if false; // Only backend can write
+    }
+    
+    // Admin access for service account operations
+    // (This rule won't apply to Admin SDK operations, but good for reference)
+    match /{allPaths=**} {
+      allow read, write: if false; // Deny all other access
+    }
+  }
+}
+
+/* 
+EXPLANATION:
+
+1. **Public PDFs** (/public_pdfs/{chatbotId}/{fileName}):
+   - Anyone can read (no authentication required)
+   - Only backend service account can write
+
+2. **Private PDFs** (/private_pdfs/{userId}/{chatbotId}/{fileName}):
+   - Only the owner (matching userId) can read when authenticated
+   - Only backend service account can write
+
+3. **Legacy Support** (/chatbot_documents/{chatbotId}/{fileName}):
+   - Supports old storage structure
+   - Uses file metadata to determine if public or private
+   - Public if metadata.isPublic == 'true'
+   - Private if user is authenticated and matches metadata.userId
+
+4. **Security Features**:
+   - No unauthorized access to private PDFs
+   - Public PDFs don't require authentication
+   - Write operations restricted to backend only
+   - Clear separation between public and private storage paths
+
+DEPLOYMENT STEPS:
+1. Go to Firebase Console > Storage > Rules
+2. Replace existing rules with the above
+3. Test with Firebase Rules Playground
+4. Deploy rules
+
+TESTING:
+- Test public PDF access without authentication
+- Test private PDF access with correct user auth
+- Test private PDF access with wrong user auth (should fail)
+- Test write operations (should fail for client, succeed for Admin SDK)
+*/

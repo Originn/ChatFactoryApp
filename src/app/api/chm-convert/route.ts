@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const chatbotId = formData.get('chatbotId') as string;
     const userId = formData.get('userId') as string;
+    const isPublic = formData.get('isPublic') === 'true'; // Convert string to boolean
 
     if (!file || !chatbotId || !userId) {
       return NextResponse.json({ 
@@ -41,13 +42,15 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`🔥 Using Firebase project: ${firebaseProjectId}`);
+    console.log(`🔒 PDF access level: ${isPublic ? 'Public' : 'Private'}`);
 
-    // Process the CHM file completely (convert, store, vectorize)
+    // Process the CHM file completely (convert, store, vectorize) with privacy setting
     const result = await CHMService.processCHMDocument(
       file,
       chatbotId,
       userId,
-      firebaseProjectId
+      firebaseProjectId,
+      isPublic
     );
 
     if (result.success) {

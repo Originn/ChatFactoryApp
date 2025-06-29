@@ -4,7 +4,7 @@ import { PineconeService } from '@/services/pineconeService';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, userId, documentName, documentType, textContent, source } = body;
+    const { chatbotId, userId, documentName, documentType, textContent, source, isPublic } = body;
 
     if (!chatbotId || !userId || !documentName || !textContent) {
       return NextResponse.json({ 
@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`📄 Processing document upload: ${documentName} for chatbot: ${chatbotId}`);
+    console.log(`🔒 Document access level: ${isPublic ? 'Public' : 'Private'}`);
 
     const result = await PineconeService.uploadDocument(
       chatbotId,

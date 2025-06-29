@@ -306,6 +306,20 @@ export class FirebaseAPIServiceSDK {
     const buckets: Record<string, string> = {};
     
     try {
+      // 🔧 FIX: Create project-specific Storage client to ensure buckets are created in correct project
+      const { Storage } = require('@google-cloud/storage');
+      const { getGCPCredentials } = require('@/lib/gcp-auth');
+      
+      const credentials = getGCPCredentials();
+      const projectSpecificStorage = new Storage({
+        projectId: projectId, // 🎯 Explicitly target the new project
+        ...(credentials && Object.keys(credentials).length > 0 && { 
+          credentials: (credentials as any).credentials 
+        })
+      });
+      
+      console.log(`📋 Creating buckets in project: ${projectId} (using project-specific Storage client)`);
+      
       const bucketSuffixes = [
         'chatbot_documents',
         'chatbot_private_images', 
@@ -315,7 +329,7 @@ export class FirebaseAPIServiceSDK {
       for (const suffix of bucketSuffixes) {
         const bucketName = `${projectId}-${suffix}`;
         try {
-          const [bucket] = await storageClient.createBucket(bucketName, {
+          const [bucket] = await projectSpecificStorage.createBucket(bucketName, {
             location: 'us-central1',
             storageClass: 'STANDARD',
             uniformBucketLevelAccess: true,

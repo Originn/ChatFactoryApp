@@ -14,6 +14,7 @@ import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialo
 import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSelectionDialog';
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import ChatbotUserManagement from '@/components/dashboard/ChatbotUserManagement';
+import UserPDFManager from '@/components/dashboard/UserPDFManager';
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 import { ChatbotConfig } from '@/types/chatbot';
 
@@ -970,25 +971,11 @@ export default function ChatbotDetailPage() {
                     </Card>
                   </div>
 
-                  {/* Recent Documents */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Recent Documents</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {vectorstoreDocCount > 0 ? (
-                        <div className="text-center text-gray-500 py-8">
-                          <p>Document listing coming soon...</p>
-                          <p className="text-sm">You have {vectorstoreDocCount} documents in your knowledge base.</p>
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-500 py-8">
-                          <p>No documents uploaded yet.</p>
-                          <p className="text-sm">Upload documents to start building your chatbot's knowledge base.</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  {/* Uploaded Documents */}
+                  <UserPDFManager 
+                    chatbotId={chatbotId}
+                    showChatbotFilter={false}
+                  />
                 </div>
               )}
 

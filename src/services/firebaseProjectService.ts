@@ -509,14 +509,14 @@ export class FirebaseProjectService {
         const buckets: Record<string, string> = {};
         
         try {
-          // Initialize Google Cloud Storage client with service account
+          // 🔧 FIX: Initialize project-specific Google Cloud Storage client
           const credentials = this.getGoogleCloudCredentials();
           const storage = new Storage({
-            projectId: projectId,
+            projectId: projectId, // 🎯 Explicitly target the new project
             ...(credentials && { credentials })
           });
           
-          console.log('✅ Google Cloud Storage client initialized');
+          console.log('✅ Project-specific Google Cloud Storage client initialized');
           console.log(`📋 Attempting to create buckets in project: ${projectId}`);
           
           for (const suffix of bucketSuffixes) {

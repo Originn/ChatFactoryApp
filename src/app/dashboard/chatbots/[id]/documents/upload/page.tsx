@@ -7,6 +7,7 @@ import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useParams } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { Tooltip } from '@/components/ui/custom-tooltip';
 
 interface UploadedFile {
   file: File;
@@ -16,6 +17,7 @@ interface UploadedFile {
   progress?: number;
   jobId?: string;
   error?: string;
+  isPublic: boolean; // ✨ Track public/private access choice (default false)
 }
 
 export default function ChatbotDocumentUploadPage() {
@@ -35,7 +37,8 @@ export default function ChatbotDocumentUploadPage() {
       file,
       id: `${Date.now()}-${Math.random()}`,
       type: file.name.toLowerCase().endsWith('.chm') ? 'chm' : 'regular',
-      status: 'pending'
+      status: 'pending',
+      isPublic: false // ✨ Default to private for security
     }));
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
@@ -50,7 +53,8 @@ export default function ChatbotDocumentUploadPage() {
       file,
       id: `${Date.now()}-${Math.random()}`,
       type: file.name.toLowerCase().endsWith('.chm') ? 'chm' : 'regular',
-      status: 'pending'
+      status: 'pending',
+      isPublic: false // ✨ Default to private for security
     }));
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
@@ -60,16 +64,17 @@ export default function ChatbotDocumentUploadPage() {
     event.preventDefault();
   };
 
-  const processCHMFile = async (fileItem: UploadedFile) => {
+  const processCHMFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
     try {
       setUploadedFiles(prev => prev.map(f => 
-        f.id === fileItem.id ? { ...f, status: 'converting' } : f
+        f.id === fileItem.id ? { ...f, status: 'converting', isPublic } : f
       ));
 
       const formData = new FormData();
       formData.append('file', fileItem.file);
       formData.append('chatbotId', chatbotId as string);
       formData.append('userId', user?.uid || '');
+      formData.append('isPublic', isPublic.toString()); // ✨ NEW: Pass public/private choice
 
       const response = await fetch('/api/chm-convert', {
         method: 'POST',
@@ -83,10 +88,12 @@ export default function ChatbotDocumentUploadPage() {
           f.id === fileItem.id ? { 
             ...f, 
             status: 'completed',
-            progress: 100
+            progress: 100,
+            isPublic
           } : f
         ));
         console.log(`✅ CHM processed: ${result.vectorCount} vectors created, PDF stored at: ${result.pdfUrl}`);
+        console.log(`🔒 Access level: ${isPublic ? 'Public' : 'Private'}`);
       } else {
         throw new Error(result.error);
       }
@@ -102,6 +109,9 @@ export default function ChatbotDocumentUploadPage() {
   };
 
   const getFileStatusDisplay = (file: UploadedFile) => {
+    const accessBadge = file.status === 'completed' ? 
+      ` (${file.isPublic ? '🔓 Public' : '🔒 Private'})` : '';
+    
     switch (file.status) {
       case 'pending':
         return { text: 'Ready to upload', color: 'text-gray-500' };
@@ -114,7 +124,7 @@ export default function ChatbotDocumentUploadPage() {
         };
       case 'completed':
         return { 
-          text: file.type === 'chm' ? 'CHM converted & vectorized' : 'Completed', 
+          text: (file.type === 'chm' ? 'CHM converted & vectorized' : 'Completed') + accessBadge, 
           color: 'text-green-500' 
         };
       case 'error':
@@ -124,10 +134,10 @@ export default function ChatbotDocumentUploadPage() {
     }
   };
 
-  const processRegularFile = async (fileItem: UploadedFile) => {
+  const processRegularFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
     try {
       setUploadedFiles(prev => prev.map(f => 
-        f.id === fileItem.id ? { ...f, status: 'uploading' } : f
+        f.id === fileItem.id ? { ...f, status: 'uploading', isPublic } : f
       ));
 
       // Extract text content based on file type
@@ -146,7 +156,8 @@ export default function ChatbotDocumentUploadPage() {
           documentName: fileItem.file.name,
           documentType: fileItem.file.type,
           textContent,
-          source: fileItem.file.name
+          source: fileItem.file.name,
+          isPublic // ✨ NEW: Pass public/private choice for regular files too
         }),
       });
 
@@ -154,8 +165,9 @@ export default function ChatbotDocumentUploadPage() {
 
       if (result.success) {
         setUploadedFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { ...f, status: 'completed' } : f
+          f.id === fileItem.id ? { ...f, status: 'completed', isPublic } : f
         ));
+        console.log(`🔒 Regular file access level: ${isPublic ? 'Public' : 'Private'}`);
       } else {
         throw new Error(result.error);
       }
@@ -170,15 +182,23 @@ export default function ChatbotDocumentUploadPage() {
     }
   };
 
+  // ✨ Handle checkbox change for public/private access
+  const handlePublicToggle = (fileId: string, isPublic: boolean) => {
+    setUploadedFiles(prev => prev.map(file => 
+      file.id === fileId ? { ...file, isPublic } : file
+    ));
+  };
+
+  // ✨ Upload files using their individual public/private settings
   const handleUploadAll = async () => {
     setIsProcessing(true);
     
     for (const fileItem of uploadedFiles) {
       if (fileItem.status === 'pending') {
         if (fileItem.type === 'chm') {
-          await processCHMFile(fileItem);
+          await processCHMFile(fileItem, fileItem.isPublic);
         } else {
-          await processRegularFile(fileItem);
+          await processRegularFile(fileItem, fileItem.isPublic);
         }
       }
     }
@@ -329,10 +349,37 @@ export default function ChatbotDocumentUploadPage() {
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-3">
+                          
+                          {/* ✨ Public/Private Checkbox with Professional Tooltip */}
+                          <div className="flex items-center space-x-4">
+                            {fileItem.status === 'pending' && (
+                              <div className="flex items-center space-x-2">
+                                <Tooltip 
+                                  content={fileItem.isPublic 
+                                    ? "Public: Chatbot users can access this PDF and see it as a source reference. Good for showing documentation sources."
+                                    : "Private: PDF is private and chatbot users cannot access it directly. Users won't see source references."
+                                  }
+                                  side="top"
+                                >
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={fileItem.isPublic}
+                                      onChange={(e) => handlePublicToggle(fileItem.id, e.target.checked)}
+                                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">
+                                      {fileItem.isPublic ? '🔓 Public' : '🔒 Private'}
+                                    </span>
+                                  </label>
+                                </Tooltip>
+                              </div>
+                            )}
+                            
                             <span className={`text-sm ${statusDisplay.color}`}>
                               {statusDisplay.text}
                             </span>
+                            
                             {fileItem.status === 'pending' && (
                               <Button
                                 variant="outline"

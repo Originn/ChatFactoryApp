@@ -1,6 +1,7 @@
 // src/services/databaseService.ts
 import { adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { UserPDFMetadata } from '@/types/pdf';
 
 interface VectorstoreInfo {
   provider: 'pinecone';
@@ -156,6 +157,170 @@ class DatabaseService {
       return { success: true };
     } catch (error) {
       console.error(`❌ Failed to update vectorstore document count:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  // PDF Metadata Management Methods
+  static async createPDFMetadata(
+    pdfMetadata: Omit<UserPDFMetadata, 'id' | 'uploadedAt'>
+  ): Promise<{ success: boolean; pdfId?: string; error?: string }> {
+    try {
+      const pdfRef = adminDb.collection('user_pdfs').doc();
+      
+      const fullMetadata: UserPDFMetadata = {
+        ...pdfMetadata,
+        id: pdfRef.id,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      // Filter out undefined values for Firestore compatibility
+      const cleanMetadata = Object.fromEntries(
+        Object.entries(fullMetadata).filter(([_, value]) => value !== undefined)
+      );
+
+      await pdfRef.set(cleanMetadata);
+
+      console.log(`✅ Created PDF metadata for ${pdfMetadata.pdfFileName}`);
+      return { success: true, pdfId: pdfRef.id };
+    } catch (error) {
+      console.error(`❌ Failed to create PDF metadata:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async getUserPDFs(
+    userId: string,
+    chatbotId?: string
+  ): Promise<{ success: boolean; pdfs: UserPDFMetadata[]; error?: string }> {
+    try {
+      let query = adminDb.collection('user_pdfs').where('userId', '==', userId);
+      
+      if (chatbotId) {
+        query = query.where('chatbotId', '==', chatbotId);
+      }
+      
+      const snapshot = await query.orderBy('uploadedAt', 'desc').get();
+      
+      const pdfs: UserPDFMetadata[] = snapshot.docs.map(doc => 
+        doc.data() as UserPDFMetadata
+      );
+
+      console.log(`✅ Retrieved ${pdfs.length} PDFs for user ${userId}`);
+      return { success: true, pdfs };
+    } catch (error) {
+      console.error(`❌ Failed to get user PDFs:`, error);
+      return {
+        success: false,
+        pdfs: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async getPDFMetadata(
+    pdfId: string
+  ): Promise<{ success: boolean; pdf?: UserPDFMetadata; error?: string }> {
+    try {
+      const pdfDoc = await adminDb.collection('user_pdfs').doc(pdfId).get();
+      
+      if (!pdfDoc.exists) {
+        return {
+          success: false,
+          error: 'PDF not found',
+        };
+      }
+
+      const pdf = pdfDoc.data() as UserPDFMetadata;
+      return { success: true, pdf };
+    } catch (error) {
+      console.error(`❌ Failed to get PDF metadata:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async updatePDFStatus(
+    pdfId: string,
+    status: UserPDFMetadata['status'],
+    error?: string,
+    vectorCount?: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updateData: any = {
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (error) {
+        updateData.error = error;
+      }
+
+      if (vectorCount !== undefined) {
+        updateData.vectorCount = vectorCount;
+      }
+
+      await adminDb.collection('user_pdfs').doc(pdfId).update(updateData);
+
+      console.log(`✅ Updated PDF ${pdfId} status to ${status}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to update PDF status:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async updatePDFPrivacy(
+    pdfId: string,
+    isPublic: boolean,
+    newUrl?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updateData: any = {
+        isPublic,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (isPublic && newUrl) {
+        updateData.publicUrl = newUrl;
+      } else if (!isPublic) {
+        updateData.publicUrl = FieldValue.delete();
+      }
+
+      await adminDb.collection('user_pdfs').doc(pdfId).update(updateData);
+
+      console.log(`✅ Updated PDF ${pdfId} privacy to ${isPublic ? 'public' : 'private'}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to update PDF privacy:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async deletePDFMetadata(
+    pdfId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await adminDb.collection('user_pdfs').doc(pdfId).delete();
+
+      console.log(`✅ Deleted PDF metadata ${pdfId}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to delete PDF metadata:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
