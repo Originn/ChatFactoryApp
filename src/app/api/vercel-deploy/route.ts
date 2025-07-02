@@ -665,6 +665,7 @@ export async function POST(request: NextRequest) {
       PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
       PINECONE_ENVIRONMENT: 'us-east-1', // Use us-east-1 for free plan compatibility
       PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
+      PINECONE_NAMESPACE: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'default',
       MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
       
       // Embedding Configuration

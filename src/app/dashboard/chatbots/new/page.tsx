@@ -283,22 +283,12 @@ export default function NewChatbotPage() {
       }
       
       // Prepare data for Firestore
-      const chatbotData = {
+      const chatbotData: any = {
         id: newChatbotRef.id,
         userId: user.uid,
         name: formData.name.trim(),
         description: formData.description.trim(),
         requireAuth: formData.requireAuth, // Authentication requirement setting
-        authConfig: formData.requireAuth ? {
-          accessMode: formData.accessMode,
-          allowSignup: formData.accessMode === 'open', // backward compatibility
-          requireEmailVerification: true,
-          allowGoogleAuth: true,
-          allowAnonymousUsers: false,
-          sessionTimeout: 60, // minutes
-          maxConcurrentSessions: 1,
-          invitedUsers: formData.accessMode === 'managed' ? formData.invitedUsers : [], // Use actual invited users
-        } : undefined,
         logoUrl: logoUrl, // Add logo URL to the data
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -325,6 +315,20 @@ export default function NewChatbotPage() {
           lastUpdated: serverTimestamp(),
         }
       };
+
+      // Only add authConfig if authentication is required
+      if (formData.requireAuth) {
+        chatbotData.authConfig = {
+          accessMode: formData.accessMode,
+          allowSignup: formData.accessMode === 'open', // backward compatibility
+          requireEmailVerification: true,
+          allowGoogleAuth: true,
+          allowAnonymousUsers: false,
+          sessionTimeout: 60, // minutes
+          maxConcurrentSessions: 1,
+          invitedUsers: formData.accessMode === 'managed' ? formData.invitedUsers : [], // Use actual invited users
+        };
+      }
       
       // Save to Firestore
       await setDoc(newChatbotRef, chatbotData);

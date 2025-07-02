@@ -12,7 +12,7 @@ import { Tooltip } from '@/components/ui/custom-tooltip';
 interface UploadedFile {
   file: File;
   id: string;
-  type: 'regular' | 'chm';
+  type: 'regular' | 'chm' | 'pdf';
   status: 'pending' | 'uploading' | 'converting' | 'completed' | 'error';
   progress?: number;
   jobId?: string;
@@ -33,13 +33,23 @@ export default function ChatbotDocumentUploadPage() {
     const files = event.target.files;
     if (!files) return;
 
-    const newFiles: UploadedFile[] = Array.from(files).map(file => ({
-      file,
-      id: `${Date.now()}-${Math.random()}`,
-      type: file.name.toLowerCase().endsWith('.chm') ? 'chm' : 'regular',
-      status: 'pending',
-      isPublic: false // ✨ Default to private for security
-    }));
+    const newFiles: UploadedFile[] = Array.from(files).map(file => {
+      let fileType: 'regular' | 'chm' | 'pdf' = 'regular';
+      
+      if (file.name.toLowerCase().endsWith('.chm')) {
+        fileType = 'chm';
+      } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        fileType = 'pdf';
+      }
+
+      return {
+        file,
+        id: `${Date.now()}-${Math.random()}`,
+        type: fileType,
+        status: 'pending',
+        isPublic: false // ✨ Default to private for security
+      };
+    });
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
   };
@@ -49,13 +59,23 @@ export default function ChatbotDocumentUploadPage() {
     const files = event.dataTransfer.files;
     if (!files) return;
 
-    const newFiles: UploadedFile[] = Array.from(files).map(file => ({
-      file,
-      id: `${Date.now()}-${Math.random()}`,
-      type: file.name.toLowerCase().endsWith('.chm') ? 'chm' : 'regular',
-      status: 'pending',
-      isPublic: false // ✨ Default to private for security
-    }));
+    const newFiles: UploadedFile[] = Array.from(files).map(file => {
+      let fileType: 'regular' | 'chm' | 'pdf' = 'regular';
+      
+      if (file.name.toLowerCase().endsWith('.chm')) {
+        fileType = 'chm';
+      } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        fileType = 'pdf';
+      }
+
+      return {
+        file,
+        id: `${Date.now()}-${Math.random()}`,
+        type: fileType,
+        status: 'pending',
+        isPublic: false // ✨ Default to private for security
+      };
+    });
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
   };
@@ -108,6 +128,52 @@ export default function ChatbotDocumentUploadPage() {
     }
   };
 
+  const processPDFFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
+    try {
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileItem.id ? { ...f, status: 'converting', isPublic } : f
+      ));
+
+      const formData = new FormData();
+      formData.append('file', fileItem.file);
+      formData.append('chatbotId', chatbotId as string);
+      formData.append('userId', user?.uid || '');
+      formData.append('isPublic', isPublic.toString());
+
+      const response = await fetch('/api/pdf-convert', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileItem.id ? { 
+            ...f, 
+            status: 'completed',
+            progress: 100,
+            isPublic
+          } : f
+        ));
+        console.log(`✅ PDF processed: ${result.vectorCount} vectors created`);
+        console.log(`🤖 Embedding: ${result.embeddingConfig}`);
+        console.log(`📊 Vectorstore: ${result.vectorstore}`);
+        console.log(`🔒 Access level: ${isPublic ? 'Public' : 'Private'}`);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileItem.id ? { 
+          ...f, 
+          status: 'error', 
+          error: error instanceof Error ? error.message : 'PDF processing failed'
+        } : f
+      ));
+    }
+  };
+
   const getFileStatusDisplay = (file: UploadedFile) => {
     const accessBadge = file.status === 'completed' ? 
       ` (${file.isPublic ? '🔓 Public' : '🔒 Private'})` : '';
@@ -118,13 +184,22 @@ export default function ChatbotDocumentUploadPage() {
       case 'uploading':
         return { text: 'Uploading...', color: 'text-blue-500' };
       case 'converting':
-        return { 
-          text: file.type === 'chm' ? 'Converting CHM to PDF & storing...' : 'Processing...', 
-          color: 'text-yellow-500' 
-        };
+        if (file.type === 'chm') {
+          return { text: 'Converting CHM to PDF & storing...', color: 'text-yellow-500' };
+        } else if (file.type === 'pdf') {
+          return { text: 'Processing PDF & vectorizing...', color: 'text-yellow-500' };
+        } else {
+          return { text: 'Processing...', color: 'text-yellow-500' };
+        }
       case 'completed':
+        let completedText = 'Completed';
+        if (file.type === 'chm') {
+          completedText = 'CHM converted & vectorized';
+        } else if (file.type === 'pdf') {
+          completedText = 'PDF processed & vectorized';
+        }
         return { 
-          text: (file.type === 'chm' ? 'CHM converted & vectorized' : 'Completed') + accessBadge, 
+          text: completedText + accessBadge, 
           color: 'text-green-500' 
         };
       case 'error':
@@ -197,6 +272,8 @@ export default function ChatbotDocumentUploadPage() {
       if (fileItem.status === 'pending') {
         if (fileItem.type === 'chm') {
           await processCHMFile(fileItem, fileItem.isPublic);
+        } else if (fileItem.type === 'pdf') {
+          await processPDFFile(fileItem, fileItem.isPublic);
         } else {
           await processRegularFile(fileItem, fileItem.isPublic);
         }
@@ -306,7 +383,7 @@ export default function ChatbotDocumentUploadPage() {
                       <p className="pl-1 text-gray-500">or drag and drop</p>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      PDF, MD, HTML, DOCX, TXT, CHM up to 10MB each
+                      PDF, MD, HTML, DOCX, TXT, CHM up to 10MB each • PDFs use AI embeddings
                     </p>
                   </div>
                 </div>
@@ -335,6 +412,10 @@ export default function ChatbotDocumentUploadPage() {
                                 <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
                                   <span className="text-orange-600 text-xs font-semibold">CHM</span>
                                 </div>
+                              ) : fileItem.type === 'pdf' ? (
+                                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                  <span className="text-red-600 text-xs font-semibold">PDF</span>
+                                </div>
                               ) : (
                                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                                   <span className="text-blue-600 text-xs font-semibold">DOC</span>
@@ -346,6 +427,7 @@ export default function ChatbotDocumentUploadPage() {
                               <p className="text-xs text-gray-500">
                                 {(fileItem.file.size / 1024 / 1024).toFixed(2)} MB
                                 {fileItem.type === 'chm' && ' • CHM file will be converted to PDF'}
+                                {fileItem.type === 'pdf' && ' • PDF will be processed with AI embeddings'}
                               </p>
                             </div>
                           </div>
