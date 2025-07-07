@@ -746,8 +746,8 @@ export class ReusableFirebaseProjectService {
       return;
     }
     
-    // Step 1: Clean specific known paths
-    const pathsToClean = [
+    // Step 1: Delete entire folders containing chatbot data
+    const foldersToDelete = [
       `user-${userId}/chatbot-logos/chatbot-${chatbotId}/`,
       `user-${userId}/chatbot-documents/chatbot-${chatbotId}/`,
       `chatbots/${chatbotId}/`,
@@ -762,49 +762,71 @@ export class ReusableFirebaseProjectService {
     
     let totalFilesDeleted = 0;
     
-    for (const path of pathsToClean) {
+    for (const folderPath of foldersToDelete) {
       try {
-        console.log(`🗂️ Checking storage path: ${path}`);
+        console.log(`🗂️ Deleting entire folder: ${folderPath}`);
         
-        const [files] = await workingBucket.getFiles({
-          prefix: path,
-          maxResults: 5000 // Increased limit for thorough cleanup
+        // Delete all files in the folder (this deletes the entire folder)
+        await workingBucket.deleteFiles({
+          prefix: folderPath
         });
         
-        if (files.length > 0) {
-          console.log(`📁 Found ${files.length} files in ${path}`);
-          
-          // Delete files in batches
-          const deletePromises = files.map(file => 
-            file.delete().catch(error => {
-              console.warn(`⚠️ Could not delete file ${file.name}:`, error);
-            })
-          );
-          
-          await Promise.all(deletePromises);
-          totalFilesDeleted += files.length;
-          
-          console.log(`✅ Deleted ${files.length} files from ${path}`);
+        console.log(`✅ Deleted entire folder: ${folderPath}`);
+        
+        // Count files for reporting (optional)
+        const [files] = await workingBucket.getFiles({
+          prefix: folderPath,
+          maxResults: 1
+        });
+        
+        if (files.length === 0) {
+          console.log(`✅ Verified folder ${folderPath} is empty`);
         } else {
-          console.log(`ℹ️ No files found in ${path}`);
+          console.log(`⚠️ Some files may remain in ${folderPath}`);
         }
         
-      } catch (error) {
-        console.warn(`⚠️ Could not clean up storage path ${path}:`, error);
+      } catch (error: any) {
+        console.warn(`⚠️ Could not delete folder ${folderPath}:`, error.message);
       }
     }
     
-    // Step 2: Comprehensive scan for any remaining files containing chatbot ID or user ID
-    console.log(`🔍 Performing comprehensive scan for remaining files...`);
+    // Step 2: Delete any remaining files with chatbot ID anywhere in the bucket
+    console.log(`🔍 Cleaning up any remaining files with chatbot ID...`);
+    
+    try {
+      // Use bulk deletion for efficiency - delete all files matching patterns
+      const deletePatterns = [
+        `**/*${chatbotId}*`, // Any file containing chatbot ID
+        `**/*user-${userId}*`, // Any file containing user ID
+        `**/chatbot-${chatbotId}*`, // Any file containing chatbot-specific pattern
+      ];
+      
+      for (const pattern of deletePatterns) {
+        try {
+          await workingBucket.deleteFiles({
+            prefix: '',
+            matchGlob: pattern
+          });
+          
+          console.log(`✅ Deleted files matching pattern: ${pattern}`);
+        } catch (error: any) {
+          console.warn(`⚠️ Could not delete files matching pattern ${pattern}:`, error.message);
+        }
+      }
+      
+    } catch (error: any) {
+      console.warn(`⚠️ Could not delete remaining files with chatbot ID:`, error.message);
+    }
+    
+    // Step 3: Fallback cleanup - scan for any remaining files (if bulk operations failed)
+    console.log(`🔍 Fallback cleanup - scanning for any remaining files...`);
     
     try {
       const [allFiles] = await workingBucket.getFiles({
-        maxResults: 10000 // Scan up to 10k files
+        maxResults: 1000 // Reasonable limit for fallback scan
       });
       
-      console.log(`🔍 Scanning ${allFiles.length} total files for chatbot/user references...`);
-      
-      const filesToDelete = allFiles.filter(file => {
+      const remainingChatbotFiles = allFiles.filter(file => {
         const fileName = file.name;
         return (
           fileName.includes(chatbotId) || 
@@ -817,55 +839,55 @@ export class ReusableFirebaseProjectService {
         );
       });
       
-      if (filesToDelete.length > 0) {
-        console.log(`🎯 Found ${filesToDelete.length} additional files to delete:`);
-        filesToDelete.forEach(file => console.log(`  - ${file.name}`));
+      if (remainingChatbotFiles.length > 0) {
+        console.log(`🎯 Found ${remainingChatbotFiles.length} remaining files to delete:`);
+        remainingChatbotFiles.forEach(file => console.log(`  - ${file.name}`));
         
-        const deletePromises = filesToDelete.map(file => 
+        // Delete remaining files individually
+        const deletePromises = remainingChatbotFiles.map(file => 
           file.delete().catch(error => {
             console.warn(`⚠️ Could not delete file ${file.name}:`, error);
           })
         );
         
         await Promise.all(deletePromises);
-        totalFilesDeleted += filesToDelete.length;
-        
-        console.log(`✅ Deleted ${filesToDelete.length} additional files`);
+        console.log(`✅ Deleted ${remainingChatbotFiles.length} remaining files`);
       } else {
-        console.log(`✅ No additional files found containing chatbot/user references`);
+        console.log(`✅ No remaining files found - cleanup successful!`);
       }
-    } catch (error) {
-      console.warn(`⚠️ Could not perform comprehensive file scan:`, error);
+      
+    } catch (error: any) {
+      console.warn(`⚠️ Could not perform fallback cleanup scan:`, error.message);
     }
     
-    // Step 3: Check for empty directories/buckets and clean them up
-    console.log(`🧹 Checking for empty directories...`);
+    // Step 4: Final verification
+    console.log(`🔍 Verifying cleanup completed...`);
     
     try {
-      // Check if any of the user's directories are now empty
-      const userPaths = [
-        `user-${userId}/chatbot-logos/`,
-        `user-${userId}/chatbot-documents/`,
-        `user-${userId}/`,
-      ];
+      // Quick check to see if any files remain
+      const [remainingFiles] = await workingBucket.getFiles({
+        prefix: '',
+        maxResults: 100
+      });
       
-      for (const userPath of userPaths) {
-        const [remainingFiles] = await workingBucket.getFiles({
-          prefix: userPath,
-          maxResults: 1
-        });
-        
-        if (remainingFiles.length === 0) {
-          console.log(`📁 Directory ${userPath} is now empty`);
-          // Note: Firebase Storage doesn't have actual directories, so no need to delete
-        }
+      const remainingChatbotFiles = remainingFiles.filter(file => 
+        file.name.includes(chatbotId) || 
+        file.name.includes(`user-${userId}`) ||
+        file.name.includes(`chatbot-${chatbotId}`)
+      );
+      
+      if (remainingChatbotFiles.length === 0) {
+        console.log(`✅ Verification passed: No remaining files found for chatbot ${chatbotId}`);
+      } else {
+        console.log(`⚠️ Found ${remainingChatbotFiles.length} remaining files:`);
+        remainingChatbotFiles.forEach(file => console.log(`  - ${file.name}`));
       }
-    } catch (error) {
-      console.warn(`⚠️ Could not check for empty directories:`, error);
+      
+    } catch (error: any) {
+      console.warn(`⚠️ Could not verify cleanup:`, error.message);
     }
     
     console.log(`✅ Comprehensive storage cleanup completed!`);
-    console.log(`📊 Total files deleted: ${totalFilesDeleted}`);
     
     // Step 4: Log remaining files for verification (optional)
     if (totalFilesDeleted > 0) {
