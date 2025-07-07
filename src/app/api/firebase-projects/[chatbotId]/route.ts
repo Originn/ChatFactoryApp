@@ -129,8 +129,8 @@ export async function POST(
           console.log('🧹 Regular chatbot cleanup (preserves other data)');
           
           try {
-            // Use the cleanup service for reusable Firebase projects  
-            const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(chatbotId, userId);
+            // Use the cleanup service for reusable Firebase projects with aggressive cleanup
+            const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(chatbotId, userId, true);
             
             if (cleanupResult.success) {
               return NextResponse.json({

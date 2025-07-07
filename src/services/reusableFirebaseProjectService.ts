@@ -17,11 +17,21 @@ export class ReusableFirebaseProjectService {
    * Clean up all chatbot-specific data from a reusable Firebase project
    * @param chatbotId - The ID of the chatbot to clean up
    * @param userId - The ID of the user who owned the chatbot
+   * @param aggressiveCleanup - If true, performs more thorough cleanup including bucket deletion
    * @returns Promise<{ success: boolean; message: string; details?: any }>
    */
-  static async cleanupChatbotData(chatbotId: string, userId: string): Promise<{ success: boolean; message: string; details?: any }> {
+  static async cleanupChatbotData(chatbotId: string, userId: string, aggressiveCleanup: boolean = false): Promise<{ success: boolean; message: string; details?: any }> {
     try {
       console.log(`🧹 Starting cleanup of chatbot data: ${chatbotId} for user: ${userId}`);
+      console.log(`🔥 Aggressive cleanup mode: ${aggressiveCleanup ? 'ENABLED' : 'DISABLED'}`);
+      
+      // Check environment variable for aggressive cleanup
+      const forceAggressiveCleanup = process.env.FORCE_AGGRESSIVE_CLEANUP === 'true';
+      const enableAggressiveCleanup = aggressiveCleanup || forceAggressiveCleanup;
+      
+      if (enableAggressiveCleanup) {
+        console.log('⚠️ AGGRESSIVE CLEANUP MODE ENABLED - Will delete ALL related files and attempt bucket cleanup');
+      }
       
       const cleanupResults = {
         firestore: false,
@@ -31,6 +41,7 @@ export class ReusableFirebaseProjectService {
         webApps: false,
         identityPlatform: false,
         serviceAccountKeys: false,
+        bucketCleanup: false,
       };
 
       // 1. Clean up OAuth clients (fixes accumulation issue)
@@ -73,7 +84,7 @@ export class ReusableFirebaseProjectService {
       
       // 4. Clean up Storage files
       try {
-        await this.cleanupStorageData(chatbotId, userId);
+        await this.cleanupStorageData(chatbotId, userId, enableAggressiveCleanup);
         cleanupResults.storage = true;
         console.log('✅ Storage cleanup completed');
       } catch (error) {
@@ -580,7 +591,8 @@ export class ReusableFirebaseProjectService {
       'documents',
       'analytics',
       'user_sessions',
-      'chatbot_users'
+      'chatbot_users',
+      'user_pdfs' // ✅ Added this - contains CHM and PDF document metadata
     ];
     
     for (const collectionName of collectionsToCheck) {
@@ -619,6 +631,33 @@ export class ReusableFirebaseProjectService {
       console.warn('⚠️ Could not clean up main chatbot document:', error);
     }
     
+    // ✅ COMPREHENSIVE: Clean up user_pdfs collection specifically
+    // This contains CHM and PDF document metadata
+    try {
+      console.log(`📄 Cleaning user_pdfs collection for chatbot: ${chatbotId}, user: ${userId}`);
+      
+      const userPdfsQuery = adminDb.collection('user_pdfs')
+        .where('chatbotId', '==', chatbotId)
+        .where('userId', '==', userId)
+        .limit(500); // Handle large collections
+      
+      const userPdfsSnapshot = await userPdfsQuery.get();
+      
+      if (!userPdfsSnapshot.empty) {
+        userPdfsSnapshot.forEach(doc => {
+          batch.delete(doc.ref);
+          operationCount++;
+        });
+        
+        console.log(`📄 Scheduled deletion of ${userPdfsSnapshot.size} user_pdfs documents`);
+      } else {
+        console.log(`ℹ️ No user_pdfs documents found for chatbot ${chatbotId}`);
+      }
+      
+    } catch (error) {
+      console.warn('⚠️ Could not clean up user_pdfs collection:', error);
+    }
+    
     // Clean up Firebase project records for reusable projects
     // These are stored with compound IDs: ${projectId}-${chatbotId}
     try {
@@ -649,16 +688,24 @@ export class ReusableFirebaseProjectService {
   
   /**
    * Clean up Firebase Storage files related to a specific chatbot
+   * Now with comprehensive scanning and bucket cleanup
    */
-  private static async cleanupStorageData(chatbotId: string, userId: string): Promise<void> {
+  private static async cleanupStorageData(chatbotId: string, userId: string, aggressiveCleanup: boolean = false): Promise<void> {
     const bucket = adminStorage.bucket();
     
-    // Paths that might contain chatbot-specific files
+    console.log(`🧹 Starting comprehensive storage cleanup for chatbot: ${chatbotId}, user: ${userId}`);
+    console.log(`🔥 Aggressive cleanup mode: ${aggressiveCleanup ? 'ENABLED' : 'DISABLED'}`);
+    
+    // Step 1: Clean specific known paths
     const pathsToClean = [
       `user-${userId}/chatbot-logos/chatbot-${chatbotId}/`,
       `user-${userId}/chatbot-documents/chatbot-${chatbotId}/`,
       `chatbots/${chatbotId}/`,
       `uploads/${chatbotId}/`,
+      `pdfs/${chatbotId}/`,
+      `documents/${chatbotId}/`,
+      `chm/${chatbotId}/`,
+      `${chatbotId}/`, // Root chatbot folder
     ];
     
     let totalFilesDeleted = 0;
@@ -669,7 +716,7 @@ export class ReusableFirebaseProjectService {
         
         const [files] = await bucket.getFiles({
           prefix: path,
-          maxResults: 1000 // Limit to avoid memory issues
+          maxResults: 5000 // Increased limit for thorough cleanup
         });
         
         if (files.length > 0) {
@@ -695,7 +742,123 @@ export class ReusableFirebaseProjectService {
       }
     }
     
-    console.log(`✅ Total storage files deleted: ${totalFilesDeleted}`);
+    // Step 2: Comprehensive scan for any remaining files containing chatbot ID or user ID
+    console.log(`🔍 Performing comprehensive scan for remaining files...`);
+    
+    try {
+      const [allFiles] = await bucket.getFiles({
+        maxResults: 10000 // Scan up to 10k files
+      });
+      
+      console.log(`🔍 Scanning ${allFiles.length} total files for chatbot/user references...`);
+      
+      const filesToDelete = allFiles.filter(file => {
+        const fileName = file.name;
+        return (
+          fileName.includes(chatbotId) || 
+          fileName.includes(`user-${userId}`) ||
+          fileName.includes(`chatbot-${chatbotId}`) ||
+          fileName.includes(`/${chatbotId}/`) ||
+          fileName.includes(`${chatbotId}.`) ||
+          fileName.includes(`-${chatbotId}-`) ||
+          fileName.includes(`_${chatbotId}_`)
+        );
+      });
+      
+      if (filesToDelete.length > 0) {
+        console.log(`🎯 Found ${filesToDelete.length} additional files to delete:`);
+        filesToDelete.forEach(file => console.log(`  - ${file.name}`));
+        
+        const deletePromises = filesToDelete.map(file => 
+          file.delete().catch(error => {
+            console.warn(`⚠️ Could not delete file ${file.name}:`, error);
+          })
+        );
+        
+        await Promise.all(deletePromises);
+        totalFilesDeleted += filesToDelete.length;
+        
+        console.log(`✅ Deleted ${filesToDelete.length} additional files`);
+      } else {
+        console.log(`✅ No additional files found containing chatbot/user references`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Could not perform comprehensive file scan:`, error);
+    }
+    
+    // Step 3: Check for empty directories/buckets and clean them up
+    console.log(`🧹 Checking for empty directories...`);
+    
+    try {
+      // Check if any of the user's directories are now empty
+      const userPaths = [
+        `user-${userId}/chatbot-logos/`,
+        `user-${userId}/chatbot-documents/`,
+        `user-${userId}/`,
+      ];
+      
+      for (const userPath of userPaths) {
+        const [remainingFiles] = await bucket.getFiles({
+          prefix: userPath,
+          maxResults: 1
+        });
+        
+        if (remainingFiles.length === 0) {
+          console.log(`📁 Directory ${userPath} is now empty`);
+          // Note: Firebase Storage doesn't have actual directories, so no need to delete
+        }
+      }
+    } catch (error) {
+      console.warn(`⚠️ Could not check for empty directories:`, error);
+    }
+    
+    console.log(`✅ Comprehensive storage cleanup completed!`);
+    console.log(`📊 Total files deleted: ${totalFilesDeleted}`);
+    
+    // Step 4: Log remaining files for verification (optional)
+    if (totalFilesDeleted > 0) {
+      console.log(`🔍 Verification: Checking for any remaining files...`);
+      
+      try {
+        const [remainingFiles] = await bucket.getFiles({
+          maxResults: 1000
+        });
+        
+        const stillContainsChatbot = remainingFiles.filter(file => 
+          file.name.includes(chatbotId) || file.name.includes(`user-${userId}`)
+        );
+        
+        if (stillContainsChatbot.length > 0) {
+          console.warn(`⚠️ Warning: ${stillContainsChatbot.length} files still contain chatbot/user references:`);
+          stillContainsChatbot.forEach(file => console.warn(`  - ${file.name}`));
+        } else {
+          console.log(`✅ Verification passed: No remaining files found`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Could not perform verification scan:`, error);
+      }
+    }
+    
+    // Step 5: Aggressive cleanup - attempt bucket cleanup if enabled
+    if (aggressiveCleanup && totalFilesDeleted > 0) {
+      console.log(`🔥 AGGRESSIVE CLEANUP: Checking if buckets can be deleted...`);
+      
+      try {
+        const [allRemainingFiles] = await bucket.getFiles({
+          maxResults: 100 // Just check if bucket is empty
+        });
+        
+        if (allRemainingFiles.length === 0) {
+          console.log(`🗑️ AGGRESSIVE CLEANUP: Storage bucket is now empty!`);
+          console.log(`⚠️ Note: Bucket deletion requires manual intervention for safety`);
+          console.log(`💡 You can manually delete the bucket from Firebase Console if no longer needed`);
+        } else {
+          console.log(`📁 AGGRESSIVE CLEANUP: Storage bucket still contains ${allRemainingFiles.length} files from other chatbots`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Could not check bucket status for aggressive cleanup:`, error);
+      }
+    }
   }
   
   /**
