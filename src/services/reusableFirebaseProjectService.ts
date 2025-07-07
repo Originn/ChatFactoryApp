@@ -889,6 +889,55 @@ export class ReusableFirebaseProjectService {
     
     console.log(`✅ Comprehensive storage cleanup completed!`);
     
+    // Step 5: Detailed bucket inspection for debugging
+    console.log(`🔍 DEBUGGING: Final bucket inspection for chatbot ${chatbotId}...`);
+    
+    try {
+      // List all buckets in the project
+      const buckets = await projectSpecificStorage.getBuckets();
+      console.log(`📦 Found ${buckets[0].length} buckets in project ${reusableProjectId}:`);
+      
+      for (const bucket of buckets[0]) {
+        console.log(`  📦 Bucket: ${bucket.name}`);
+        
+        try {
+          // List files in each bucket
+          const [files] = await bucket.getFiles({
+            maxResults: 20 // Just show first 20 files
+          });
+          
+          console.log(`    📁 Contains ${files.length} files (showing first 20):`);
+          files.forEach((file, index) => {
+            if (index < 20) {
+              console.log(`      ${index + 1}. ${file.name}`);
+            }
+          });
+          
+          // Check for chatbot-specific files
+          const chatbotFiles = files.filter(file => 
+            file.name.includes(chatbotId) || 
+            file.name.includes(`user-${userId}`) ||
+            file.name.includes(`chatbot-${chatbotId}`)
+          );
+          
+          if (chatbotFiles.length > 0) {
+            console.log(`    ⚠️ FOUND ${chatbotFiles.length} CHATBOT-RELATED FILES:`);
+            chatbotFiles.forEach(file => console.log(`      🎯 ${file.name}`));
+          } else {
+            console.log(`    ✅ No chatbot-related files found in this bucket`);
+          }
+          
+        } catch (bucketError: any) {
+          console.log(`    ❌ Could not list files in bucket ${bucket.name}: ${bucketError.message}`);
+        }
+      }
+      
+    } catch (error: any) {
+      console.warn(`⚠️ Could not perform bucket inspection:`, error.message);
+    }
+    
+    console.log(`🔍 Bucket inspection completed for chatbot ${chatbotId}`);
+    
     // Step 4: Log remaining files for verification (optional)
     if (totalFilesDeleted > 0) {
       console.log(`🔍 Verification: Checking for any remaining files...`);
