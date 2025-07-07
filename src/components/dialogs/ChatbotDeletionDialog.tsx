@@ -45,22 +45,9 @@ export function ChatbotDeletionDialog({
           <ul className="text-sm text-gray-600 mb-4 space-y-1">
             <li>• Chatbot configuration and settings</li>
             <li>• Vercel deployment (if deployed)</li>
-            <li>• <strong>ALL Firebase storage files</strong> (comprehensive cleanup)</li>
+            <li>• Firebase storage files</li>
             <li>• Document metadata from database</li>
-            <li>• CHM and PDF conversion files</li>
           </ul>
-
-          <div className="p-3 bg-green-50 border border-green-200 rounded-md mb-4">
-            <p className="text-xs text-green-800">
-              ✅ <strong>Enhanced cleanup enabled:</strong> Now performs comprehensive scanning and deletion of all files related to this chatbot, including CHM conversions and document uploads.
-            </p>
-          </div>
-
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-md mb-4">
-            <p className="text-xs text-amber-800">
-              ⚠️ <strong>Manual cleanup may still be required:</strong> Empty storage buckets and unused Firebase projects may require manual deletion from the Firebase Console for complete cost optimization.
-            </p>
-          </div>
 
           {hasVectorstore && (
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
