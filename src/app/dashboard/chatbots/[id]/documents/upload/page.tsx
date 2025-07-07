@@ -62,6 +62,9 @@ export default function ChatbotDocumentUploadPage() {
       case 'generating_embeddings':
         return `Generating embeddings${file.embeddingModel ? ` with ${file.embeddingModel}` : ''}...`;
       case 'completed':
+        if (file.type === 'chm') {
+          return '✅ Conversion and ingestion completed successfully';
+        }
         return `✅ Completed! ${file.vectorCount || 0} vectors created${file.pineconeIndex ? ` in ${file.pineconeIndex}` : ''}`;
       case 'completed_pdf_only':
         return `✅ PDF created. Embeddings: ${file.embeddingError || 'Not configured'}`;

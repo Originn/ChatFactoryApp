@@ -463,7 +463,7 @@ For now, the PDF is stored and can be accessed directly.`;
           return {
             success: true,
             message: `CHM document processed successfully with embeddings`,
-            vectorCount: enhancedResult.pinecone_vectors_uploaded || enhancedResult.chunks_generated || 0,
+            vectorCount: enhancedResult.vectorCount || enhancedResult.pinecone_vectors_uploaded || enhancedResult.chunks_generated || 0,
             pdfUrl: `${CHM_CONVERTER_URL}/download/${enhancedResult.job_id}`, // PDF download URL
             mode: enhancedResult.mode || 'enhanced_complete' // ✅ Preserve mode from CHM container
           };
