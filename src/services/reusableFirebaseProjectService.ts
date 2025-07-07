@@ -717,34 +717,31 @@ export class ReusableFirebaseProjectService {
       credentials: credentials
     });
     
-    // Try different bucket names that might be used
-    const possibleBuckets = [
-      `${reusableProjectId}-chatbot-documents`,
-      `${reusableProjectId}.appspot.com`,
-      `${reusableProjectId}`,
-      `${reusableProjectId}-default-rtdb`,
-      `${reusableProjectId}-storage`,
-    ];
+    // Get ALL buckets in the project
+    let allBuckets;
+    try {
+      [allBuckets] = await projectSpecificStorage.getBuckets();
+      console.log(`📦 Found ${allBuckets.length} buckets in project ${reusableProjectId}`);
+    } catch (error: any) {
+      console.error(`❌ Could not list buckets in project ${reusableProjectId}:`, error.message);
+      return;
+    }
     
-    let workingBucket = null;
-    
-    // Find the correct bucket
-    for (const bucketName of possibleBuckets) {
+    // Process each bucket
+    for (const bucket of allBuckets) {
       try {
-        const bucket = projectSpecificStorage.bucket(bucketName);
-        await bucket.getMetadata();
-        workingBucket = bucket;
-        console.log(`✅ Found working bucket: ${bucketName}`);
-        break;
-      } catch (error) {
-        console.log(`⚠️ Bucket ${bucketName} not found or inaccessible`);
+        console.log(`\n🧹 Processing bucket: ${bucket.name}`);
+        await this.cleanupBucket(bucket, chatbotId, userId, aggressiveCleanup);
+      } catch (error: any) {
+        console.error(`❌ Error processing bucket ${bucket.name}:`, error.message);
       }
     }
     
-    if (!workingBucket) {
-      console.error('❌ No accessible storage bucket found for project:', reusableProjectId);
-      return;
-    }
+    console.log(`✅ Comprehensive storage cleanup completed across all buckets!`);
+  }
+  
+  private static async cleanupBucket(workingBucket: any, chatbotId: string, userId: string, aggressiveCleanup: boolean): Promise<void> {
+    console.log(`🧹 Cleaning bucket: ${workingBucket.name}`);
     
     // Step 1: Delete all files with prefixes (this deletes file content but may leave folder markers)
     const directoriesToCompletelyDelete = [
@@ -758,7 +755,7 @@ export class ReusableFirebaseProjectService {
       'chm/',
     ];
     
-    console.log(`🔥 STEP 1: Deleting all files with prefixes...`);
+    console.log(`🔥 STEP 1: Deleting all files with prefixes in bucket ${workingBucket.name}...`);
     
     for (const directory of directoriesToCompletelyDelete) {
       try {
@@ -777,7 +774,7 @@ export class ReusableFirebaseProjectService {
     }
     
     // Step 2: CRITICAL - Delete zero-byte placeholder objects that represent empty folders
-    console.log(`🔥 STEP 2: Deleting zero-byte placeholder objects (empty folder markers)...`);
+    console.log(`🔥 STEP 2: Deleting zero-byte placeholder objects in bucket ${workingBucket.name}...`);
     
     const folderPlaceholders = [
       'private_pdfs/',          // Zero-byte placeholder for private_pdfs folder
@@ -810,8 +807,6 @@ export class ReusableFirebaseProjectService {
       `${chatbotId}/`,
     ];
     
-    let totalFilesDeleted = 0;
-    
     for (const folder of specificFoldersToDelete) {
       try {
         console.log(`🗂️ Deleting remaining chatbot folder: ${folder}`);
@@ -828,8 +823,8 @@ export class ReusableFirebaseProjectService {
       }
     }
     
-    // Step 3: Nuclear option - delete ANY remaining files with chatbot/user patterns
-    console.log(`🔍 Cleaning up any remaining files with chatbot ID...`);
+    // Step 4: Nuclear option - delete ANY remaining files with chatbot/user patterns
+    console.log(`🔍 Cleaning up any remaining files with chatbot ID in bucket ${workingBucket.name}...`);
     
     try {
       // Use bulk deletion for efficiency - delete all files matching patterns
@@ -856,38 +851,44 @@ export class ReusableFirebaseProjectService {
       console.warn(`⚠️ Could not delete remaining files with chatbot ID:`, error.message);
     }
     
-    // Step 4: FINAL NUCLEAR CLEANUP - Delete EVERYTHING in the bucket
-    console.log(`💥 NUCLEAR CLEANUP: Deleting ALL files and folders in bucket...`);
+    // Step 5: If aggressive cleanup is enabled, perform nuclear cleanup
+    if (aggressiveCleanup) {
+      console.log(`💥 NUCLEAR CLEANUP: Deleting ALL files and folders in bucket ${workingBucket.name}...`);
+      
+      try {
+        // Get ALL files in the bucket (including hidden folder markers)
+        const [allFiles] = await workingBucket.getFiles({
+          maxResults: 10000, // Get everything
+          includeTrailingDelimiter: true, // Include folder delimiters
+          delimiter: '' // Don't treat anything as a delimiter
+        });
+        
+        console.log(`🔍 Found ${allFiles.length} total files/folders in bucket ${workingBucket.name}`);
+        
+        if (allFiles.length > 0) {
+          console.log(`💥 DELETING EVERYTHING: Removing ALL ${allFiles.length} files and folders...`);
+          
+          // Delete ALL files and folders
+          const deletePromises = allFiles.map(file => 
+            file.delete().catch(error => {
+              console.warn(`⚠️ Could not delete ${file.name}:`, error.message);
+            })
+          );
+          
+          await Promise.all(deletePromises);
+          console.log(`✅ DELETED ALL ${allFiles.length} files and folders from bucket ${workingBucket.name}`);
+          
+        } else {
+          console.log(`✅ Bucket ${workingBucket.name} is already empty`);
+        }
+        
+      } catch (error: any) {
+        console.warn(`⚠️ Could not perform nuclear cleanup on bucket ${workingBucket.name}:`, error.message);
+      }
+    }
     
-    try {
-      // Get ALL files in the bucket (including hidden folder markers)
-      const [allFiles] = await workingBucket.getFiles({
-        maxResults: 10000, // Get everything
-        includeTrailingDelimiter: true, // Include folder delimiters
-        delimiter: '' // Don't treat anything as a delimiter
-      });
-      
-      console.log(`🔍 Found ${allFiles.length} total files/folders in bucket`);
-      
-      if (allFiles.length > 0) {
-        console.log(`💥 DELETING EVERYTHING: Removing ALL ${allFiles.length} files and folders...`);
-        
-        // Delete ALL files and folders
-        const deletePromises = allFiles.map(file => 
-          file.delete().catch(error => {
-            console.warn(`⚠️ Could not delete ${file.name}:`, error.message);
-          })
-        );
-        
-        await Promise.all(deletePromises);
-        console.log(`✅ DELETED ALL ${allFiles.length} files and folders from bucket`);
-        
-        // Additional cleanup: Try to delete any remaining folder markers
-        try {
-          await workingBucket.deleteFiles({
-            prefix: '',
-            includeTrailingDelimiter: true
-          });
+    console.log(`✅ Bucket ${workingBucket.name} cleanup completed!`);
+  }
           console.log(`✅ Deleted any remaining folder markers`);
         } catch (error: any) {
           console.warn(`⚠️ Could not delete folder markers:`, error.message);
