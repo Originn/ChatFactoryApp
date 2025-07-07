@@ -403,9 +403,33 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                       Remove
                     </Button>
                   )}
+                  
+                  {(file.status === 'completed' || file.status === 'error') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => removeFile(file.id)}
+                      className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                    >
+                      Clear
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Clear All Button */}
+        {uploadedFiles.some(f => f.status === 'completed' || f.status === 'error') && (
+          <div className="flex justify-center mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setUploadedFiles(prev => prev.filter(f => f.status === 'pending'))}
+              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+            >
+              Clear All Completed
+            </Button>
           </div>
         )}
 

@@ -890,8 +890,8 @@ export default function ChatbotDetailPage() {
                     onUploadComplete={() => {
                       // Refresh the document list and update document count
                       setRefreshKey(prev => prev + 1);
-                      // Could also refresh chatbot data to update vectorstoreDocCount
-                      // but that might be overkill
+                      // Update the document count (increment by 1 for each successful upload)
+                      setVectorstoreDocCount(prev => prev + 1);
                     }}
                   />
 
