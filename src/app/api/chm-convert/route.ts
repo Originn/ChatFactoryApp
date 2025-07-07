@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CHMService } from '@/services/chmService';
+import { DatabaseService } from '@/services/databaseService';
 import { adminDb } from '@/lib/firebase/admin';
 
 export async function POST(request: NextRequest) {
@@ -144,6 +145,30 @@ export async function POST(request: NextRequest) {
     if (result.success) {
       // Job completed successfully
       console.log(`✅ Enhanced CHM processing completed: ${result.vectorCount} vectors created`);
+      
+      // 🔧 FIX: Save document metadata to database so it appears in Documents tab
+      try {
+        const pdfMetadataResult = await DatabaseService.createPDFMetadata({
+          userId,
+          chatbotId,
+          originalFileName: file.name,
+          pdfFileName: file.name.replace('.chm', '.pdf'),
+          isPublic,
+          firebaseStoragePath: result.pdfUrl || '', // Use PDF URL from CHM service
+          firebaseProjectId,
+          fileSize: file.size, // Use original CHM file size
+          status: 'completed',
+          vectorCount: result.vectorCount
+        });
+
+        if (pdfMetadataResult.success) {
+          console.log(`✅ Saved CHM document metadata to database: ${pdfMetadataResult.pdfId}`);
+        } else {
+          console.warn(`⚠️ Failed to save CHM document metadata: ${pdfMetadataResult.error}`);
+        }
+      } catch (metadataError) {
+        console.error('❌ Error saving CHM document metadata:', metadataError);
+      }
       
       return NextResponse.json({
         success: true,
