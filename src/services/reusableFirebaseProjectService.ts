@@ -756,6 +756,8 @@ export class ReusableFirebaseProjectService {
       `documents/${chatbotId}/`,
       `chm/${chatbotId}/`,
       `${chatbotId}/`, // Root chatbot folder
+      `public_pdfs/${chatbotId}/`, // CHM public files
+      `private_pdfs/${userId}/${chatbotId}/`, // CHM private files
     ];
     
     let totalFilesDeleted = 0;

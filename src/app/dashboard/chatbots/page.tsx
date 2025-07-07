@@ -76,6 +76,7 @@ export default function ChatbotsPage() {
     }
     
     setDeletingId(id);
+    let firebaseDeleteResult: any = null; // Declare at function scope
     
     try {
       // First, get the chatbot data to retrieve Vercel project info and user info
@@ -215,7 +216,7 @@ export default function ChatbotsPage() {
 
           // Get auth token from Firebase user
           const token = await user.getIdToken();
-          const firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(id, token);
+          firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(id, token);
           
           if (firebaseDeleteResult.success) {
             if (firebaseDeleteResult.error) {
@@ -307,8 +308,19 @@ export default function ChatbotsPage() {
         console.error('🔧 Firebase operation error details:', firebaseError);
       }
       
-      // Delete the document from Firestore
-      await deleteDoc(doc(db, "chatbots", id));
+      // Only delete from Firestore if Firebase project deletion didn't handle it
+      if (!firebaseDeleteResult?.success) {
+        try {
+          // Delete the document from Firestore
+          await deleteDoc(doc(db, "chatbots", id));
+          console.log('✅ Deleted chatbot document from Firestore');
+        } catch (firestoreError: any) {
+          console.warn('⚠️ Firestore deletion failed (document might already be deleted):', firestoreError.message);
+          // Don't throw error - chatbot might already be deleted by Firebase project cleanup
+        }
+      } else {
+        console.log('✅ Chatbot document already deleted by Firebase project cleanup');
+      }
       
       // Update local state
       setChatbots(chatbots.filter(chatbot => chatbot.id !== id));
