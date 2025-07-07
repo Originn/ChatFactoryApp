@@ -746,51 +746,60 @@ export class ReusableFirebaseProjectService {
       return;
     }
     
-    // Step 1: Delete entire folders containing chatbot data
-    const foldersToDelete = [
-      `user-${userId}/chatbot-logos/chatbot-${chatbotId}/`,
-      `user-${userId}/chatbot-documents/chatbot-${chatbotId}/`,
-      `chatbots/${chatbotId}/`,
-      `uploads/${chatbotId}/`,
-      `pdfs/${chatbotId}/`,
-      `documents/${chatbotId}/`,
-      `chm/${chatbotId}/`,
+    // Step 1: AGGRESSIVE CLEANUP - Delete entire directories since project is recycled
+    const directoriesToCompletelyDelete = [
+      `private_pdfs/`, // Delete ALL private PDFs from all users
+      `public_pdfs/`, // Delete ALL public PDFs 
+      `user-${userId}/`, // Delete ALL user-specific folders
+      `chatbots/`, // Delete ALL chatbot folders
+      `uploads/`, // Delete ALL upload folders
+      `pdfs/`, // Delete ALL PDF folders
+      `documents/`, // Delete ALL document folders
+      `chm/`, // Delete ALL CHM folders
+    ];
+    
+    console.log(`🔥 AGGRESSIVE CLEANUP: Deleting entire directories for project recycling...`);
+    
+    for (const directory of directoriesToCompletelyDelete) {
+      try {
+        console.log(`🗂️ Deleting entire directory: ${directory}`);
+        
+        // Delete ALL files in the directory
+        await workingBucket.deleteFiles({
+          prefix: directory
+        });
+        
+        console.log(`✅ Deleted entire directory: ${directory}`);
+        
+      } catch (error: any) {
+        console.warn(`⚠️ Could not delete directory ${directory}:`, error.message);
+      }
+    }
+    
+    // Step 2: Also delete individual chatbot folders (legacy cleanup)
+    const specificFoldersToDelete = [
       `${chatbotId}/`, // Root chatbot folder
-      `public_pdfs/${chatbotId}/`, // CHM public files
-      `private_pdfs/${userId}/${chatbotId}/`, // CHM private files
     ];
     
     let totalFilesDeleted = 0;
     
-    for (const folderPath of foldersToDelete) {
+    for (const folder of specificFoldersToDelete) {
       try {
-        console.log(`🗂️ Deleting entire folder: ${folderPath}`);
+        console.log(`🗂️ Deleting remaining chatbot folder: ${folder}`);
         
-        // Delete all files in the folder (this deletes the entire folder)
+        // Delete all files in the folder
         await workingBucket.deleteFiles({
-          prefix: folderPath
+          prefix: folder
         });
         
-        console.log(`✅ Deleted entire folder: ${folderPath}`);
-        
-        // Count files for reporting (optional)
-        const [files] = await workingBucket.getFiles({
-          prefix: folderPath,
-          maxResults: 1
-        });
-        
-        if (files.length === 0) {
-          console.log(`✅ Verified folder ${folderPath} is empty`);
-        } else {
-          console.log(`⚠️ Some files may remain in ${folderPath}`);
-        }
+        console.log(`✅ Deleted chatbot folder: ${folder}`);
         
       } catch (error: any) {
-        console.warn(`⚠️ Could not delete folder ${folderPath}:`, error.message);
+        console.warn(`⚠️ Could not delete folder ${folder}:`, error.message);
       }
     }
     
-    // Step 2: Delete any remaining files with chatbot ID anywhere in the bucket
+    // Step 3: Nuclear option - delete ANY remaining files with chatbot/user patterns
     console.log(`🔍 Cleaning up any remaining files with chatbot ID...`);
     
     try {
@@ -818,69 +827,52 @@ export class ReusableFirebaseProjectService {
       console.warn(`⚠️ Could not delete remaining files with chatbot ID:`, error.message);
     }
     
-    // Step 3: Fallback cleanup - scan for any remaining files (if bulk operations failed)
-    console.log(`🔍 Fallback cleanup - scanning for any remaining files...`);
+    // Step 4: FINAL NUCLEAR CLEANUP - Delete everything that might be left
+    console.log(`💥 FINAL CLEANUP: Scanning for any remaining files...`);
     
     try {
+      // Get all files in the bucket
       const [allFiles] = await workingBucket.getFiles({
-        maxResults: 1000 // Reasonable limit for fallback scan
+        maxResults: 5000 // Scan up to 5000 files
       });
       
-      const remainingChatbotFiles = allFiles.filter(file => {
-        const fileName = file.name;
-        return (
-          fileName.includes(chatbotId) || 
-          fileName.includes(`user-${userId}`) ||
-          fileName.includes(`chatbot-${chatbotId}`) ||
-          fileName.includes(`/${chatbotId}/`) ||
-          fileName.includes(`${chatbotId}.`) ||
-          fileName.includes(`-${chatbotId}-`) ||
-          fileName.includes(`_${chatbotId}_`)
-        );
-      });
+      console.log(`🔍 Found ${allFiles.length} total files in bucket`);
       
-      if (remainingChatbotFiles.length > 0) {
-        console.log(`🎯 Found ${remainingChatbotFiles.length} remaining files to delete:`);
-        remainingChatbotFiles.forEach(file => console.log(`  - ${file.name}`));
+      if (allFiles.length > 0) {
+        console.log(`💥 NUCLEAR CLEANUP: Deleting ALL remaining files in bucket...`);
         
-        // Delete remaining files individually
-        const deletePromises = remainingChatbotFiles.map(file => 
+        // Delete ALL files (nuclear option for project recycling)
+        const deletePromises = allFiles.map(file => 
           file.delete().catch(error => {
             console.warn(`⚠️ Could not delete file ${file.name}:`, error);
           })
         );
         
         await Promise.all(deletePromises);
-        console.log(`✅ Deleted ${remainingChatbotFiles.length} remaining files`);
+        console.log(`✅ Deleted ALL ${allFiles.length} files from bucket`);
       } else {
-        console.log(`✅ No remaining files found - cleanup successful!`);
+        console.log(`✅ Bucket is already empty`);
       }
       
     } catch (error: any) {
-      console.warn(`⚠️ Could not perform fallback cleanup scan:`, error.message);
+      console.warn(`⚠️ Could not perform nuclear cleanup:`, error.message);
     }
     
-    // Step 4: Final verification
+    // Step 5: Final verification - should be empty now
     console.log(`🔍 Verifying cleanup completed...`);
     
     try {
       // Quick check to see if any files remain
       const [remainingFiles] = await workingBucket.getFiles({
         prefix: '',
-        maxResults: 100
+        maxResults: 10
       });
       
-      const remainingChatbotFiles = remainingFiles.filter(file => 
-        file.name.includes(chatbotId) || 
-        file.name.includes(`user-${userId}`) ||
-        file.name.includes(`chatbot-${chatbotId}`)
-      );
-      
-      if (remainingChatbotFiles.length === 0) {
-        console.log(`✅ Verification passed: No remaining files found for chatbot ${chatbotId}`);
+      if (remainingFiles.length === 0) {
+        console.log(`✅ PERFECT: Bucket is completely empty - ready for recycling!`);
       } else {
-        console.log(`⚠️ Found ${remainingChatbotFiles.length} remaining files:`);
-        remainingChatbotFiles.forEach(file => console.log(`  - ${file.name}`));
+        console.log(`⚠️ Found ${remainingFiles.length} remaining files:`);
+        remainingFiles.forEach(file => console.log(`  - ${file.name}`));
       }
       
     } catch (error: any) {
