@@ -870,7 +870,7 @@ export class ReusableFirebaseProjectService {
       console.log(`🔍 Verification: Checking for any remaining files...`);
       
       try {
-        const [remainingFiles] = await bucket.getFiles({
+        const [remainingFiles] = await workingBucket.getFiles({
           maxResults: 1000
         });
         
@@ -894,7 +894,7 @@ export class ReusableFirebaseProjectService {
       console.log(`🔥 AGGRESSIVE CLEANUP: Checking if buckets can be deleted...`);
       
       try {
-        const [allRemainingFiles] = await bucket.getFiles({
+        const [allRemainingFiles] = await workingBucket.getFiles({
           maxResults: 100 // Just check if bucket is empty
         });
         
