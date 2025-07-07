@@ -746,7 +746,7 @@ export class ReusableFirebaseProjectService {
       return;
     }
     
-    // Step 1: CORRECT WAY - Use bucket.deleteFiles() method with prefix
+    // Step 1: Delete all files with prefixes (this deletes file content but may leave folder markers)
     const directoriesToCompletelyDelete = [
       'private_pdfs/',
       'public_pdfs/',
@@ -758,26 +758,56 @@ export class ReusableFirebaseProjectService {
       'chm/',
     ];
     
-    console.log(`🔥 CORRECT FOLDER DELETION: Using bucket.deleteFiles() with prefix...`);
+    console.log(`🔥 STEP 1: Deleting all files with prefixes...`);
     
     for (const directory of directoriesToCompletelyDelete) {
       try {
-        console.log(`🗂️ Deleting directory: ${directory}`);
+        console.log(`🗂️ Deleting files in: ${directory}`);
         
-        // THIS IS THE CORRECT WAY TO DELETE FOLDERS
         await workingBucket.deleteFiles({ 
           prefix: directory,
           force: true 
         });
         
-        console.log(`✅ Deleted directory: ${directory}`);
+        console.log(`✅ Deleted files in: ${directory}`);
         
       } catch (error: any) {
-        console.warn(`⚠️ Could not delete directory ${directory}:`, error.message);
+        console.warn(`⚠️ Could not delete files in ${directory}:`, error.message);
       }
     }
     
-    // Step 2: Also delete individual chatbot folders
+    // Step 2: CRITICAL - Delete folder marker files that make folders appear in UI
+    console.log(`🔥 STEP 2: Deleting folder marker files...`);
+    
+    const folderMarkers = [
+      'private_pdfs/',          // Direct folder marker
+      'public_pdfs/',           // Direct folder marker
+      `user-${userId}/`,        // User folder marker
+      'chatbots/',              // Chatbots folder marker
+      'uploads/',               // Uploads folder marker
+      'pdfs/',                  // PDFs folder marker
+      'documents/',             // Documents folder marker
+      'chm/',                   // CHM folder marker
+    ];
+    
+    for (const marker of folderMarkers) {
+      try {
+        console.log(`📁 Deleting folder marker: ${marker}`);
+        
+        // Delete the marker file that represents the empty folder
+        const markerFile = workingBucket.file(marker);
+        await markerFile.delete().catch(() => {
+          // Ignore if marker doesn't exist
+        });
+        
+        console.log(`✅ Deleted folder marker: ${marker}`);
+        
+      } catch (error: any) {
+        console.warn(`⚠️ Could not delete folder marker ${marker}:`, error.message);
+      }
+    }
+    
+    // Step 3: Also delete individual chatbot folders
     const specificFoldersToDelete = [
       `${chatbotId}/`,
     ];

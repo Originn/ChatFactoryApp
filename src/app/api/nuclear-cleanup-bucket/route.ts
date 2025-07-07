@@ -86,17 +86,73 @@ export async function POST(request: NextRequest) {
       console.warn(`⚠️ Could not clean folder patterns:`, error.message);
     }
     
-    // Final verification
+    // Method 4: CRITICAL - Delete folder marker files that make folders appear in UI
+    console.log(`🔥 Method 4: Deleting folder marker files...`);
+    
+    const folderMarkers = [
+      'private_pdfs/',
+      'public_pdfs/',
+      'user-',
+      'chatbots/',
+      'uploads/',
+      'pdfs/',
+      'documents/',
+      'chm/'
+    ];
+    
+    for (const marker of folderMarkers) {
+      try {
+        // Delete the marker file that represents the empty folder
+        const markerFile = bucket.file(marker);
+        await markerFile.delete().catch(() => {
+          // Ignore if marker doesn't exist
+        });
+        
+        console.log(`✅ Deleted folder marker: ${marker}`);
+      } catch (error: any) {
+        console.warn(`⚠️ Could not delete folder marker ${marker}:`, error.message);
+      }
+    }
+    
+    // Method 5: Delete any remaining marker files with common patterns
+    console.log(`🔥 Method 5: Deleting any remaining marker files...`);
+    
     const [remainingFiles] = await bucket.getFiles({
+      maxResults: 1000
+    });
+    
+    // Look for files that end with '/' (folder markers) or are empty
+    const markerFiles = remainingFiles.filter(file => 
+      file.name.endsWith('/') || 
+      file.name.includes('_$folder$') ||
+      file.name.includes('.folder')
+    );
+    
+    if (markerFiles.length > 0) {
+      console.log(`📁 Found ${markerFiles.length} folder marker files to delete:`);
+      markerFiles.forEach(file => console.log(`  - ${file.name}`));
+      
+      const deletePromises = markerFiles.map(file => 
+        file.delete().catch(error => {
+          console.warn(`⚠️ Could not delete marker file ${file.name}:`, error.message);
+        })
+      );
+      
+      await Promise.all(deletePromises);
+      console.log(`✅ Deleted ${markerFiles.length} folder marker files`);
+    }
+    
+    // Final verification
+    const [finalFiles] = await bucket.getFiles({
       maxResults: 10
     });
     
-    console.log(`🔍 Final check: ${remainingFiles.length} files remaining`);
+    console.log(`🔍 Final check: ${finalFiles.length} files remaining`);
     
     return NextResponse.json({
       success: true,
-      message: `Nuclear cleanup completed. Deleted ${files.length} files. ${remainingFiles.length} files remaining.`,
-      remainingFiles: remainingFiles.map(f => f.name)
+      message: `Nuclear cleanup completed. ${finalFiles.length} files remaining after cleaning folder markers.`,
+      remainingFiles: finalFiles.map(f => f.name)
     });
     
   } catch (error: any) {
