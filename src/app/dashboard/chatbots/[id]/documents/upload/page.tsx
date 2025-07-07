@@ -54,7 +54,7 @@ export default function ChatbotDocumentUploadPage() {
   const getStatusMessage = (file: UploadedFile) => {
     switch(file.status) {
       case 'pending':
-        return 'Preparing upload...';
+        return 'Ready to upload';
       case 'uploading':
         return 'Uploading file...';
       case 'converting_chm':
