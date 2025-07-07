@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
         fileName: file.name.replace('.chm', '.pdf'),
         embeddingConfig: `${embeddingProvider}/${embeddingModel}`,
         vectorstore: vectorstore.indexName,
-        mode: 'enhanced'
+        mode: result.mode || 'enhanced_complete' // ✅ Use mode from CHM service result
       });
     } else if (result.jobId) {
       // Job is queued or processing - return job info for polling
