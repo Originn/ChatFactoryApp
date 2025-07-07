@@ -86,10 +86,10 @@ export async function POST(request: NextRequest) {
       console.warn(`⚠️ Could not clean folder patterns:`, error.message);
     }
     
-    // Method 4: CRITICAL - Delete folder marker files that make folders appear in UI
-    console.log(`🔥 Method 4: Deleting folder marker files...`);
+    // Method 4: CRITICAL - Delete zero-byte placeholder objects (Google's official solution)
+    console.log(`🔥 Method 4: Deleting zero-byte placeholder objects...`);
     
-    const folderMarkers = [
+    const folderPlaceholders = [
       'private_pdfs/',
       'public_pdfs/',
       'user-',
@@ -100,46 +100,50 @@ export async function POST(request: NextRequest) {
       'chm/'
     ];
     
-    for (const marker of folderMarkers) {
+    for (const placeholder of folderPlaceholders) {
       try {
-        // Delete the marker file that represents the empty folder
-        const markerFile = bucket.file(marker);
-        await markerFile.delete().catch(() => {
-          // Ignore if marker doesn't exist
-        });
+        // Delete the zero-byte placeholder object that represents the empty folder
+        const placeholderFile = bucket.file(placeholder);
+        await placeholderFile.delete({ ignoreNotFound: true });
         
-        console.log(`✅ Deleted folder marker: ${marker}`);
+        console.log(`✅ Deleted zero-byte placeholder: ${placeholder}`);
       } catch (error: any) {
-        console.warn(`⚠️ Could not delete folder marker ${marker}:`, error.message);
+        console.warn(`⚠️ Could not delete placeholder ${placeholder}:`, error.message);
       }
     }
     
-    // Method 5: Delete any remaining marker files with common patterns
-    console.log(`🔥 Method 5: Deleting any remaining marker files...`);
+    // Method 5: Scan for any remaining zero-byte placeholder objects
+    console.log(`🔥 Method 5: Scanning for remaining zero-byte placeholder objects...`);
     
     const [remainingFiles] = await bucket.getFiles({
       maxResults: 1000
     });
     
-    // Look for files that end with '/' (folder markers) or are empty
-    const markerFiles = remainingFiles.filter(file => 
-      file.name.endsWith('/') || 
-      file.name.includes('_$folder$') ||
-      file.name.includes('.folder')
-    );
+    // Look for zero-byte files that end with '/' (folder placeholders)
+    const placeholderFiles = remainingFiles.filter(file => {
+      const metadata = file.metadata;
+      return (
+        file.name.endsWith('/') ||                    // Ends with slash (folder marker)
+        (metadata && metadata.size === '0') ||        // Zero-byte file
+        file.name.includes('_$folder$') ||            // Common folder marker pattern
+        file.name.includes('.folder')                 // Another folder marker pattern
+      );
+    });
     
-    if (markerFiles.length > 0) {
-      console.log(`📁 Found ${markerFiles.length} folder marker files to delete:`);
-      markerFiles.forEach(file => console.log(`  - ${file.name}`));
+    if (placeholderFiles.length > 0) {
+      console.log(`📁 Found ${placeholderFiles.length} zero-byte placeholder files to delete:`);
+      placeholderFiles.forEach(file => console.log(`  - ${file.name} (size: ${file.metadata?.size || 'unknown'})`));
       
-      const deletePromises = markerFiles.map(file => 
-        file.delete().catch(error => {
-          console.warn(`⚠️ Could not delete marker file ${file.name}:`, error.message);
+      const deletePromises = placeholderFiles.map(file => 
+        file.delete({ ignoreNotFound: true }).catch(error => {
+          console.warn(`⚠️ Could not delete placeholder file ${file.name}:`, error.message);
         })
       );
       
       await Promise.all(deletePromises);
-      console.log(`✅ Deleted ${markerFiles.length} folder marker files`);
+      console.log(`✅ Deleted ${placeholderFiles.length} zero-byte placeholder files`);
+    } else {
+      console.log(`✅ No zero-byte placeholder files found`);
     }
     
     // Final verification
@@ -148,11 +152,15 @@ export async function POST(request: NextRequest) {
     });
     
     console.log(`🔍 Final check: ${finalFiles.length} files remaining`);
+    if (finalFiles.length > 0) {
+      console.log(`📋 Remaining files:`);
+      finalFiles.forEach(file => console.log(`  - ${file.name} (size: ${file.metadata?.size || 'unknown'})`));
+    }
     
     return NextResponse.json({
       success: true,
-      message: `Nuclear cleanup completed. ${finalFiles.length} files remaining after cleaning folder markers.`,
-      remainingFiles: finalFiles.map(f => f.name)
+      message: `Nuclear cleanup completed. Deleted zero-byte placeholder objects. ${finalFiles.length} files remaining.`,
+      remainingFiles: finalFiles.map(f => ({ name: f.name, size: f.metadata?.size || 'unknown' }))
     });
     
   } catch (error: any) {

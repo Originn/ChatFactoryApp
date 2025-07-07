@@ -776,34 +776,32 @@ export class ReusableFirebaseProjectService {
       }
     }
     
-    // Step 2: CRITICAL - Delete folder marker files that make folders appear in UI
-    console.log(`🔥 STEP 2: Deleting folder marker files...`);
+    // Step 2: CRITICAL - Delete zero-byte placeholder objects that represent empty folders
+    console.log(`🔥 STEP 2: Deleting zero-byte placeholder objects (empty folder markers)...`);
     
-    const folderMarkers = [
-      'private_pdfs/',          // Direct folder marker
-      'public_pdfs/',           // Direct folder marker
-      `user-${userId}/`,        // User folder marker
-      'chatbots/',              // Chatbots folder marker
-      'uploads/',               // Uploads folder marker
-      'pdfs/',                  // PDFs folder marker
-      'documents/',             // Documents folder marker
-      'chm/',                   // CHM folder marker
+    const folderPlaceholders = [
+      'private_pdfs/',          // Zero-byte placeholder for private_pdfs folder
+      'public_pdfs/',           // Zero-byte placeholder for public_pdfs folder
+      `user-${userId}/`,        // Zero-byte placeholder for user folder
+      'chatbots/',              // Zero-byte placeholder for chatbots folder
+      'uploads/',               // Zero-byte placeholder for uploads folder
+      'pdfs/',                  // Zero-byte placeholder for pdfs folder
+      'documents/',             // Zero-byte placeholder for documents folder
+      'chm/',                   // Zero-byte placeholder for chm folder
     ];
     
-    for (const marker of folderMarkers) {
+    for (const placeholder of folderPlaceholders) {
       try {
-        console.log(`📁 Deleting folder marker: ${marker}`);
+        console.log(`📁 Deleting zero-byte placeholder: ${placeholder}`);
         
-        // Delete the marker file that represents the empty folder
-        const markerFile = workingBucket.file(marker);
-        await markerFile.delete().catch(() => {
-          // Ignore if marker doesn't exist
-        });
+        // Delete the zero-byte placeholder object that represents the empty folder
+        const placeholderFile = workingBucket.file(placeholder);
+        await placeholderFile.delete({ ignoreNotFound: true });
         
-        console.log(`✅ Deleted folder marker: ${marker}`);
+        console.log(`✅ Deleted zero-byte placeholder: ${placeholder}`);
         
       } catch (error: any) {
-        console.warn(`⚠️ Could not delete folder marker ${marker}:`, error.message);
+        console.warn(`⚠️ Could not delete placeholder ${placeholder}:`, error.message);
       }
     }
     
