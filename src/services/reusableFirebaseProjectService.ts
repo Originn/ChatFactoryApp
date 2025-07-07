@@ -827,29 +827,43 @@ export class ReusableFirebaseProjectService {
       console.warn(`⚠️ Could not delete remaining files with chatbot ID:`, error.message);
     }
     
-    // Step 4: FINAL NUCLEAR CLEANUP - Delete everything that might be left
-    console.log(`💥 FINAL CLEANUP: Scanning for any remaining files...`);
+    // Step 4: FINAL NUCLEAR CLEANUP - Delete EVERYTHING in the bucket
+    console.log(`💥 NUCLEAR CLEANUP: Deleting ALL files and folders in bucket...`);
     
     try {
-      // Get all files in the bucket
+      // Get ALL files in the bucket (including hidden folder markers)
       const [allFiles] = await workingBucket.getFiles({
-        maxResults: 5000 // Scan up to 5000 files
+        maxResults: 10000, // Get everything
+        includeTrailingDelimiter: true, // Include folder delimiters
+        delimiter: '' // Don't treat anything as a delimiter
       });
       
-      console.log(`🔍 Found ${allFiles.length} total files in bucket`);
+      console.log(`🔍 Found ${allFiles.length} total files/folders in bucket`);
       
       if (allFiles.length > 0) {
-        console.log(`💥 NUCLEAR CLEANUP: Deleting ALL remaining files in bucket...`);
+        console.log(`💥 DELETING EVERYTHING: Removing ALL ${allFiles.length} files and folders...`);
         
-        // Delete ALL files (nuclear option for project recycling)
+        // Delete ALL files and folders
         const deletePromises = allFiles.map(file => 
           file.delete().catch(error => {
-            console.warn(`⚠️ Could not delete file ${file.name}:`, error);
+            console.warn(`⚠️ Could not delete ${file.name}:`, error.message);
           })
         );
         
         await Promise.all(deletePromises);
-        console.log(`✅ Deleted ALL ${allFiles.length} files from bucket`);
+        console.log(`✅ DELETED ALL ${allFiles.length} files and folders from bucket`);
+        
+        // Additional cleanup: Try to delete any remaining folder markers
+        try {
+          await workingBucket.deleteFiles({
+            prefix: '',
+            includeTrailingDelimiter: true
+          });
+          console.log(`✅ Deleted any remaining folder markers`);
+        } catch (error: any) {
+          console.warn(`⚠️ Could not delete folder markers:`, error.message);
+        }
+        
       } else {
         console.log(`✅ Bucket is already empty`);
       }
