@@ -28,48 +28,39 @@ export async function POST(request: NextRequest) {
     
     const bucket = storage.bucket(bucketName);
     
-    // Method 1: Delete all files using bulk operation
-    console.log(`🔥 Method 1: Bulk deleting all files...`);
+    // Method 1: CORRECT WAY - Use bucket.deleteFiles() to delete everything
+    console.log(`🔥 Method 1: Using bucket.deleteFiles() to delete everything...`);
     try {
       await bucket.deleteFiles({
-        force: true,
-        maxResults: 10000
+        force: true
       });
-      console.log(`✅ Bulk deletion completed`);
+      console.log(`✅ Bulk deletion completed using deleteFiles()`);
     } catch (error: any) {
       console.warn(`⚠️ Bulk deletion failed:`, error.message);
     }
     
-    // Method 2: List and delete everything individually
-    console.log(`🔥 Method 2: Individual file deletion...`);
-    const [files] = await bucket.getFiles({
-      maxResults: 10000,
-      includeTrailingDelimiter: true,
-      delimiter: ''
-    });
+    // Method 2: Fallback - List and delete everything individually (if Method 1 fails)
+    console.log(`🔥 Method 2: Fallback individual file deletion...`);
+    const [files] = await bucket.getFiles();
     
-    console.log(`📋 Found ${files.length} files/folders to delete`);
+    console.log(`📋 Found ${files.length} files to delete`);
     
     if (files.length > 0) {
-      // Delete in batches of 100
-      const batchSize = 100;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
-        const deletePromises = batch.map(file => 
-          file.delete().catch(error => {
-            console.warn(`⚠️ Could not delete ${file.name}:`, error.message);
-          })
-        );
-        
-        await Promise.all(deletePromises);
-        console.log(`✅ Deleted batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(files.length/batchSize)}`);
-      }
+      // Delete files individually as fallback
+      const deletePromises = files.map(file => 
+        file.delete().catch(error => {
+          console.warn(`⚠️ Could not delete ${file.name}:`, error.message);
+        })
+      );
+      
+      await Promise.all(deletePromises);
+      console.log(`✅ Deleted ${files.length} files individually`);
     }
     
-    // Method 3: Try to delete any remaining folder markers
-    console.log(`🔥 Method 3: Cleaning folder markers...`);
+    // Method 3: CORRECT WAY - Use deleteFiles() for specific folder patterns
+    console.log(`🔥 Method 3: Using deleteFiles() for folder patterns...`);
     try {
-      const folderMarkers = [
+      const folderPatterns = [
         'private_pdfs/',
         'public_pdfs/',
         'user-',
@@ -80,19 +71,19 @@ export async function POST(request: NextRequest) {
         'chm/'
       ];
       
-      for (const marker of folderMarkers) {
+      for (const pattern of folderPatterns) {
         try {
           await bucket.deleteFiles({
-            prefix: marker,
+            prefix: pattern,
             force: true
           });
-          console.log(`✅ Cleaned folder marker: ${marker}`);
+          console.log(`✅ Deleted folder pattern: ${pattern}`);
         } catch (error: any) {
-          console.warn(`⚠️ Could not clean ${marker}:`, error.message);
+          console.warn(`⚠️ Could not delete pattern ${pattern}:`, error.message);
         }
       }
     } catch (error: any) {
-      console.warn(`⚠️ Could not clean folder markers:`, error.message);
+      console.warn(`⚠️ Could not clean folder patterns:`, error.message);
     }
     
     // Final verification

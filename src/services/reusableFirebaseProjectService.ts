@@ -746,39 +746,40 @@ export class ReusableFirebaseProjectService {
       return;
     }
     
-    // Step 1: AGGRESSIVE CLEANUP - Delete entire directories since project is recycled
+    // Step 1: CORRECT WAY - Use bucket.deleteFiles() method with prefix
     const directoriesToCompletelyDelete = [
-      `private_pdfs/`, // Delete ALL private PDFs from all users
-      `public_pdfs/`, // Delete ALL public PDFs 
-      `user-${userId}/`, // Delete ALL user-specific folders
-      `chatbots/`, // Delete ALL chatbot folders
-      `uploads/`, // Delete ALL upload folders
-      `pdfs/`, // Delete ALL PDF folders
-      `documents/`, // Delete ALL document folders
-      `chm/`, // Delete ALL CHM folders
+      'private_pdfs/',
+      'public_pdfs/',
+      `user-${userId}/`,
+      'chatbots/',
+      'uploads/',
+      'pdfs/',
+      'documents/',
+      'chm/',
     ];
     
-    console.log(`🔥 AGGRESSIVE CLEANUP: Deleting entire directories for project recycling...`);
+    console.log(`🔥 CORRECT FOLDER DELETION: Using bucket.deleteFiles() with prefix...`);
     
     for (const directory of directoriesToCompletelyDelete) {
       try {
-        console.log(`🗂️ Deleting entire directory: ${directory}`);
+        console.log(`🗂️ Deleting directory: ${directory}`);
         
-        // Delete ALL files in the directory
-        await workingBucket.deleteFiles({
-          prefix: directory
+        // THIS IS THE CORRECT WAY TO DELETE FOLDERS
+        await workingBucket.deleteFiles({ 
+          prefix: directory,
+          force: true 
         });
         
-        console.log(`✅ Deleted entire directory: ${directory}`);
+        console.log(`✅ Deleted directory: ${directory}`);
         
       } catch (error: any) {
         console.warn(`⚠️ Could not delete directory ${directory}:`, error.message);
       }
     }
     
-    // Step 2: Also delete individual chatbot folders (legacy cleanup)
+    // Step 2: Also delete individual chatbot folders
     const specificFoldersToDelete = [
-      `${chatbotId}/`, // Root chatbot folder
+      `${chatbotId}/`,
     ];
     
     let totalFilesDeleted = 0;
