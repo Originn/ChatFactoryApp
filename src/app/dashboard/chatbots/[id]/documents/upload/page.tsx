@@ -13,11 +13,18 @@ interface UploadedFile {
   file: File;
   id: string;
   type: 'regular' | 'chm' | 'pdf';
-  status: 'pending' | 'uploading' | 'converting' | 'completed' | 'error';
+  status: 'pending' | 'uploading' | 'converting' | 'converting_chm' | 'generating_embeddings' | 'completed' | 'completed_pdf_only' | 'error';
   progress?: number;
   jobId?: string;
   error?: string;
-  isPublic: boolean; // ✨ Track public/private access choice (default false)
+  isPublic: boolean;
+  // Enhanced fields for CHM pipeline tracking
+  vectorCount?: number;
+  embeddingModel?: string;
+  embeddingError?: string;
+  pipelineStage?: 'chm_conversion' | 'embedding_generation' | 'completed';
+  pineconeIndex?: string;
+  mode?: 'enhanced_complete' | 'pdf_only' | 'legacy';
 }
 
 export default function ChatbotDocumentUploadPage() {
@@ -28,6 +35,42 @@ export default function ChatbotDocumentUploadPage() {
   
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Helper functions for enhanced progress tracking
+  const getProgressForCHM = (status: string, elapsed: number) => {
+    switch(status) {
+      case 'converting_chm': 
+        return Math.min(10 + (elapsed * 0.8), 60); // 10-60% for CHM→PDF
+      case 'generating_embeddings':
+        return Math.min(60 + (elapsed * 0.4), 95);  // 60-95% for embeddings
+      case 'completed':
+      case 'completed_pdf_only':
+        return 100;
+      default:
+        return Math.min(elapsed * 2, 10); // Initial upload
+    }
+  };
+
+  const getStatusMessage = (file: UploadedFile) => {
+    switch(file.status) {
+      case 'pending':
+        return 'Preparing upload...';
+      case 'uploading':
+        return 'Uploading file...';
+      case 'converting_chm':
+        return 'Converting CHM to PDF...';
+      case 'generating_embeddings':
+        return `Generating embeddings${file.embeddingModel ? ` with ${file.embeddingModel}` : ''}...`;
+      case 'completed':
+        return `✅ Completed! ${file.vectorCount || 0} vectors created${file.pineconeIndex ? ` in ${file.pineconeIndex}` : ''}`;
+      case 'completed_pdf_only':
+        return `✅ PDF created. Embeddings: ${file.embeddingError || 'Not configured'}`;
+      case 'error':
+        return `❌ Error: ${file.error}`;
+      default:
+        return 'Processing...';
+    }
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -86,15 +129,22 @@ export default function ChatbotDocumentUploadPage() {
 
   const processCHMFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
     try {
+      // Set initial status - CHM conversion phase
       setUploadedFiles(prev => prev.map(f => 
-        f.id === fileItem.id ? { ...f, status: 'converting', isPublic } : f
+        f.id === fileItem.id ? { 
+          ...f, 
+          status: 'converting_chm', 
+          progress: 10,
+          pipelineStage: 'chm_conversion',
+          isPublic 
+        } : f
       ));
 
       const formData = new FormData();
       formData.append('file', fileItem.file);
       formData.append('chatbotId', chatbotId as string);
       formData.append('userId', user?.uid || '');
-      formData.append('isPublic', isPublic.toString()); // ✨ NEW: Pass public/private choice
+      formData.append('isPublic', isPublic.toString());
 
       const response = await fetch('/api/chm-convert', {
         method: 'POST',
@@ -104,16 +154,55 @@ export default function ChatbotDocumentUploadPage() {
       const result = await response.json();
 
       if (result.success) {
+        // Check the completion mode
+        if (result.mode === 'enhanced_complete') {
+          // Full pipeline completed successfully
+          setUploadedFiles(prev => prev.map(f => 
+            f.id === fileItem.id ? { 
+              ...f, 
+              status: 'completed',
+              progress: 100,
+              vectorCount: result.vectorCount,
+              embeddingModel: result.embeddingConfig || result.embeddingModel,
+              pineconeIndex: result.vectorstore || result.pineconeIndex,
+              pipelineStage: 'completed',
+              mode: 'enhanced_complete',
+              isPublic
+            } : f
+          ));
+          console.log(`✅ Enhanced CHM processing completed: ${result.vectorCount} vectors created`);
+        } else {
+          // PDF only mode (legacy or embedding failed)
+          setUploadedFiles(prev => prev.map(f => 
+            f.id === fileItem.id ? { 
+              ...f, 
+              status: 'completed_pdf_only',
+              progress: 100,
+              vectorCount: result.vectorCount || 0,
+              embeddingError: result.embeddingError || 'Embeddings not configured',
+              pipelineStage: 'completed',
+              mode: result.mode || 'pdf_only',
+              isPublic
+            } : f
+          ));
+          console.log(`✅ CHM to PDF completed. Mode: ${result.mode}`);
+        }
+      } else if (result.processing && result.jobId) {
+        // Job is queued/processing - start enhanced polling
+        console.log(`⏳ CHM processing queued/in-progress: ${result.status} (Job ID: ${result.jobId})`);
+        
         setUploadedFiles(prev => prev.map(f => 
           f.id === fileItem.id ? { 
             ...f, 
-            status: 'completed',
-            progress: 100,
+            status: 'converting_chm',
+            progress: 20,
+            pipelineStage: 'chm_conversion',
             isPublic
           } : f
         ));
-        console.log(`✅ CHM processed: ${result.vectorCount} vectors created, PDF stored at: ${result.pdfUrl}`);
-        console.log(`🔒 Access level: ${isPublic ? 'Public' : 'Private'}`);
+
+        // Poll for completion with enhanced tracking
+        await pollJobCompletionEnhanced(result.jobId, fileItem.id, isPublic);
       } else {
         throw new Error(result.error);
       }
@@ -126,6 +215,86 @@ export default function ChatbotDocumentUploadPage() {
         } : f
       ));
     }
+  };
+
+  const pollJobCompletionEnhanced = async (jobId: string, fileId: string, isPublic: boolean) => {
+    const maxAttempts = 120; // 20 minutes max (10 seconds interval)
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        attempts++;
+        
+        const response = await fetch(`/api/chm-convert?jobId=${jobId}`);
+        const result = await response.json();
+
+        if (result.success && result.completed) {
+          // Job completed successfully - check mode
+          const isEnhancedComplete = result.vectorCount > 0;
+          
+          setUploadedFiles(prev => prev.map(f => 
+            f.id === fileId ? { 
+              ...f, 
+              status: isEnhancedComplete ? 'completed' : 'completed_pdf_only',
+              progress: 100,
+              vectorCount: result.vectorCount || 0,
+              embeddingError: result.embeddingError,
+              pipelineStage: 'completed',
+              mode: isEnhancedComplete ? 'enhanced_complete' : 'pdf_only',
+              isPublic
+            } : f
+          ));
+          
+          console.log(`✅ CHM processing completed: ${result.vectorCount || 0} vectors created`);
+          return;
+        } else if (result.completed) {
+          // Job failed
+          throw new Error(result.error || 'Processing failed');
+        } else if (attempts >= maxAttempts) {
+          // Timeout
+          throw new Error('Processing timed out after 20 minutes');
+        } else {
+          // Still processing - update progress based on estimated pipeline stage
+          let progress = 10;
+          let status = 'converting_chm';
+          let stage = 'chm_conversion';
+          
+          // After 5 minutes (30 attempts), assume we're in embedding generation phase
+          if (attempts > 30) {
+            progress = Math.min(60 + ((attempts - 30) * 0.5), 95);
+            status = 'generating_embeddings';
+            stage = 'embedding_generation';
+          } else {
+            // CHM to PDF phase
+            progress = Math.min(10 + (attempts * 1.5), 60);
+          }
+          
+          setUploadedFiles(prev => prev.map(f => 
+            f.id === fileId ? { 
+              ...f, 
+              status: status as any,
+              progress: Math.round(progress),
+              pipelineStage: stage as any,
+              isPublic
+            } : f
+          ));
+          
+          // Continue polling after 10 seconds
+          setTimeout(poll, 10000);
+        }
+      } catch (error) {
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileId ? { 
+            ...f, 
+            status: 'error', 
+            error: error instanceof Error ? error.message : 'Polling failed'
+          } : f
+        ));
+      }
+    };
+
+    // Start polling
+    poll();
   };
 
   const processPDFFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
@@ -175,27 +344,61 @@ export default function ChatbotDocumentUploadPage() {
   };
 
   const getFileStatusDisplay = (file: UploadedFile) => {
-    const accessBadge = file.status === 'completed' ? 
+    const accessBadge = (file.status === 'completed' || file.status === 'completed_pdf_only') ? 
       ` (${file.isPublic ? '🔓 Public' : '🔒 Private'})` : '';
     
+    // Use enhanced status message helper for CHM files
+    if (file.type === 'chm') {
+      const message = getStatusMessage(file);
+      let color = 'text-gray-500';
+      
+      switch (file.status) {
+        case 'pending':
+          color = 'text-gray-500';
+          break;
+        case 'uploading':
+          color = 'text-blue-500';
+          break;
+        case 'converting_chm':
+          color = 'text-yellow-500';
+          break;
+        case 'generating_embeddings':
+          color = 'text-orange-500';
+          break;
+        case 'completed':
+          color = 'text-green-500';
+          break;
+        case 'completed_pdf_only':
+          color = 'text-yellow-600';
+          break;
+        case 'error':
+          color = 'text-red-500';
+          break;
+      }
+      
+      return { 
+        text: message + accessBadge, 
+        color,
+        showProgress: ['converting_chm', 'generating_embeddings'].includes(file.status),
+        progress: file.progress || 0
+      };
+    }
+    
+    // Original logic for non-CHM files
     switch (file.status) {
       case 'pending':
         return { text: 'Ready to upload', color: 'text-gray-500' };
       case 'uploading':
         return { text: 'Uploading...', color: 'text-blue-500' };
       case 'converting':
-        if (file.type === 'chm') {
-          return { text: 'Converting CHM to PDF & storing...', color: 'text-yellow-500' };
-        } else if (file.type === 'pdf') {
+        if (file.type === 'pdf') {
           return { text: 'Processing PDF & vectorizing...', color: 'text-yellow-500' };
         } else {
           return { text: 'Processing...', color: 'text-yellow-500' };
         }
       case 'completed':
         let completedText = 'Completed';
-        if (file.type === 'chm') {
-          completedText = 'CHM converted & vectorized';
-        } else if (file.type === 'pdf') {
+        if (file.type === 'pdf') {
           completedText = 'PDF processed & vectorized';
         }
         return { 
@@ -426,9 +629,32 @@ export default function ChatbotDocumentUploadPage() {
                               <p className="text-sm font-medium">{fileItem.file.name}</p>
                               <p className="text-xs text-gray-500">
                                 {(fileItem.file.size / 1024 / 1024).toFixed(2)} MB
-                                {fileItem.type === 'chm' && ' • CHM file will be converted to PDF'}
+                                {fileItem.type === 'chm' && ' • CHM file will be converted to PDF + embeddings'}
                                 {fileItem.type === 'pdf' && ' • PDF will be processed with AI embeddings'}
                               </p>
+                              
+                              {/* Enhanced Progress Bar for CHM Pipeline */}
+                              {fileItem.type === 'chm' && statusDisplay.showProgress && (
+                                <div className="mt-2">
+                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>
+                                      {fileItem.pipelineStage === 'chm_conversion' && '🔄 Converting CHM to PDF'}
+                                      {fileItem.pipelineStage === 'embedding_generation' && '🧠 Generating embeddings'}
+                                    </span>
+                                    <span>{Math.round(statusDisplay.progress || 0)}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div 
+                                      className={`h-1.5 rounded-full transition-all duration-500 ${
+                                        fileItem.pipelineStage === 'chm_conversion' 
+                                          ? 'bg-yellow-500' 
+                                          : 'bg-orange-500'
+                                      }`}
+                                      style={{ width: `${Math.min(statusDisplay.progress || 0, 100)}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                           

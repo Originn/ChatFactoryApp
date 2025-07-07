@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const chatbotId = formData.get('chatbotId') as string;
     const userId = formData.get('userId') as string;
-    const isPublic = formData.get('isPublic') === 'true'; // Convert string to boolean
+    const isPublic = formData.get('isPublic') === 'true';
 
     if (!file || !chatbotId || !userId) {
       return NextResponse.json({ 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`📄 Processing CHM file: ${file.name} for chatbot: ${chatbotId}`);
 
-    // Get Firebase project ID for this chatbot from database
+    // Get chatbot configuration from database (same as PDF)
     const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
     if (!chatbotDoc.exists) {
       return NextResponse.json({ 
@@ -41,30 +41,140 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    console.log(`🔥 Using Firebase project: ${firebaseProjectId}`);
-    console.log(`🔒 PDF access level: ${isPublic ? 'Public' : 'Private'}`);
+    // Get vectorstore configuration (same as PDF)
+    const vectorstore = chatbotData?.vectorstore;
+    if (!vectorstore || !vectorstore.indexName) {
+      console.log(`⚠️ No vectorstore configured - using legacy CHM conversion (PDF only)`);
+      
+      // Legacy mode: CHM → PDF only (no embeddings)
+      const result = await CHMService.processCHMDocument(
+        file,
+        chatbotId,
+        userId,
+        firebaseProjectId,
+        isPublic
+      );
 
-    // Process the CHM file completely (convert, store, vectorize) with privacy setting
+      if (result.success) {
+        console.log(`✅ Legacy CHM processing completed: ${result.vectorCount || 0} vectors created`);
+        
+        return NextResponse.json({
+          success: true,
+          message: result.message,
+          vectorCount: result.vectorCount || 0,
+          pdfUrl: result.pdfUrl,
+          fileName: file.name.replace('.chm', '.pdf'),
+          mode: 'legacy'
+        });
+      } else if (result.jobId) {
+        // Legacy job is also queued/processing - return job info for polling
+        console.log(`⏳ Legacy CHM processing queued/in-progress: ${result.status} (Job ID: ${result.jobId})`);
+        
+        return NextResponse.json({
+          success: false,
+          processing: true,
+          jobId: result.jobId,
+          status: result.status,
+          message: result.message,
+          fileName: file.name.replace('.chm', '.pdf'),
+          mode: 'legacy'
+        });
+      } else {
+        console.error(`❌ Legacy CHM processing failed:`, result.error);
+        return NextResponse.json({ 
+          error: result.error 
+        }, { status: 500 });
+      }
+    }
+
+    // Get embedding model configuration (same as PDF)
+    const aiConfig = chatbotData?.aiConfig;
+    if (!aiConfig || !aiConfig.embeddingModel) {
+      return NextResponse.json({ 
+        error: 'AI configuration not found for this chatbot' 
+      }, { status: 404 });
+    }
+
+    // Parse embedding model to extract provider and model name (same as PDF)
+    let embeddingProvider = 'openai'; // default
+    let embeddingModel = aiConfig.embeddingModel;
+    let dimensions: number | undefined;
+
+    if (aiConfig.embeddingModel.includes('/')) {
+      [embeddingProvider, embeddingModel] = aiConfig.embeddingModel.split('/', 2);
+    }
+
+    // Set dimensions based on known models (same as PDF)
+    const modelDimensions: Record<string, number> = {
+      'text-embedding-3-large': 3072,
+      'text-embedding-3-small': 1536,
+      'text-embedding-ada-002': 1536,
+      'embed-multilingual-v3.0': 1024,
+      'embed-english-v3.0': 1024,
+      'voyage-large-2': 1536,
+      'voyage-code-2': 1536,
+      'voyage-3': 1024,
+      'voyage-code-3': 1024,
+      'voyage-finance-3': 1024
+    };
+
+    dimensions = modelDimensions[embeddingModel] || vectorstore.dimension;
+
+    console.log(`🔥 Using Firebase project: ${firebaseProjectId}`);
+    console.log(`🔒 CHM access level: ${isPublic ? 'Public' : 'Private'}`);
+    console.log(`📊 Vectorstore: ${vectorstore.indexName}`);
+    console.log(`🤖 Embedding: ${embeddingProvider}/${embeddingModel} (${dimensions}d)`);
+
+    // Process the CHM file with the enhanced converter
     const result = await CHMService.processCHMDocument(
       file,
       chatbotId,
       userId,
       firebaseProjectId,
-      isPublic
+      isPublic,
+      // Pass embedding configuration
+      embeddingProvider as any,
+      embeddingModel,
+      dimensions,
+      vectorstore.indexName,
+      chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined
     );
 
+    // Handle different result statuses
     if (result.success) {
-      console.log(`✅ CHM processing completed: ${result.vectorCount} vectors created`);
+      // Job completed successfully
+      console.log(`✅ Enhanced CHM processing completed: ${result.vectorCount} vectors created`);
       
       return NextResponse.json({
         success: true,
         message: result.message,
         vectorCount: result.vectorCount,
         pdfUrl: result.pdfUrl,
-        fileName: file.name.replace('.chm', '.pdf')
+        fileName: file.name.replace('.chm', '.pdf'),
+        embeddingConfig: `${embeddingProvider}/${embeddingModel}`,
+        vectorstore: vectorstore.indexName,
+        mode: 'enhanced'
+      });
+    } else if (result.jobId) {
+      // Job is queued or processing - return job info for polling
+      console.log(`⏳ CHM processing queued/in-progress: ${result.status} (Job ID: ${result.jobId})`);
+      
+      return NextResponse.json({
+        success: false,
+        processing: true,
+        jobId: result.jobId,
+        status: result.status,
+        message: result.message,
+        queuePosition: result.queuePosition,
+        estimatedTimeSeconds: result.estimatedTimeSeconds,
+        fileName: file.name.replace('.chm', '.pdf'),
+        embeddingConfig: `${embeddingProvider}/${embeddingModel}`,
+        vectorstore: vectorstore.indexName,
+        mode: 'enhanced'
       });
     } else {
-      console.error(`❌ CHM processing failed:`, result.error);
+      // Job failed
+      console.error(`❌ Enhanced CHM processing failed:`, result.error);
       return NextResponse.json({ 
         error: result.error 
       }, { status: 500 });
@@ -83,28 +193,65 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
 
-    if (!jobId) {
-      return NextResponse.json({ 
-        error: 'Missing jobId parameter' 
-      }, { status: 400 });
+    if (jobId) {
+      // Poll job completion (use enhanced polling method)
+      const result = await CHMService.pollJobCompletion(jobId);
+      
+      if (result.success) {
+        // Job completed successfully
+        return NextResponse.json({
+          success: true,
+          status: 'completed',
+          message: result.message,
+          vectorCount: result.vectorCount,
+          pdfUrl: result.pdfUrl,
+          completed: true
+        });
+      } else if (result.jobId) {
+        // Job still processing
+        return NextResponse.json({
+          success: false,
+          processing: true,
+          jobId: result.jobId,
+          status: result.status,
+          message: result.message,
+          completed: false
+        });
+      } else {
+        // Job failed
+        return NextResponse.json({
+          success: false,
+          error: result.error,
+          status: 'failed',
+          completed: true
+        });
+      }
+    } else {
+      // Health check for CHM converter service (NEW!)
+      const healthResult = await CHMService.healthCheck();
+      
+      if (healthResult.success) {
+        return NextResponse.json({
+          success: true,
+          status: healthResult.status,
+          service: 'chm-converter'
+        });
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: healthResult.error,
+            service: 'chm-converter'
+          },
+          { status: 503 }
+        );
+      }
     }
 
-    // Check job status with CHM converter service
-    const status = await CHMService.checkConversionStatus(jobId);
-    
-    return NextResponse.json({
-      success: status.success,
-      status: status.status,
-      message: status.status === 'completed' ? 'Conversion completed' : 'Still processing',
-      ...(status.download_url && { 
-        download_available: true
-      })
-    });
-
   } catch (error) {
-    console.error('CHM status check error:', error);
+    console.error('CHM API error:', error);
     return NextResponse.json({ 
-      error: 'Internal server error during status check' 
+      error: 'Internal server error during CHM API call' 
     }, { status: 500 });
   }
 }
