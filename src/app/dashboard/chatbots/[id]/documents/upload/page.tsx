@@ -140,6 +140,9 @@ export default function ChatbotDocumentUploadPage() {
         } : f
       ));
 
+      // Start estimated progress animation
+      const progressInterval = startEstimatedProgress(fileItem.id);
+
       const formData = new FormData();
       formData.append('file', fileItem.file);
       formData.append('chatbotId', chatbotId as string);
@@ -150,6 +153,9 @@ export default function ChatbotDocumentUploadPage() {
         method: 'POST',
         body: formData,
       });
+
+      // Clear progress animation
+      clearInterval(progressInterval);
 
       const result = await response.json();
 
@@ -215,6 +221,45 @@ export default function ChatbotDocumentUploadPage() {
         } : f
       ));
     }
+  };
+
+  // Helper function for estimated progress
+  const startEstimatedProgress = (fileId: string) => {
+    let elapsed = 0;
+    
+    return setInterval(() => {
+      elapsed += 2; // 2 seconds per tick
+      
+      let progress = 10;
+      let status = 'converting_chm';
+      let stage = 'chm_conversion';
+      
+      if (elapsed < 60) {
+        // First minute: CHM→PDF conversion (10-40%)
+        progress = 10 + (elapsed * 0.5);
+        status = 'converting_chm';
+        stage = 'chm_conversion';
+      } else if (elapsed < 240) {
+        // Next 3 minutes: Embedding generation (40-90%)
+        progress = 40 + ((elapsed - 60) * 0.28);
+        status = 'generating_embeddings';
+        stage = 'embedding_generation';
+      } else {
+        // Beyond 4 minutes: Slow crawl to 95%
+        progress = Math.min(90 + ((elapsed - 240) * 0.02), 95);
+        status = 'generating_embeddings';
+        stage = 'embedding_generation';
+      }
+      
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileId ? { 
+          ...f, 
+          status: status as any,
+          progress: Math.round(progress),
+          pipelineStage: stage as any
+        } : f
+      ));
+    }, 2000); // Update every 2 seconds
   };
 
   const pollJobCompletionEnhanced = async (jobId: string, fileId: string, isPublic: boolean) => {
