@@ -15,6 +15,7 @@ import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSele
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import ChatbotUserManagement from '@/components/dashboard/ChatbotUserManagement';
 import UserPDFManager from '@/components/dashboard/UserPDFManager';
+import InlineDocumentUpload from '@/components/dashboard/InlineDocumentUpload';
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 import { ChatbotConfig } from '@/types/chatbot';
 
@@ -38,6 +39,7 @@ export default function ChatbotDetailPage() {
   const [vectorstoreDocCount, setVectorstoreDocCount] = useState(0);
   const [vectorStoreName, setVectorStoreName] = useState<string>('');
   const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
+  const [refreshKey, setRefreshKey] = useState(0); // For triggering UserPDFManager refresh
   
   // Vector store deployment dialogs
   const [showVectorStoreSelection, setShowVectorStoreSelection] = useState(false);
@@ -883,53 +885,15 @@ export default function ChatbotDetailPage() {
                   </div>
 
                   {/* Upload Section */}
-                  <Card className="mb-8">
-                    <CardContent className="p-8">
-                      <div className="text-center">
-                        <div className="mx-auto h-16 w-16 text-blue-500 mb-4">
-                          <svg className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round" 
-                              strokeWidth={1.5} 
-                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
-                            />
-                          </svg>
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Documents</h3>
-                        <p className="text-gray-600 mb-6">
-                          Upload your documentation files to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, and <strong className="text-blue-600">CHM files</strong>.
-                        </p>
-                        <div className="border-2 border-dashed border-blue-300 rounded-lg p-12 bg-gradient-to-br from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 transition-all duration-200">
-                          <div className="space-y-4">
-                            <div className="mx-auto h-12 w-12 text-blue-500">
-                              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path 
-                                  strokeLinecap="round" 
-                                  strokeLinejoin="round" 
-                                  strokeWidth={2} 
-                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
-                                />
-                              </svg>
-                            </div>
-                            <div>
-                              <Button 
-                                asChild
-                                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium px-8 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
-                              >
-                                <Link href={`/dashboard/chatbots/${chatbotId}/documents/upload`}>
-                                  Upload Documents
-                                </Link>
-                              </Button>
-                            </div>
-                            <p className="text-sm text-gray-500">
-                              Supports: PDF, MD, HTML, DOCX, TXT, CHM files up to 10MB each
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <InlineDocumentUpload 
+                    chatbotId={chatbotId}
+                    onUploadComplete={() => {
+                      // Refresh the document list and update document count
+                      setRefreshKey(prev => prev + 1);
+                      // Could also refresh chatbot data to update vectorstoreDocCount
+                      // but that might be overkill
+                    }}
+                  />
 
                   {/* Knowledge Base Stats */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -973,6 +937,7 @@ export default function ChatbotDetailPage() {
 
                   {/* Uploaded Documents */}
                   <UserPDFManager 
+                    key={refreshKey}
                     chatbotId={chatbotId}
                     showChatbotFilter={false}
                   />
