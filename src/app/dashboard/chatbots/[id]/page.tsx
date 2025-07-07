@@ -323,17 +323,30 @@ export default function ChatbotDetailPage() {
         
         if (firebaseDeleteResult.success) {
           console.log('✅ Successfully deleted Firebase project');
+          // Firebase project deletion includes Firestore cleanup, so we're done
         } else {
           console.error('❌ Failed to delete Firebase project:', firebaseDeleteResult.error);
-          // Continue with deletion even if Firebase project deletion fails
+          // Continue with manual Firestore deletion since Firebase project deletion failed
         }
       } catch (firebaseError) {
         console.error('❌ Error deleting Firebase project:', firebaseError);
-        // Continue with deletion even if Firebase project deletion fails
+        // Continue with manual Firestore deletion since Firebase project deletion failed
       }
       
-      // Delete from Firestore
-      await deleteDoc(doc(db, "chatbots", chatbot.id));
+      // Only delete from Firestore if Firebase project deletion didn't handle it
+      // For reusable Firebase projects, the cleanup service already deletes the chatbot document
+      if (!firebaseDeleteResult?.success) {
+        try {
+          console.log('🗑️ Manually deleting chatbot document from Firestore...');
+          await deleteDoc(doc(db, "chatbots", chatbot.id));
+          console.log('✅ Chatbot document deleted from Firestore');
+        } catch (firestoreError: any) {
+          console.warn('⚠️ Could not delete chatbot document from Firestore:', firestoreError);
+          // Don't throw error - chatbot might already be deleted by cleanup service
+        }
+      } else {
+        console.log('✅ Chatbot document already deleted by Firebase project cleanup');
+      }
       
       console.log('✅ Chatbot deleted successfully from all services');
       

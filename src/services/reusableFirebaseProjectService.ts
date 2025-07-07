@@ -691,10 +691,60 @@ export class ReusableFirebaseProjectService {
    * Now with comprehensive scanning and bucket cleanup
    */
   private static async cleanupStorageData(chatbotId: string, userId: string, aggressiveCleanup: boolean = false): Promise<void> {
-    const bucket = adminStorage.bucket();
-    
     console.log(`🧹 Starting comprehensive storage cleanup for chatbot: ${chatbotId}, user: ${userId}`);
     console.log(`🔥 Aggressive cleanup mode: ${aggressiveCleanup ? 'ENABLED' : 'DISABLED'}`);
+    
+    // Get the reusable Firebase project ID
+    const reusableProjectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
+    
+    if (!reusableProjectId) {
+      console.error('❌ REUSABLE_FIREBASE_PROJECT_ID not set - cannot perform storage cleanup');
+      return;
+    }
+    
+    console.log(`🎯 Target Firebase project: ${reusableProjectId}`);
+    
+    // Initialize project-specific storage client
+    const { Storage } = require('@google-cloud/storage');
+    const credentials = {
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      project_id: process.env.FIREBASE_PROJECT_ID,
+    };
+    
+    const projectSpecificStorage = new Storage({
+      projectId: reusableProjectId,
+      credentials: credentials
+    });
+    
+    // Try different bucket names that might be used
+    const possibleBuckets = [
+      `${reusableProjectId}-chatbot-documents`,
+      `${reusableProjectId}.appspot.com`,
+      `${reusableProjectId}`,
+      `${reusableProjectId}-default-rtdb`,
+      `${reusableProjectId}-storage`,
+    ];
+    
+    let workingBucket = null;
+    
+    // Find the correct bucket
+    for (const bucketName of possibleBuckets) {
+      try {
+        const bucket = projectSpecificStorage.bucket(bucketName);
+        await bucket.getMetadata();
+        workingBucket = bucket;
+        console.log(`✅ Found working bucket: ${bucketName}`);
+        break;
+      } catch (error) {
+        console.log(`⚠️ Bucket ${bucketName} not found or inaccessible`);
+      }
+    }
+    
+    if (!workingBucket) {
+      console.error('❌ No accessible storage bucket found for project:', reusableProjectId);
+      return;
+    }
     
     // Step 1: Clean specific known paths
     const pathsToClean = [
@@ -714,7 +764,7 @@ export class ReusableFirebaseProjectService {
       try {
         console.log(`🗂️ Checking storage path: ${path}`);
         
-        const [files] = await bucket.getFiles({
+        const [files] = await workingBucket.getFiles({
           prefix: path,
           maxResults: 5000 // Increased limit for thorough cleanup
         });
@@ -746,7 +796,7 @@ export class ReusableFirebaseProjectService {
     console.log(`🔍 Performing comprehensive scan for remaining files...`);
     
     try {
-      const [allFiles] = await bucket.getFiles({
+      const [allFiles] = await workingBucket.getFiles({
         maxResults: 10000 // Scan up to 10k files
       });
       
@@ -798,7 +848,7 @@ export class ReusableFirebaseProjectService {
       ];
       
       for (const userPath of userPaths) {
-        const [remainingFiles] = await bucket.getFiles({
+        const [remainingFiles] = await workingBucket.getFiles({
           prefix: userPath,
           maxResults: 1
         });
