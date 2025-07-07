@@ -52,6 +52,19 @@ export async function GET(
 
     // For private PDFs, generate a signed URL
     try {
+      // 🔧 FIX: Handle CHM external URLs
+      if (pdf.firebaseStoragePath.startsWith('chm-external:')) {
+        const externalUrl = pdf.firebaseStoragePath.replace('chm-external:', '');
+        const response: PDFAccessResponse = {
+          success: true,
+          accessUrl: externalUrl,
+          expiresAt: 'never' // CHM external URLs don't expire
+        };
+        
+        console.log(`✅ Returning CHM external URL for PDF ${pdfId}`);
+        return NextResponse.json(response);
+      }
+      
       const { Storage } = require('@google-cloud/storage');
       
       const credentials = {

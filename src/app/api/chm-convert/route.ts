@@ -154,8 +154,9 @@ export async function POST(request: NextRequest) {
           originalFileName: file.name,
           pdfFileName: file.name.replace('.chm', '.pdf'),
           isPublic,
-          firebaseStoragePath: result.pdfUrl || '', // Use PDF URL from CHM service
+          firebaseStoragePath: `chm-external:${result.pdfUrl}`, // Special path for CHM external URLs
           firebaseProjectId,
+          ...(result.pdfUrl && { publicUrl: result.pdfUrl }), // Set publicUrl for access
           fileSize: file.size, // Use original CHM file size
           status: 'completed',
           vectorCount: result.vectorCount
