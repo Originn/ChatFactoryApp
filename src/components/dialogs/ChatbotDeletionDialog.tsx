@@ -45,8 +45,15 @@ export function ChatbotDeletionDialog({
           <ul className="text-sm text-gray-600 mb-4 space-y-1">
             <li>• Chatbot configuration and settings</li>
             <li>• Vercel deployment (if deployed)</li>
-            <li>• Firebase storage files</li>
+            <li>• Firebase storage files (but not buckets)</li>
+            <li>• Document metadata from database</li>
           </ul>
+
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-md mb-4">
+            <p className="text-xs text-amber-800">
+              ⚠️ <strong>Manual cleanup may be required:</strong> Firebase Storage buckets and dedicated Firebase projects may require manual deletion from the Firebase Console to avoid continued charges.
+            </p>
+          </div>
 
           {hasVectorstore && (
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
