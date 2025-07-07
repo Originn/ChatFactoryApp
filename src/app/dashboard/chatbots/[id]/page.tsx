@@ -208,6 +208,7 @@ export default function ChatbotDetailPage() {
     
     setIsDeleting(true);
     setShowDeleteDialog(false);
+    let firebaseDeleteResult: any = null; // Declare at function scope
     
     try {
       // Get Vercel project info and user ID from the chatbot data
@@ -319,7 +320,7 @@ export default function ChatbotDetailPage() {
 
         // Get auth token from Firebase user
         const token = await user.getIdToken();
-        const firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(chatbot.id, token);
+        firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(chatbot.id, token);
         
         if (firebaseDeleteResult.success) {
           console.log('✅ Successfully deleted Firebase project');
