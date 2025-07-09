@@ -450,7 +450,6 @@ export async function POST(request: NextRequest) {
             metric: 'cosine',
             region: 'us-east-1',
             status: 'ready',
-            embeddingModel: finalEmbeddingModel,
           });
         }
       } catch (pineconeError) {
