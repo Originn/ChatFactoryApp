@@ -20,7 +20,7 @@ interface ExistingIndex {
 
 interface Props {
   isOpen: boolean;
-  onConfirm: (vectorStoreName: string, sanitizedName: string) => void;
+  onConfirm: (vectorStoreName: string, sanitizedName: string, isExisting: boolean, embeddingModel: string) => void;
   onCancel: () => void;
   userId: string;
   embeddingModel: string;
@@ -132,11 +132,11 @@ export function VectorStoreNameDialog({
       // Use existing index
       const selectedIndex = existingIndexes.find(idx => idx.name === selectedExistingIndex);
       if (selectedIndex) {
-        onConfirm(selectedIndex.displayName, selectedIndex.name);
+        onConfirm(selectedIndex.displayName, selectedIndex.name, true, selectedIndex.embeddingModel || embeddingModel); // isExisting = true
       }
     } else if (inputName.trim() && sanitizedName && isAvailable) {
       // Create new index
-      onConfirm(inputName.trim(), sanitizedName);
+      onConfirm(inputName.trim(), sanitizedName, false, embeddingModel); // isExisting = false
     }
   };
 

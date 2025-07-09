@@ -388,47 +388,23 @@ export default function ChatbotDetailPage() {
   };
 
   // Handle confirming new vector store name
-  const handleConfirmVectorStoreName = async (displayName: string, indexName: string) => {
+  const handleConfirmVectorStoreName = async (displayName: string, indexName: string, isExisting: boolean, embeddingModel: string) => {
     setShowVectorStoreNaming(false);
     setIsDeploying(true);
     
     try {
-      // Check if this is an existing index (contains user prefix) or a new one
-      const isExistingIndex = indexName.includes('-') && indexName.length > 10; // Existing indexes have format: userprefix-name
-      
-      if (isExistingIndex) {
-        // Use existing vector store - skip creation, go straight to deployment
+      if (isExisting) {
+        // Use existing vector store - pass vectorstore object to deployment
         console.log('🔄 Using existing vector store:', displayName, '(' + indexName + ')');
         deployWithVectorStore(indexName, displayName);
       } else {
-        // Create new vector store
-        console.log('🆕 Creating new vector store:', displayName, '->', indexName);
-        
-        const vectorStoreResponse = await fetch('/api/vectorstore', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'create',
-            userId: user.uid,
-            userInputName: displayName,
-            embeddingModel: chatbot?.aiConfig?.embeddingModel || 'text-embedding-3-small', // ✅ Pass the chatbot's embedding model
-          }),
-        });
-
-        const vectorStoreResult = await vectorStoreResponse.json();
-        
-        if (vectorStoreResult.success) {
-          console.log('✅ Vector store created successfully:', vectorStoreResult);
-          deployWithVectorStore(vectorStoreResult.indexName, displayName);
-        } else {
-          throw new Error(vectorStoreResult.error || 'Failed to create vector store');
-        }
+        // Create new vector store - pass the desired index name to deployment script
+        console.log('🆕 Creating new vector store via deployment script:', displayName, '-> desired index name:', indexName, '-> embedding model:', embeddingModel);
+        deployWithNewVectorStore(displayName, indexName, embeddingModel);
       }
     } catch (error) {
-      console.error('❌ Error creating vector store:', error);
-      setDeploymentError(`Failed to create vector store: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Error handling vector store:', error);
+      setDeploymentError(`Failed to handle vector store: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsDeploying(false);
     }
   };
@@ -441,7 +417,7 @@ export default function ChatbotDetailPage() {
     setDeploymentError(null);
     
     try {
-      console.log('🚀 Deploying with vector store:', displayName, '(' + indexName + ')');
+      console.log('🚀 Deploying with existing vector store:', displayName, '(' + indexName + ')');
       
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
@@ -478,6 +454,8 @@ export default function ChatbotDetailPage() {
       });
       
       // Update vector store state
+      setVectorstoreIndex(indexName);
+      setVectorstoreDisplayName(displayName);
       setHasVectorstore(true);
       setVectorStoreName(displayName);
       setVectorStoreIndexName(indexName);
@@ -489,11 +467,96 @@ export default function ChatbotDetailPage() {
         window.location.reload();
       }, 1500); // Reduced from 3000ms
       
-    } catch (err: any) {
-      console.error("Error deploying chatbot:", err);
-      setDeploymentError(err.message || 'Failed to deploy chatbot. Please try again.');
+    } catch (error) {
+      console.error('❌ Error deploying with vector store:', error);
+      setDeploymentError(`Failed to deploy: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsDeploying(false);
+    }
+  };
+
+  // Deploy with new vector store - let deployment script handle creation
+  const deployWithNewVectorStore = async (displayName: string, desiredIndexName?: string, embeddingModel?: string) => {
+    if (!chatbot || !user) return;
+    
+    setIsDeploying(true);
+    setDeploymentError(null);
+    
+    try {
+      console.log('🚀 Deploying with new vector store creation:', displayName, desiredIndexName ? `-> ${desiredIndexName}` : '(auto-generated name)', embeddingModel ? `-> ${embeddingModel}` : '(default model)');
+      
+      const response = await fetch('/api/vercel-deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatbotId: chatbot.id,
+          chatbotName: chatbot.name,
+          userId: user.uid,
+          vectorstore: null, // This triggers the creation path in deployment script
+          desiredVectorstoreIndexName: desiredIndexName, // Pass the desired index name
+          embeddingModel: embeddingModel // Pass the embedding model
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to deploy chatbot');
+      }
+      
+      // Update local state immediately - no waiting
+      setChatbot({
+        ...chatbot,
+        status: 'active',
+        deployment: {
+          ...chatbot.deployment,
+          deploymentUrl: data.url,
+          status: 'deployed',
+          deployedAt: new Date() as any,
+        },
+      });
+      
+      // Update vector store state with the created index
+      if (data.vectorstoreIndexName) {
+        setVectorstoreIndex(data.vectorstoreIndexName);
+        setVectorstoreDisplayName(displayName);
+        setHasVectorstore(true);
+        setVectorStoreName(displayName);
+        setVectorStoreIndexName(data.vectorstoreIndexName);
+      }
+      
+      setSuccessMessage(`✅ Chatbot "${chatbot.name}" deployed successfully! Available at: ${data.url}`);
+      
+      // Quick refresh to show updated UI - reduced time
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500); // Reduced from 3000ms
+      
+    } catch (error) {
+      console.error('❌ Error deploying with new vector store:', error);
+      setDeploymentError(`Failed to deploy: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
+
+  // Delete chatbot function
+  const deleteChatbot = async () => {
+    setIsDeleting(true);
+    setError(null);
+    
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'chatbots', chatbot.id));
+      
+      // Navigate back to dashboard
+      router.push("/dashboard/chatbots");
+    } catch (err: any) {
+      console.error("❌ Error deleting chatbot:", err);
+      setError(`Failed to delete chatbot: ${err.message}`);
+      setIsDeleting(false);
     }
   };
 

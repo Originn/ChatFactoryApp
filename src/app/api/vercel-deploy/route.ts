@@ -5,6 +5,7 @@ import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseAPIService } from '@/services/firebaseAPIService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
+import { getEmbeddingDimensions, getEmbeddingProvider } from '@/lib/embeddingModels';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -122,7 +123,7 @@ function generateVerificationInstructions(verification: any[]): string[] {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, chatbotName, userId, vectorstore } = body;
+    const { chatbotId, chatbotName, userId, vectorstore, desiredVectorstoreIndexName, embeddingModel } = body;
 
     console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore });
 
@@ -458,23 +459,46 @@ export async function POST(request: NextRequest) {
       console.log('🗄️ Creating new Pinecone vectorstore for chatbot:', chatbotId);
       
       try {
-        const pineconeResult = await PineconeService.createIndexFromChatbotId(chatbotId, userId || chatbotData?.userId || 'unknown');
+        let pineconeResult;
+        const finalEmbeddingModel = embeddingModel || 'text-embedding-3-small'; // Default fallback
+        
+        if (desiredVectorstoreIndexName) {
+          console.log('🎯 Using desired vectorstore index name:', desiredVectorstoreIndexName, 'with embedding model:', finalEmbeddingModel);
+          pineconeResult = await PineconeService.createIndex(
+            desiredVectorstoreIndexName,
+            userId || chatbotData?.userId || 'unknown',
+            finalEmbeddingModel,
+            'cosine'
+          );
+        } else {
+          console.log('🔄 Using auto-generated index name from chatbot ID with embedding model:', finalEmbeddingModel);
+          pineconeResult = await PineconeService.createIndexFromChatbotId(
+            chatbotId, 
+            userId || chatbotData?.userId || 'unknown',
+            finalEmbeddingModel,
+            'cosine'
+          );
+        }
         
         if (!pineconeResult.success) {
           console.error('❌ Failed to create Pinecone index:', pineconeResult.error);
           throw new Error(`Failed to create vectorstore: ${pineconeResult.error}`);
         } else {
-          console.log('✅ Successfully created Pinecone index:', pineconeResult.indexName);
+          console.log('✅ Successfully created Pinecone index:', pineconeResult.indexName, 'with embedding model:', finalEmbeddingModel);
           vectorstoreIndexName = pineconeResult.indexName;
+          
+          // Get dimensions for the embedding model
+          const dimensions = getEmbeddingDimensions(finalEmbeddingModel);
           
           // Update chatbot document with vectorstore info
           await DatabaseService.updateChatbotVectorstore(chatbotId, {
             provider: 'pinecone',
             indexName: pineconeResult.indexName,
-            dimension: 1536,
+            dimension: dimensions,
             metric: 'cosine',
             region: 'us-east-1',
             status: 'ready',
+            embeddingModel: finalEmbeddingModel,
           });
         }
       } catch (pineconeError) {
@@ -624,6 +648,30 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Firebase service account credentials validated successfully');
     
+    // Generate namespace from chatbot data more robustly
+    const generateNamespace = (chatbotData: any, chatbotId: string) => {
+      // Try multiple sources for namespace
+      const namespace = chatbotData?.name?.trim() || 
+                       chatbotData?.displayName?.trim() || 
+                       chatbotId;
+      
+      // Format namespace properly
+      if (namespace && namespace !== chatbotId) {
+        return namespace.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      }
+      
+      // Fallback to chatbot ID
+      return chatbotId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    };
+
+    const pineconeNamespace = generateNamespace(chatbotData, chatbotId);
+    
+    // Add debugging
+    console.log('🔍 Deployment Namespace Debug:');
+    console.log('  Chatbot ID:', chatbotId);
+    console.log('  Chatbot Name:', chatbotData?.name);
+    console.log('  Generated Namespace:', pineconeNamespace);
+    
     // Set environment variables on the project
     const envVars = {
       // Chatbot-specific configuration
@@ -665,14 +713,21 @@ export async function POST(request: NextRequest) {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       COHERE_API_KEY: process.env.COHERE_API_KEY || '',
       
+      // Embedding Provider API Keys
+      JINA_API_KEY: process.env.JINA_API_KEY || '',
+      HUGGINGFACEHUB_API_KEY: process.env.HUGGINGFACEHUB_API_KEY || '',
+      
       // Pinecone Vector Database Configuration
       PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
       PINECONE_ENVIRONMENT: 'us-east-1', // Use us-east-1 for free plan compatibility
       PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
-      PINECONE_NAMESPACE: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'default',
+      PINECONE_NAMESPACE: pineconeNamespace,
       MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
       
       // Embedding Configuration
+      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small'),
+      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small').toString(),
       FETCH_K_EMBEDDINGS: process.env.DEFAULT_FETCH_K_EMBEDDINGS || process.env.FETCH_K_EMBEDDINGS || '12',
       LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
       K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
@@ -718,6 +773,15 @@ export async function POST(request: NextRequest) {
     console.log('PINECONE_ENVIRONMENT:', filteredEnvVars.PINECONE_ENVIRONMENT ? 'SET ✅' : 'MISSING ❌');
     console.log('PINECONE_INDEX_NAME:', filteredEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
     console.log('MINSCORESOURCESTHRESHOLD:', filteredEnvVars.MINSCORESOURCESTHRESHOLD ? 'SET ✅' : 'MISSING ❌');
+    
+    // Debug: Log Embedding Configuration
+    console.log('🔍 Embedding Configuration Check:');
+    console.log('EMBEDDING_PROVIDER:', filteredEnvVars.EMBEDDING_PROVIDER || 'MISSING ❌');
+    console.log('EMBEDDING_MODEL:', filteredEnvVars.EMBEDDING_MODEL || 'MISSING ❌');
+    console.log('EMBEDDING_DIMENSIONS:', filteredEnvVars.EMBEDDING_DIMENSIONS || 'MISSING ❌');
+    console.log('JINA_API_KEY:', filteredEnvVars.JINA_API_KEY ? 'SET ✅' : 'MISSING ❌');
+    console.log('HUGGINGFACEHUB_API_KEY:', filteredEnvVars.HUGGINGFACEHUB_API_KEY ? 'SET ✅' : 'MISSING ❌');
+    console.log('COHERE_API_KEY:', filteredEnvVars.COHERE_API_KEY ? 'SET ✅' : 'MISSING ❌');
     
     // Set environment variables on the project with better error handling
     console.log('Setting environment variables on project:', projectName);
@@ -983,7 +1047,7 @@ export async function POST(request: NextRequest) {
           // Continue with deployment - don't fail the deployment because of DB issues
         }
         
-        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false, dedicatedFirebaseProject, domainResult, finalFallbackUrl);
+        return createSuccessResponse(deploymentData, projectName, chatbotConfig, true, false, dedicatedFirebaseProject, domainResult, finalFallbackUrl, vectorstoreIndexName);
       }
       
       return NextResponse.json({ 
@@ -1365,7 +1429,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the entire deployment because of email issues
     }
     
-    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject, domainResult, finalDeploymentUrl);
+    return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject, domainResult, finalDeploymentUrl, vectorstoreIndexName);
   } catch (error: any) {
     console.error('Deployment error:', error);
     return NextResponse.json({ 
@@ -1606,7 +1670,7 @@ async function createFileBasedDeployment(token: string, projectName: string, tar
 }
 
 // Helper function to create success response
-function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false, firebaseProject: any = null, domainResult: any = null, actualProductionUrl: string | null = null) {
+function createSuccessResponse(deploymentData: any, projectName: string, chatbotConfig: any, isFallback = false, isStaged = false, firebaseProject: any = null, domainResult: any = null, actualProductionUrl: string | null = null, vectorstoreIndexName?: string) {
   // Use the actual production URL if provided, otherwise fall back to project format
   const deploymentUrl = actualProductionUrl || `https://${projectName}.vercel.app`;
   console.log('🎯 Success response using URL:', deploymentUrl);
@@ -1618,6 +1682,7 @@ function createSuccessResponse(deploymentData: any, projectName: string, chatbot
     url: deploymentUrl,
     status: 'live', // Always live since we deploy straight to production
     isStaged: false, // Never staged anymore
+    vectorstoreIndexName, // Include vectorstore index name for frontend state updates
     chatbot: {
       id: chatbotConfig.id,
       name: chatbotConfig.name,

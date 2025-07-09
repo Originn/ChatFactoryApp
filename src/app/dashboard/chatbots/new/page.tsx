@@ -222,35 +222,64 @@ export default function NewChatbotPage() {
     }
   };
 
-  const handleConfirmVectorstore = async (displayName: string, indexName: string) => {
+  const deployChatbotWithNewVectorStore = async (displayName: string, desiredIndexName?: string, embeddingModel?: string) => {
+    if (!user || !newChatbotId) return;
+
+    setIsDeployingPreview(true);
+    try {
+      const response = await fetch('/api/vercel-deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatbotId: newChatbotId,
+          chatbotName: formData.name.trim(),
+          userId: user.uid,
+          vectorstore: null, // This triggers the creation path in deployment script
+          desiredVectorstoreIndexName: desiredIndexName, // Pass the desired index name
+          embeddingModel: embeddingModel, // Pass the embedding model
+          target: 'production',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to deploy chatbot');
+      }
+
+      await updateDoc(doc(db, 'chatbots', newChatbotId), {
+        status: 'deployed',
+        deployedUrl: data.url,
+        vercelProjectId: data.projectName,
+        vercelDeploymentId: data.deploymentId,
+        vectorstore: {
+          indexName: data.vectorstoreIndexName || 'unknown',
+          displayName: displayName,
+          provider: 'pinecone',
+          status: 'ready',
+        },
+        updatedAt: serverTimestamp(),
+      });
+
+      router.push(`/dashboard/chatbots/${newChatbotId}`);
+    } catch (err: any) {
+      console.error('Error deploying with new vectorstore:', err);
+      setError(err.message || 'Failed to deploy with new vectorstore');
+    } finally {
+      setIsDeployingPreview(false);
+    }
+  };
+
+  const handleConfirmVectorstore = async (displayName: string, indexName: string, isExisting: boolean, embeddingModel: string) => {
     setShowVectorDialog(false);
     try {
-      // Check if this is an existing index (contains user prefix) or a new one
-      const isExistingIndex = indexName.includes('-') && indexName.length > 10; // Existing indexes have format: userprefix-name
-      
-      if (isExistingIndex) {
-        // Use existing vector store - skip creation, go straight to deployment
+      if (isExisting) {
+        // Use existing vector store - pass vectorstore object to deployment
         console.log('🔄 Using existing vector store:', displayName, '(' + indexName + ')');
         deployChatbot(indexName, displayName);
       } else {
-        // Create new vector store
-        console.log('🆕 Creating new vector store:', displayName);
-        const res = await fetch('/api/vectorstore', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'create',
-            userId: user?.uid,
-            userInputName: displayName,
-            embeddingModel: formData.embeddingModel, // ✅ Pass the selected embedding model
-          }),
-        });
-        const result = await res.json();
-        if (result.success) {
-          deployChatbot(result.indexName, displayName);
-        } else {
-          throw new Error(result.error || 'Failed to create vectorstore');
-        }
+        // Create new vector store - pass the desired index name to deployment script
+        console.log('🆕 Creating new vector store via deployment script:', displayName, '-> desired index name:', indexName, '-> embedding model:', embeddingModel);
+        deployChatbotWithNewVectorStore(displayName, indexName, embeddingModel);
       }
     } catch (err: any) {
       console.error('Vectorstore handling failed:', err);
