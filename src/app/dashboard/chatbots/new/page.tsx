@@ -225,25 +225,36 @@ export default function NewChatbotPage() {
   const handleConfirmVectorstore = async (displayName: string, indexName: string) => {
     setShowVectorDialog(false);
     try {
-      const res = await fetch('/api/vectorstore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          userId: user?.uid,
-          userInputName: displayName,
-          embeddingModel: formData.embeddingModel, // ✅ Pass the selected embedding model
-        }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        deployChatbot(result.indexName, displayName);
+      // Check if this is an existing index (contains user prefix) or a new one
+      const isExistingIndex = indexName.includes('-') && indexName.length > 10; // Existing indexes have format: userprefix-name
+      
+      if (isExistingIndex) {
+        // Use existing vector store - skip creation, go straight to deployment
+        console.log('🔄 Using existing vector store:', displayName, '(' + indexName + ')');
+        deployChatbot(indexName, displayName);
       } else {
-        throw new Error(result.error || 'Failed to create vectorstore');
+        // Create new vector store
+        console.log('🆕 Creating new vector store:', displayName);
+        const res = await fetch('/api/vectorstore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create',
+            userId: user?.uid,
+            userInputName: displayName,
+            embeddingModel: formData.embeddingModel, // ✅ Pass the selected embedding model
+          }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          deployChatbot(result.indexName, displayName);
+        } else {
+          throw new Error(result.error || 'Failed to create vectorstore');
+        }
       }
     } catch (err: any) {
-      console.error('Vectorstore creation failed:', err);
-      setError(err.message || 'Failed to create vectorstore');
+      console.error('Vectorstore handling failed:', err);
+      setError(err.message || 'Failed to handle vectorstore');
     }
   };
 

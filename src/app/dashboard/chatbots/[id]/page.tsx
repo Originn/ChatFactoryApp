@@ -393,29 +393,38 @@ export default function ChatbotDetailPage() {
     setIsDeploying(true);
     
     try {
-      console.log('🎯 Creating new vector store:', displayName, '->', indexName);
+      // Check if this is an existing index (contains user prefix) or a new one
+      const isExistingIndex = indexName.includes('-') && indexName.length > 10; // Existing indexes have format: userprefix-name
       
-      // Create the vector store first
-      const vectorStoreResponse = await fetch('/api/vectorstore', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'create',
-          userId: user.uid,
-          userInputName: displayName,
-          embeddingModel: chatbot?.aiConfig?.embeddingModel || 'text-embedding-3-small', // ✅ Pass the chatbot's embedding model
-        }),
-      });
-
-      const vectorStoreResult = await vectorStoreResponse.json();
-      
-      if (vectorStoreResult.success) {
-        console.log('✅ Vector store created successfully:', vectorStoreResult);
-        deployWithVectorStore(vectorStoreResult.indexName, displayName);
+      if (isExistingIndex) {
+        // Use existing vector store - skip creation, go straight to deployment
+        console.log('🔄 Using existing vector store:', displayName, '(' + indexName + ')');
+        deployWithVectorStore(indexName, displayName);
       } else {
-        throw new Error(vectorStoreResult.error || 'Failed to create vector store');
+        // Create new vector store
+        console.log('🆕 Creating new vector store:', displayName, '->', indexName);
+        
+        const vectorStoreResponse = await fetch('/api/vectorstore', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'create',
+            userId: user.uid,
+            userInputName: displayName,
+            embeddingModel: chatbot?.aiConfig?.embeddingModel || 'text-embedding-3-small', // ✅ Pass the chatbot's embedding model
+          }),
+        });
+
+        const vectorStoreResult = await vectorStoreResponse.json();
+        
+        if (vectorStoreResult.success) {
+          console.log('✅ Vector store created successfully:', vectorStoreResult);
+          deployWithVectorStore(vectorStoreResult.indexName, displayName);
+        } else {
+          throw new Error(vectorStoreResult.error || 'Failed to create vector store');
+        }
       }
     } catch (error) {
       console.error('❌ Error creating vector store:', error);
