@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/services/databaseService';
+import { PDFService } from '@/services/pdfService';
 import { PDFPrivacyToggleResponse } from '@/types/pdf';
+import { getPDFExpirationHours } from '@/config/pdfAccess';
 
 // PUT /api/user-pdfs/[id]/privacy - Toggle PDF privacy (public/private)
 export async function PUT(
@@ -48,45 +50,33 @@ export async function PUT(
       return NextResponse.json(response);
     }
 
-    // Handle storage-level privacy change
+    // Generate new signed URL for public access (compatible with uniform bucket-level access)
     let newUrl: string | undefined = undefined;
     
-    try {
-      const { Storage } = require('@google-cloud/storage');
-      
-      const credentials = {
-        client_email: process.env.FIREBASE_CLIENT_EMAIL,
-        private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        project_id: process.env.FIREBASE_PROJECT_ID,
-      };
-      
-      const storage = new Storage({
-        projectId: pdf.firebaseProjectId,
-        credentials: credentials
-      });
-      
-      const bucketName = `${pdf.firebaseProjectId}-chatbot-documents`;
-      const bucket = storage.bucket(bucketName);
-      const file = bucket.file(pdf.firebaseStoragePath);
+    if (isPublic) {
+      try {
+        const expirationHours = getPDFExpirationHours('public');
+        const signedUrlResult = await PDFService.generateSignedUrl(
+          pdf.firebaseStoragePath,
+          pdf.firebaseProjectId,
+          expirationHours
+        );
 
-      if (isPublic) {
-        // Make file public
-        await file.makePublic();
-        newUrl = `https://storage.googleapis.com/${bucketName}/${pdf.firebaseStoragePath}`;
-        console.log(`✅ Made PDF ${pdfId} public`);
-      } else {
-        // Make file private (remove public access)
-        await file.acl.delete({ entity: 'allUsers' }).catch(() => {
-          // Ignore error if allUsers permission doesn't exist
-        });
-        console.log(`✅ Made PDF ${pdfId} private`);
+        if (signedUrlResult.success) {
+          newUrl = signedUrlResult.url;
+          console.log(`✅ Generated long-term signed URL for public PDF ${pdfId}`);
+        } else {
+          console.error('Failed to generate signed URL:', signedUrlResult.error);
+          return NextResponse.json({ 
+            error: 'Failed to generate public access URL' 
+          }, { status: 500 });
+        }
+      } catch (storageError) {
+        console.error('Failed to generate signed URL:', storageError);
+        return NextResponse.json({ 
+          error: 'Failed to generate public access URL' 
+        }, { status: 500 });
       }
-
-    } catch (storageError) {
-      console.error('Failed to update storage permissions:', storageError);
-      return NextResponse.json({ 
-        error: 'Failed to update PDF storage permissions' 
-      }, { status: 500 });
     }
 
     // Update database

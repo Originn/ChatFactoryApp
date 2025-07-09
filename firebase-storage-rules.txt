@@ -11,6 +11,18 @@ service firebase.storage {
       allow write: if false; // Only backend can write
     }
     
+    // Public images - anyone can read (for chatbot document images)
+    match /chatbot_documents_images/{chatbotId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only backend can write
+    }
+    
+    // Alternative: For reusable project with project ID in path
+    match /{projectId}-chatbot-document-images/{chatbotId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only backend can write
+    }
+    
     // Private PDFs - only owner can access
     match /private_pdfs/{userId}/{chatbotId}/{fileName} {
       allow read: if request.auth != null && request.auth.uid == userId;

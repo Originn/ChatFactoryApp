@@ -13,12 +13,14 @@ interface CHMProcessingRequest {
   firebaseProjectId: string;
   isPublic?: boolean;
   // Embedding configuration (same as PDF)
-  embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock';
+  embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock' | 'jina';
   embeddingModel: string;
   dimensions?: number;
   // Pinecone configuration
   pineconeIndex: string;
   pineconeNamespace?: string;
+  // Image storage configuration
+  imageStorageBucket?: string;
 }
 
 interface CHMConversionResult {
@@ -39,8 +41,11 @@ interface CHMConversionResult {
   embedding_provider?: string;
   embedding_model?: string;
   embedding_enabled?: boolean;
+  embedding_config?: string;
   pinecone_vectors_uploaded?: number;
+  vectorCount?: number;
   chunks_generated?: number;
+  mode?: string;
   error?: string;
 }
 
@@ -50,6 +55,7 @@ interface CHMProcessingResult {
   vectorCount?: number;
   pdfUrl?: string;
   error?: string;
+  mode?: string;
   // Job tracking fields for polling
   jobId?: string;
   status?: 'queued' | 'processing' | 'processing_embeddings' | 'completed' | 'failed';
@@ -82,10 +88,20 @@ export class CHMService {
         formData.append('dimensions', request.dimensions.toString());
       }
 
+      // Add image storage bucket
+      if (request.imageStorageBucket) {
+        formData.append('image_storage_bucket', request.imageStorageBucket);
+      }
+
+      // 🔒 SECURITY: Pass privacy flag to cloud converter
+      if (request.isPublic !== undefined) {
+        formData.append('is_public', request.isPublic.toString());
+      }
+
       console.log(`🔄 Processing CHM with enhanced converter: ${request.file.name}`);
       console.log(`📝 Embedding config: ${request.embeddingProvider}/${request.embeddingModel}`);
       console.log(`📊 Pinecone: ${request.pineconeIndex}${request.pineconeNamespace ? `/${request.pineconeNamespace}` : ''}`);
-
+      console.log(`🔒 Privacy setting: ${request.isPublic ? 'Public' : 'Private'}`);
       const response = await fetch(`${CHM_CONVERTER_URL}/convert`, {
         method: 'POST',
         body: formData,
@@ -358,21 +374,24 @@ For now, the PDF is stored and can be accessed directly.`;
 
       if (isPublic) {
         try {
-          await file.makePublic();
-          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+          // Generate signed URL for public access (works with uniform bucket-level access)
+          const [signedUrl] = await file.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 1000 * 60 * 60 * 24 * 365, // 1 year from now
+          });
           
-          console.log(`✅ Public PDF stored: ${filePath}`);
+          console.log(`✅ Public PDF stored with signed URL: ${filePath}`);
           return {
             success: true,
             storagePath: filePath,
-            publicUrl: publicUrl
+            publicUrl: signedUrl
           };
         } catch (urlError) {
-          console.error('Failed to make PDF public:', urlError);
+          console.error('Failed to generate signed URL:', urlError);
           return {
             success: false,
             storagePath: filePath,
-            error: 'Failed to make PDF publicly accessible'
+            error: 'Failed to generate public access URL'
           };
         }
       } else {
@@ -403,11 +422,12 @@ For now, the PDF is stored and can be accessed directly.`;
     firebaseProjectId: string,
     isPublic: boolean = false,
     // NEW: Embedding configuration parameters (same as PDF service)
-    embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock' = 'openai',
+    embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock' | 'jina' = 'openai',
     embeddingModel: string = 'text-embedding-3-small',
     dimensions?: number,
     pineconeIndex?: string,
-    pineconeNamespace?: string
+    pineconeNamespace?: string,
+    imageStorageBucket?: string
   ): Promise<CHMProcessingResult> {
     try {
       console.log(`🔄 Starting enhanced CHM processing for: ${file.name}`);
@@ -426,7 +446,8 @@ For now, the PDF is stored and can be accessed directly.`;
           embeddingModel,
           dimensions,
           pineconeIndex,
-          pineconeNamespace
+          pineconeNamespace,
+          imageStorageBucket
         });
 
         if (!enhancedResult.success) {

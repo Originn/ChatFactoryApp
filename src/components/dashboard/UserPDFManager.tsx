@@ -60,13 +60,8 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
     if (!user?.uid) return;
 
     try {
-      // For public PDFs, use the stored public URL
-      if (pdf.isPublic && pdf.publicUrl) {
-        window.open(pdf.publicUrl, '_blank');
-        return;
-      }
-
-      // For private PDFs, get a signed URL
+      // Always use the access API endpoint for both public and private PDFs
+      // This ensures consistency with uniform bucket-level access
       const response = await fetch(`/api/user-pdfs/${pdf.id}/access?userId=${user.uid}`);
       const result: PDFAccessResponse = await response.json();
 
@@ -230,8 +225,8 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
                       {getStatusBadge(pdf.status)}
                       <Tooltip
                         content={pdf.isPublic 
-                          ? "Public: Anyone with the link can access this PDF"
-                          : "Private: Only you can access this PDF with signed URLs"
+                          ? "Public: Long-term access URL (1 year expiration)"
+                          : "Private: Access URL expires after 7 days (regenerated each time you click View PDF)"
                         }
                       >
                         <Badge variant={pdf.isPublic ? "default" : "secondary"}>

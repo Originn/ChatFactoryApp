@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFService } from '@/services/pdfService';
+import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import { adminDb } from '@/lib/firebase/admin';
 
 export async function POST(request: NextRequest) {
@@ -65,25 +66,34 @@ export async function POST(request: NextRequest) {
 
     if (aiConfig.embeddingModel.includes('/')) {
       [embeddingProvider, embeddingModel] = aiConfig.embeddingModel.split('/', 2);
+    } else {
+      // Auto-detect provider based on model name
+      if (aiConfig.embeddingModel.startsWith('jina-')) {
+        embeddingProvider = 'jina';
+      } else if (aiConfig.embeddingModel.startsWith('cohere-') || aiConfig.embeddingModel.startsWith('embed-')) {
+        embeddingProvider = 'cohere';
+      } else if (aiConfig.embeddingModel.startsWith('hf-')) {
+        embeddingProvider = 'huggingface';
+      } else if (aiConfig.embeddingModel.startsWith('azure-')) {
+        embeddingProvider = 'azure';
+      }
     }
 
-    // Set dimensions based on known models
-    const modelDimensions: Record<string, number> = {
-      'text-embedding-3-large': 3072,
-      'text-embedding-3-small': 1536,
-      'text-embedding-ada-002': 1536,
-      'embed-multilingual-v3.0': 1024,
-      'embed-english-v3.0': 1024,
-      'voyage-large-2': 1536,
-      'voyage-code-2': 1536
-    };
+    // ✅ Get dimensions from centralized configuration
+    dimensions = getEmbeddingDimensions(embeddingModel);
 
-    dimensions = modelDimensions[embeddingModel] || vectorstore.dimension;
+    // Get multimodal flag from AI config
+    const multimodal = aiConfig.multimodal || false;
+
+    // Construct image storage bucket name
+    const imageStorageBucket = `${firebaseProjectId}-chatbot-document-images`;
 
     console.log(`🔥 Using Firebase project: ${firebaseProjectId}`);
     console.log(`🔒 PDF access level: ${isPublic ? 'Public' : 'Private'}`);
     console.log(`📊 Vectorstore: ${vectorstore.indexName}`);
     console.log(`🤖 Embedding: ${embeddingProvider}/${embeddingModel} (${dimensions}d)`);
+    console.log(`🎨 Multimodal: ${multimodal ? 'enabled' : 'disabled'}`);
+    console.log(`🪣 Image storage bucket: ${imageStorageBucket}`);
 
     // Process the PDF file with the cloud converter
     const result = await PDFService.processPDFDocument({
@@ -94,9 +104,11 @@ export async function POST(request: NextRequest) {
       isPublic,
       embeddingProvider: embeddingProvider as any,
       embeddingModel,
+      multimodal,
       dimensions,
       pineconeIndex: vectorstore.indexName,
-      pineconeNamespace: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined
+      pineconeNamespace: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
+      imageStorageBucket
     });
 
     if (result.success) {

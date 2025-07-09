@@ -523,12 +523,25 @@ export class FirebaseProjectService {
             const bucketName = `${projectId}-${suffix}`;
             try {
               // Create bucket using Google Cloud Storage client library
+              // Make chatbot_documents_images bucket public for image serving
+              const isPublicBucket = suffix === 'chatbot_documents_images';
               const [bucket] = await storage.createBucket(bucketName, {
                 location: region,
                 storageClass: 'STANDARD',
                 uniformBucketLevelAccess: true,
-                publicAccessPrevention: 'enforced'
+                publicAccessPrevention: isPublicBucket ? 'inherited' : 'enforced'
               });
+
+              // If this is the images bucket, make it publicly readable
+              if (isPublicBucket) {
+                try {
+                  await bucket.makePublic();
+                  console.log(`🌐 Made bucket ${bucketName} publicly accessible`);
+                } catch (publicError: any) {
+                  console.warn(`⚠️ Could not make bucket ${bucketName} public:`, publicError.message);
+                  console.warn('💡 You may need to manually set public access in Firebase Console');
+                }
+              }
               
               buckets[suffix] = bucketName;
               console.log('✅ Bucket created:', bucketName);

@@ -405,6 +405,7 @@ export default function ChatbotDetailPage() {
           action: 'create',
           userId: user.uid,
           userInputName: displayName,
+          embeddingModel: chatbot?.aiConfig?.embeddingModel || 'text-embedding-3-small', // ✅ Pass the chatbot's embedding model
         }),
       });
 

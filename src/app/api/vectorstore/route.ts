@@ -4,13 +4,13 @@ import { PineconeService } from '@/services/pineconeService';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, chatbotId, indexName, userId, userInputName, dimension = 1536 } = body;
+    const { action, chatbotId, indexName, userId, userInputName, embeddingModel, requiredDimensions } = body;
 
     switch (action) {
       case 'create':
-        if (!userId || !userInputName) {
+        if (!userId || !userInputName || !embeddingModel) {
           return NextResponse.json({ 
-            error: 'Missing required fields: userId, userInputName' 
+            error: 'Missing required fields: userId, userInputName, embeddingModel' 
           }, { status: 400 });
         }
         
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
           }, { status: 409 });
         }
         
-        const createResult = await PineconeService.createIndex(sanitizedName, userId, dimension);
+        const createResult = await PineconeService.createIndex(sanitizedName, userId, embeddingModel);
         return NextResponse.json({
           ...createResult,
           displayName: userInputName,
@@ -71,6 +71,16 @@ export async function POST(request: NextRequest) {
         const listResult = await PineconeService.listUserIndexes(userId);
         return NextResponse.json(listResult);
 
+      case 'list-with-dimensions':
+        if (!userId) {
+          return NextResponse.json({ 
+            error: 'Missing required field: userId' 
+          }, { status: 400 });
+        }
+        
+        const listWithDimensionsResult = await PineconeService.listUserIndexesWithDimensions(userId, requiredDimensions);
+        return NextResponse.json(listWithDimensionsResult);
+
       case 'validate-name':
         if (!userId || !userInputName) {
           return NextResponse.json({ 
@@ -90,7 +100,7 @@ export async function POST(request: NextRequest) {
 
       default:
         return NextResponse.json({ 
-          error: 'Invalid action. Supported actions: create, delete, stats, exists, list, validate-name' 
+          error: 'Invalid action. Supported actions: create, delete, stats, exists, list, list-with-dimensions, validate-name' 
         }, { status: 400 });
     }
 

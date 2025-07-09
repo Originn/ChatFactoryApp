@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/services/databaseService';
+import { PDFService } from '@/services/pdfService';
 import { PDFAccessResponse } from '@/types/pdf';
+import { getPDFExpirationHours } from '@/config/pdfAccess';
 
 // GET /api/user-pdfs/[id]/access - Get access URL for a PDF
 export async function GET(
@@ -38,72 +40,53 @@ export async function GET(
       }, { status: 403 });
     }
 
-    // If PDF is public, return the public URL
-    if (pdf.isPublic && pdf.publicUrl) {
+    // Handle CHM external URLs
+    if (pdf.firebaseStoragePath.startsWith('chm-external:')) {
+      const externalUrl = pdf.firebaseStoragePath.replace('chm-external:', '');
       const response: PDFAccessResponse = {
         success: true,
-        accessUrl: pdf.publicUrl,
-        expiresAt: 'never' // Public URLs don't expire
+        accessUrl: externalUrl,
+        expiresAt: 'never' // CHM external URLs don't expire
       };
       
-      console.log(`✅ Returning public URL for PDF ${pdfId}`);
+      console.log(`✅ Returning CHM external URL for PDF ${pdfId}`);
       return NextResponse.json(response);
     }
 
-    // For private PDFs, generate a signed URL
+    // For both public and private PDFs, generate signed URLs
+    // This fixes the uniform bucket-level access issue
     try {
-      // 🔧 FIX: Handle CHM external URLs
-      if (pdf.firebaseStoragePath.startsWith('chm-external:')) {
-        const externalUrl = pdf.firebaseStoragePath.replace('chm-external:', '');
-        const response: PDFAccessResponse = {
-          success: true,
-          accessUrl: externalUrl,
-          expiresAt: 'never' // CHM external URLs don't expire
-        };
-        
-        console.log(`✅ Returning CHM external URL for PDF ${pdfId}`);
-        return NextResponse.json(response);
+      const expirationHours = getPDFExpirationHours(pdf.isPublic ? 'public' : 'private');
+      
+      const signedUrlResult = await PDFService.generateSignedUrl(
+        pdf.firebaseStoragePath,
+        pdf.firebaseProjectId,
+        expirationHours
+      );
+
+      if (!signedUrlResult.success) {
+        console.error('Failed to generate signed URL:', signedUrlResult.error);
+        return NextResponse.json({ 
+          error: 'Failed to generate access URL' 
+        }, { status: 500 });
       }
-      
-      const { Storage } = require('@google-cloud/storage');
-      
-      const credentials = {
-        client_email: process.env.FIREBASE_CLIENT_EMAIL,
-        private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        project_id: process.env.FIREBASE_PROJECT_ID,
-      };
-      
-      const storage = new Storage({
-        projectId: pdf.firebaseProjectId,
-        credentials: credentials
-      });
-      
-      const bucketName = `${pdf.firebaseProjectId}-chatbot-documents`;
-      const bucket = storage.bucket(bucketName);
-      const file = bucket.file(pdf.firebaseStoragePath);
-      
-      // Generate signed URL valid for 24 hours
+
       const expirationDate = new Date();
-      expirationDate.setHours(expirationDate.getHours() + 24);
-      
-      const [signedUrl] = await file.getSignedUrl({
-        action: 'read',
-        expires: expirationDate.getTime()
-      });
+      expirationDate.setHours(expirationDate.getHours() + expirationHours);
 
       const response: PDFAccessResponse = {
         success: true,
-        accessUrl: signedUrl,
-        expiresAt: expirationDate.toISOString()
+        accessUrl: signedUrlResult.url!,
+        expiresAt: pdf.isPublic ? 'extended' : expirationDate.toISOString()
       };
 
-      console.log(`✅ Generated signed URL for private PDF ${pdfId}`);
+      console.log(`✅ Generated signed URL for ${pdf.isPublic ? 'public' : 'private'} PDF ${pdfId}`);
       return NextResponse.json(response);
 
     } catch (storageError) {
       console.error('Failed to generate signed URL:', storageError);
       return NextResponse.json({ 
-        error: 'Failed to generate access URL for private PDF' 
+        error: 'Failed to generate access URL' 
       }, { status: 500 });
     }
 

@@ -5,6 +5,7 @@ import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseAPIService } from '@/services/firebaseAPIService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
+import { BucketConfigService } from '@/services/bucketConfigService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -520,6 +521,21 @@ export async function POST(request: NextRequest) {
 
         dedicatedFirebaseProject = firebaseResult.project;
         console.log('✅ Existing Firebase project configured for chatbot:', dedicatedFirebaseProject.projectId);
+        
+        // Make the chatbot-document-images bucket public for image serving
+        console.log('🪣 Configuring GCS bucket for public image access...');
+        try {
+          const bucketResult = await BucketConfigService.makeImagesBucketPublic(REUSABLE_FIREBASE_PROJECT_ID);
+          if (bucketResult.success) {
+            console.log('✅ Images bucket configured for public access:', bucketResult.message);
+          } else {
+            console.warn('⚠️ Could not configure images bucket for public access:', bucketResult.message);
+            console.warn('💡 You may need to manually make the bucket public in GCP Console');
+          }
+        } catch (bucketError: any) {
+          console.warn('⚠️ Bucket configuration failed:', bucketError.message);
+          console.warn('💡 Images may not be publicly accessible without manual configuration');
+        }
         
       } catch (firebaseError) {
         console.error('❌ Firebase project setup failed:', firebaseError);

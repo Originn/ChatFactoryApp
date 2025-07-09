@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ export default function NewChatbotPage() {
     
     // AI Configuration
     embeddingModel: 'text-embedding-3-small',
+    multimodal: false,
     llmModel: 'gpt-4.1',
     temperature: '0.7',
     contextWindow: '4096',
@@ -66,6 +67,14 @@ export default function NewChatbotPage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
+
+  // Auto-disable multimodal when non-multimodal embedding model is selected
+  useEffect(() => {
+    const multimodalModels = ['jina-embeddings-v4', 'jina-clip-v2'];
+    if (!multimodalModels.includes(formData.embeddingModel)) {
+      setFormData(prev => ({ ...prev, multimodal: false }));
+    }
+  }, [formData.embeddingModel]);
 
   // Add email to invited users
   const addEmailToInvited = () => {
@@ -112,8 +121,13 @@ export default function NewChatbotPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: type === 'checkbox' ? checked : value 
+    }));
   };
 
   // Handle switch/boolean changes
@@ -218,6 +232,7 @@ export default function NewChatbotPage() {
           action: 'create',
           userId: user?.uid,
           userInputName: displayName,
+          embeddingModel: formData.embeddingModel, // ✅ Pass the selected embedding model
         }),
       });
       const result = await res.json();
@@ -296,6 +311,7 @@ export default function NewChatbotPage() {
         documents: [],
         aiConfig: {
           embeddingModel: formData.embeddingModel,
+          multimodal: formData.multimodal,
           llmModel: formData.llmModel,
           temperature: parseFloat(formData.temperature),
           contextWindow: parseInt(formData.contextWindow),
@@ -743,10 +759,54 @@ export default function NewChatbotPage() {
                         <option value="hf-all-mpnet-base-v2">all-mpnet-base-v2</option>
                         <option value="hf-bge-large-en-v1.5">bge-large-en-v1.5</option>
                       </optgroup>
+                      <optgroup label="Jina AI Models">
+                        <option value="jina-embeddings-v4">jina-embeddings-v4 (2048 dimensions, multimodal)</option>
+                        <option value="jina-embeddings-v3">jina-embeddings-v3 (1024 dimensions, text-only)</option>
+                        <option value="jina-clip-v2">jina-clip-v2 (1024 dimensions, multimodal)</option>
+                      </optgroup>
                     </select>
                     <p className="text-xs text-gray-500">
                       Choose which embedding model to use for document vectorization.
                     </p>
+                  </div>
+                  
+                  {/* Multimodal Toggle */}
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="multimodal"
+                        name="multimodal"
+                        checked={formData.multimodal}
+                        onChange={handleChange}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        disabled={!['jina-embeddings-v4', 'jina-clip-v2'].includes(formData.embeddingModel)}
+                      />
+                      <label htmlFor="multimodal" className="text-sm font-medium">
+                        Enable Multimodal Processing
+                      </label>
+                      <div className="relative group">
+                        <svg className="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 hidden group-hover:block bg-black text-white text-xs rounded py-1 px-2 whitespace-nowrap z-50">
+                          Process both text and images from documents (requires jina-embeddings-v4 or jina-clip-v2)
+                        </div>
+                      </div>
+                    </div>
+                    {formData.multimodal && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                        <p className="text-blue-800">
+                          <strong>Multimodal Mode:</strong> Your chatbot will process both text and images from documents. 
+                          Great for PDFs with charts, diagrams, and visual content.
+                        </p>
+                      </div>
+                    )}
+                    {!['jina-embeddings-v4', 'jina-clip-v2'].includes(formData.embeddingModel) && (
+                      <p className="text-xs text-orange-600">
+                        Multimodal processing requires jina-embeddings-v4 or jina-clip-v2 models.
+                      </p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -1177,6 +1237,7 @@ export default function NewChatbotPage() {
         onConfirm={handleConfirmVectorstore}
         onCancel={() => setShowVectorDialog(false)}
         userId={user?.uid || ''}
+        embeddingModel={formData.embeddingModel}
         isValidating={isDeployingPreview}
       />
     </div>

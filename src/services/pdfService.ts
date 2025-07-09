@@ -2,6 +2,7 @@ import { adminStorage } from '@/lib/firebase/admin';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { PDFStorageResult } from '@/types/pdf';
+import { getPDFExpirationHours } from '@/config/pdfAccess';
 
 const PDF_CONVERTER_URL = process.env.PDF_CONVERTER_URL || 'https://pdf-converter-931513743743.us-central1.run.app';
 
@@ -12,12 +13,15 @@ interface PDFProcessingRequest {
   firebaseProjectId: string;
   isPublic?: boolean;
   // Embedding configuration
-  embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock';
+  embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock' | 'jina';
   embeddingModel: string;
+  multimodal?: boolean;
   dimensions?: number;
   // Pinecone configuration
   pineconeIndex: string;
   pineconeNamespace?: string;
+  // Image storage configuration
+  imageStorageBucket?: string;
 }
 
 interface PDFConversionResult {
@@ -62,12 +66,27 @@ export class PDFService {
       formData.append('embedding_provider', request.embeddingProvider);
       formData.append('embedding_model', request.embeddingModel);
       
+      if (request.multimodal) {
+        formData.append('multimodal', 'true');
+      }
+      
       if (request.dimensions) {
         formData.append('dimensions', request.dimensions.toString());
       }
 
+      // Add image storage bucket
+      if (request.imageStorageBucket) {
+        formData.append('image_storage_bucket', request.imageStorageBucket);
+      }
+
+      // 🔒 SECURITY: Pass privacy flag to cloud converter
+      if (request.isPublic !== undefined) {
+        formData.append('is_public', request.isPublic.toString());
+      }
+
       console.log(`🔄 Processing PDF with converter: ${request.file.name}`);
       console.log(`📝 Embedding config: ${request.embeddingProvider}/${request.embeddingModel}`);
+      console.log(`🔒 Privacy setting: ${request.isPublic ? 'Public' : 'Private'}`);
 
       const response = await fetch(`${PDF_CONVERTER_URL}/process-pdf`, {
         method: 'POST',
@@ -205,21 +224,25 @@ export class PDFService {
       // Handle URL generation based on privacy setting
       if (isPublic) {
         try {
-          await file.makePublic();
-          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+          // Generate signed URL for public access (works with uniform bucket-level access)
+          const expirationHours = getPDFExpirationHours('public');
+          const [signedUrl] = await file.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 1000 * 60 * 60 * expirationHours,
+          });
           
-          console.log(`✅ Public PDF stored: ${filePath}`);
+          console.log(`✅ Public PDF stored with signed URL: ${filePath}`);
           return {
             success: true,
             storagePath: filePath,
-            publicUrl: publicUrl
+            publicUrl: signedUrl
           };
         } catch (urlError) {
-          console.error('Failed to make PDF public:', urlError);
+          console.error('Failed to generate signed URL:', urlError);
           return {
             success: false,
             storagePath: filePath,
-            error: 'Failed to make PDF publicly accessible'
+            error: 'Failed to generate public access URL'
           };
         }
       } else {
@@ -236,6 +259,51 @@ export class PDFService {
         success: false,
         storagePath: '',
         error: `Failed to store PDF in Firebase: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  /**
+   * Generate a new signed URL for an existing PDF file
+   */
+  static async generateSignedUrl(
+    storagePath: string,
+    firebaseProjectId: string,
+    expirationHours: number = 24
+  ): Promise<{ success: boolean; url?: string; error?: string }> {
+    try {
+      const { Storage } = require('@google-cloud/storage');
+      
+      const credentials = {
+        client_email: process.env.FIREBASE_CLIENT_EMAIL,
+        private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        project_id: process.env.FIREBASE_PROJECT_ID,
+      };
+      
+      const projectSpecificStorage = new Storage({
+        projectId: firebaseProjectId,
+        credentials: credentials
+      });
+      
+      const chatbotBucketName = `${firebaseProjectId}-chatbot-documents`;
+      const bucket = projectSpecificStorage.bucket(chatbotBucketName);
+      const file = bucket.file(storagePath);
+      
+      const [signedUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 1000 * 60 * 60 * expirationHours,
+      });
+      
+      return {
+        success: true,
+        url: signedUrl
+      };
+      
+    } catch (error) {
+      console.error('Failed to generate signed URL:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }

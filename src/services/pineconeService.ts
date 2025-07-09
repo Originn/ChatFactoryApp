@@ -1,5 +1,6 @@
 // src/services/pineconeService.ts
 import { Pinecone } from '@pinecone-database/pinecone';
+import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import OpenAI from 'openai';
 
 interface DocumentMetadata {
@@ -11,6 +12,7 @@ interface DocumentMetadata {
   totalChunks: number;
   uploadedAt: string;
   source?: string;
+  isPublic?: boolean; // 🔒 SECURITY: Privacy flag to control chatbot access
   [key: string]: any; // Allow additional metadata fields
 }
 
@@ -84,22 +86,22 @@ class PineconeService {
       const pc = this.getPineconeClient();
       const indexList = await pc.listIndexes();
       
-      const userPrefix = userId.substring(0, 8);
+      const userPrefix = userId.substring(0, 8).toLowerCase(); // ✅ Force lowercase
       const userIndexes = indexList.indexes?.filter(index => 
-        index.name?.startsWith(`${userPrefix}-`)
+        index.name?.toLowerCase().startsWith(`${userPrefix}-`) // ✅ Case insensitive comparison
       ) || [];
 
       const indexesWithStats = await Promise.all(userIndexes.map(async (index) => {
         try {
           const stats = await pc.index(index.name!).describeIndexStats();
-          const displayName = index.name!.replace(`${userPrefix}-`, '').replace(/-/g, ' ');
+          const displayName = index.name!.replace(new RegExp(`^${userPrefix}-`, 'i'), '').replace(/-/g, ' '); // ✅ Case insensitive replacement
           return {
             name: index.name!,
             displayName: displayName,
             stats: stats
           };
         } catch (error) {
-          const displayName = index.name!.replace(`${userPrefix}-`, '').replace(/-/g, ' ');
+          const displayName = index.name!.replace(new RegExp(`^${userPrefix}-`, 'i'), '').replace(/-/g, ' '); // ✅ Case insensitive replacement
           return {
             name: index.name!,
             displayName: displayName,
@@ -110,6 +112,113 @@ class PineconeService {
 
       return { success: true, indexes: indexesWithStats };
     } catch (error) {
+      return { 
+        success: false, 
+        indexes: [],
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // List all indexes owned by a user with dimensions and compatibility info
+  static async listUserIndexesWithDimensions(userId: string, requiredDimensions?: number): Promise<{ 
+    success: boolean; 
+    indexes: Array<{
+      name: string, 
+      displayName: string, 
+      dimensions?: number,
+      isCompatible: boolean,
+      vectorCount?: number,
+      stats?: any
+    }>; 
+    error?: string 
+  }> {
+    try {
+      const pc = this.getPineconeClient();
+      const indexList = await pc.listIndexes();
+      
+      const userPrefix = userId.substring(0, 8).toLowerCase(); // ✅ Force lowercase
+      
+      const userIndexes = indexList.indexes?.filter(index => 
+        index.name?.toLowerCase().startsWith(`${userPrefix}-`) // ✅ Case insensitive comparison
+      ) || [];
+
+      const indexesWithDetails = await Promise.all(userIndexes.map(async (index) => {
+        try {
+          const stats = await pc.index(index.name!).describeIndexStats();
+          const displayName = index.name!.replace(new RegExp(`^${userPrefix}-`, 'i'), '').replace(/-/g, ' '); // ✅ Case insensitive replacement
+          
+          // Get dimensions from index configuration
+          const dimensions = index.dimension;
+          const isCompatible = requiredDimensions ? dimensions === requiredDimensions : true;
+          
+          // Better vector count extraction - check multiple possible locations
+          let vectorCount = 0;
+          
+          // Try totalRecordCount first (newer API)
+          if (stats?.totalRecordCount) {
+            vectorCount = stats.totalRecordCount;
+          } 
+          // Try totalVectorCount (older API)
+          else if (stats?.totalVectorCount) {
+            vectorCount = stats.totalVectorCount;
+          } 
+          // Sum up records from all namespaces
+          else if (stats?.namespaces) {
+            vectorCount = Object.values(stats.namespaces).reduce((total: number, namespace: any) => {
+              return total + (namespace.recordCount || namespace.vectorCount || 0);
+            }, 0);
+          }
+          
+          return {
+            name: index.name!,
+            displayName: displayName,
+            dimensions: dimensions,
+            isCompatible: isCompatible,
+            vectorCount: vectorCount,
+            stats: stats
+          };
+        } catch (error) {
+          console.error('Error processing index:', index.name, error);
+          const displayName = index.name!.replace(new RegExp(`^${userPrefix}-`, 'i'), '').replace(/-/g, ' '); // ✅ Case insensitive replacement
+          
+          // Try to get basic stats even if there's an error
+          let vectorCount = 0;
+          try {
+            const basicStats = await pc.index(index.name!).describeIndexStats();
+            
+            // Try totalRecordCount first (newer API)
+            if (basicStats?.totalRecordCount) {
+              vectorCount = basicStats.totalRecordCount;
+            } 
+            // Try totalVectorCount (older API)
+            else if (basicStats?.totalVectorCount) {
+              vectorCount = basicStats.totalVectorCount;
+            } 
+            // Sum up records from all namespaces
+            else if (basicStats?.namespaces) {
+              vectorCount = Object.values(basicStats.namespaces).reduce((total: number, namespace: any) => {
+                return total + (namespace.recordCount || namespace.vectorCount || 0);
+              }, 0);
+            }
+          } catch (retryError) {
+            console.error('Failed to get basic stats on retry:', retryError);
+          }
+          
+          return {
+            name: index.name!,
+            displayName: displayName,
+            dimensions: index.dimension,
+            isCompatible: requiredDimensions ? index.dimension === requiredDimensions : true,
+            vectorCount: vectorCount, // Use the calculated vectorCount
+            stats: null
+          };
+        }
+      }));
+
+      return { success: true, indexes: indexesWithDetails };
+    } catch (error) {
+      console.error('Error in listUserIndexesWithDimensions:', error);
       return { 
         success: false, 
         indexes: [],
@@ -131,11 +240,15 @@ class PineconeService {
   static async createIndex(
     indexName: string, // Now accepts custom name instead of chatbotId
     userId: string,
-    dimension: number = 1536,
+    embeddingModel: string, // ✅ Now requires embedding model to get correct dimensions
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine'
   ): Promise<{ success: boolean; indexName: string; error?: string }> {
     try {
       const pc = this.getPineconeClient();
+      
+      // ✅ Get dimensions based on embedding model
+      const dimension = getEmbeddingDimensions(embeddingModel);
+      console.log(`🔢 Creating index with ${dimension} dimensions for model: ${embeddingModel}`);
 
       if (await this.indexExists(indexName)) {
         console.log(`✅ Index ${indexName} already exists`);
@@ -207,11 +320,11 @@ class PineconeService {
   static async createIndexFromChatbotId(
     chatbotId: string,
     userId: string,
-    dimension: number = 1536,
+    embeddingModel: string = 'text-embedding-3-small', // ✅ Now uses embeddingModel instead of dimension
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine'
   ): Promise<{ success: boolean; indexName: string; error?: string }> {
     const indexName = this.generateIndexName(chatbotId);
-    return this.createIndex(indexName, userId, dimension, metric);
+    return this.createIndex(indexName, userId, embeddingModel, metric);
   }
 
   static async generateEmbeddings(textChunks: string[]): Promise<number[][]> {

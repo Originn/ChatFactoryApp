@@ -888,19 +888,6 @@ export class ReusableFirebaseProjectService {
     }
     
     console.log(`✅ Bucket ${workingBucket.name} cleanup completed!`);
-  }
-          console.log(`✅ Deleted any remaining folder markers`);
-        } catch (error: any) {
-          console.warn(`⚠️ Could not delete folder markers:`, error.message);
-        }
-        
-      } else {
-        console.log(`✅ Bucket is already empty`);
-      }
-      
-    } catch (error: any) {
-      console.warn(`⚠️ Could not perform nuclear cleanup:`, error.message);
-    }
     
     // Step 5: Final verification - should be empty now
     console.log(`🔍 Verifying cleanup completed...`);
@@ -924,102 +911,8 @@ export class ReusableFirebaseProjectService {
     }
     
     console.log(`✅ Comprehensive storage cleanup completed!`);
-    
-    // Step 5: Detailed bucket inspection for debugging
-    console.log(`🔍 DEBUGGING: Final bucket inspection for chatbot ${chatbotId}...`);
-    
-    try {
-      // List all buckets in the project
-      const buckets = await projectSpecificStorage.getBuckets();
-      console.log(`📦 Found ${buckets[0].length} buckets in project ${reusableProjectId}:`);
-      
-      for (const bucket of buckets[0]) {
-        console.log(`  📦 Bucket: ${bucket.name}`);
-        
-        try {
-          // List files in each bucket
-          const [files] = await bucket.getFiles({
-            maxResults: 20 // Just show first 20 files
-          });
-          
-          console.log(`    📁 Contains ${files.length} files (showing first 20):`);
-          files.forEach((file, index) => {
-            if (index < 20) {
-              console.log(`      ${index + 1}. ${file.name}`);
-            }
-          });
-          
-          // Check for chatbot-specific files
-          const chatbotFiles = files.filter(file => 
-            file.name.includes(chatbotId) || 
-            file.name.includes(`user-${userId}`) ||
-            file.name.includes(`chatbot-${chatbotId}`)
-          );
-          
-          if (chatbotFiles.length > 0) {
-            console.log(`    ⚠️ FOUND ${chatbotFiles.length} CHATBOT-RELATED FILES:`);
-            chatbotFiles.forEach(file => console.log(`      🎯 ${file.name}`));
-          } else {
-            console.log(`    ✅ No chatbot-related files found in this bucket`);
-          }
-          
-        } catch (bucketError: any) {
-          console.log(`    ❌ Could not list files in bucket ${bucket.name}: ${bucketError.message}`);
-        }
-      }
-      
-    } catch (error: any) {
-      console.warn(`⚠️ Could not perform bucket inspection:`, error.message);
-    }
-    
-    console.log(`🔍 Bucket inspection completed for chatbot ${chatbotId}`);
-    
-    // Step 4: Log remaining files for verification (optional)
-    if (totalFilesDeleted > 0) {
-      console.log(`🔍 Verification: Checking for any remaining files...`);
-      
-      try {
-        const [remainingFiles] = await workingBucket.getFiles({
-          maxResults: 1000
-        });
-        
-        const stillContainsChatbot = remainingFiles.filter(file => 
-          file.name.includes(chatbotId) || file.name.includes(`user-${userId}`)
-        );
-        
-        if (stillContainsChatbot.length > 0) {
-          console.warn(`⚠️ Warning: ${stillContainsChatbot.length} files still contain chatbot/user references:`);
-          stillContainsChatbot.forEach(file => console.warn(`  - ${file.name}`));
-        } else {
-          console.log(`✅ Verification passed: No remaining files found`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Could not perform verification scan:`, error);
-      }
-    }
-    
-    // Step 5: Aggressive cleanup - attempt bucket cleanup if enabled
-    if (aggressiveCleanup && totalFilesDeleted > 0) {
-      console.log(`🔥 AGGRESSIVE CLEANUP: Checking if buckets can be deleted...`);
-      
-      try {
-        const [allRemainingFiles] = await workingBucket.getFiles({
-          maxResults: 100 // Just check if bucket is empty
-        });
-        
-        if (allRemainingFiles.length === 0) {
-          console.log(`🗑️ AGGRESSIVE CLEANUP: Storage bucket is now empty!`);
-          console.log(`⚠️ Note: Bucket deletion requires manual intervention for safety`);
-          console.log(`💡 You can manually delete the bucket from Firebase Console if no longer needed`);
-        } else {
-          console.log(`📁 AGGRESSIVE CLEANUP: Storage bucket still contains ${allRemainingFiles.length} files from other chatbots`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Could not check bucket status for aggressive cleanup:`, error);
-      }
-    }
   }
-  
+
   /**
    * Clean up Firebase Auth users related to a specific chatbot
    * Note: This is optional and might not be desired in all cases

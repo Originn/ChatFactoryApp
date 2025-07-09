@@ -699,12 +699,36 @@ export class FirebaseAPIService {
       for (const suffix of bucketSuffixes) {
         const bucketName = `${projectId}-${suffix}`;
         try {
-          const [bucket] = await projectSpecificStorage.createBucket(bucketName, {
+          // ✅ Special configuration for image bucket (needs to be public for multimodal embedding)
+          const isImageBucket = suffix === 'chatbot-document-images';
+          
+          const bucketConfig = {
             location: 'us-central1',
             storageClass: 'STANDARD',
             uniformBucketLevelAccess: true,
-            publicAccessPrevention: 'enforced'
-          });
+            publicAccessPrevention: isImageBucket ? 'inherited' : 'enforced' // ✅ Allow public access for images
+          };
+          
+          const [bucket] = await projectSpecificStorage.createBucket(bucketName, bucketConfig);
+          
+          // ✅ Make image bucket publicly readable for multimodal embedding
+          if (isImageBucket) {
+            try {
+              const [policy] = await bucket.getIamPolicy({ requestedPolicyVersion: 3 });
+              
+              // Add public read access
+              policy.bindings.push({
+                role: 'roles/storage.objectViewer',
+                members: ['allUsers']
+              });
+              
+              await bucket.setIamPolicy(policy);
+              console.log('🌐 Made image bucket publicly readable:', bucketName);
+            } catch (publicError: any) {
+              console.warn('⚠️ Could not make image bucket public:', publicError.message);
+              // Continue anyway - can be set manually later
+            }
+          }
           
           buckets[suffix.replace('-', '_')] = bucketName;
           console.log('✅ Bucket created via Storage SDK:', bucketName);
@@ -712,6 +736,34 @@ export class FirebaseAPIService {
           if (bucketError.code === 409) {
             buckets[suffix.replace('-', '_')] = bucketName;
             console.log('ℹ️ Bucket already exists:', bucketName);
+            
+            // ✅ Still try to make image bucket public if it already exists
+            if (suffix === 'chatbot-document-images') {
+              try {
+                const bucket = projectSpecificStorage.bucket(bucketName);
+                const [policy] = await bucket.getIamPolicy({ requestedPolicyVersion: 3 });
+                
+                // Check if already public
+                const isAlreadyPublic = policy.bindings.some(binding => 
+                  binding.role === 'roles/storage.objectViewer' && 
+                  binding.members?.includes('allUsers')
+                );
+                
+                if (!isAlreadyPublic) {
+                  policy.bindings.push({
+                    role: 'roles/storage.objectViewer',
+                    members: ['allUsers']
+                  });
+                  
+                  await bucket.setIamPolicy(policy);
+                  console.log('🌐 Made existing image bucket publicly readable:', bucketName);
+                } else {
+                  console.log('✅ Image bucket is already publicly readable:', bucketName);
+                }
+              } catch (publicError: any) {
+                console.warn('⚠️ Could not make existing image bucket public:', publicError.message);
+              }
+            }
           } else {
             console.warn(`⚠️ Failed to create bucket ${bucketName} via Storage SDK:`, bucketError.message);
           }

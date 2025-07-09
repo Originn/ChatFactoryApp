@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CHMService } from '@/services/chmService';
+import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import { DatabaseService } from '@/services/databaseService';
 import { adminDb } from '@/lib/firebase/admin';
 
@@ -103,28 +104,30 @@ export async function POST(request: NextRequest) {
 
     if (aiConfig.embeddingModel.includes('/')) {
       [embeddingProvider, embeddingModel] = aiConfig.embeddingModel.split('/', 2);
+    } else {
+      // Auto-detect provider based on model name
+      if (aiConfig.embeddingModel.startsWith('jina-')) {
+        embeddingProvider = 'jina';
+      } else if (aiConfig.embeddingModel.startsWith('cohere-') || aiConfig.embeddingModel.startsWith('embed-')) {
+        embeddingProvider = 'cohere';
+      } else if (aiConfig.embeddingModel.startsWith('hf-')) {
+        embeddingProvider = 'huggingface';
+      } else if (aiConfig.embeddingModel.startsWith('azure-')) {
+        embeddingProvider = 'azure';
+      }
     }
 
-    // Set dimensions based on known models (same as PDF)
-    const modelDimensions: Record<string, number> = {
-      'text-embedding-3-large': 3072,
-      'text-embedding-3-small': 1536,
-      'text-embedding-ada-002': 1536,
-      'embed-multilingual-v3.0': 1024,
-      'embed-english-v3.0': 1024,
-      'voyage-large-2': 1536,
-      'voyage-code-2': 1536,
-      'voyage-3': 1024,
-      'voyage-code-3': 1024,
-      'voyage-finance-3': 1024
-    };
+    // ✅ Get dimensions from centralized configuration
+    dimensions = getEmbeddingDimensions(embeddingModel);
 
-    dimensions = modelDimensions[embeddingModel] || vectorstore.dimension;
+    // Construct image storage bucket name
+    const imageStorageBucket = `${firebaseProjectId}-chatbot-document-images`;
 
     console.log(`🔥 Using Firebase project: ${firebaseProjectId}`);
     console.log(`🔒 CHM access level: ${isPublic ? 'Public' : 'Private'}`);
     console.log(`📊 Vectorstore: ${vectorstore.indexName}`);
     console.log(`🤖 Embedding: ${embeddingProvider}/${embeddingModel} (${dimensions}d)`);
+    console.log(`🪣 Image storage bucket: ${imageStorageBucket}`);
 
     // Process the CHM file with the enhanced converter
     const result = await CHMService.processCHMDocument(
@@ -138,7 +141,8 @@ export async function POST(request: NextRequest) {
       embeddingModel,
       dimensions,
       vectorstore.indexName,
-      chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined
+      chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
+      imageStorageBucket
     );
 
     // Handle different result statuses
@@ -179,7 +183,7 @@ export async function POST(request: NextRequest) {
         fileName: file.name.replace('.chm', '.pdf'),
         embeddingConfig: `${embeddingProvider}/${embeddingModel}`,
         vectorstore: vectorstore.indexName,
-        mode: result.mode || 'enhanced_complete' // ✅ Use mode from CHM service result
+        mode: 'enhanced_complete' // ✅ Default mode for CHM processing
       });
     } else if (result.jobId) {
       // Job is queued or processing - return job info for polling
