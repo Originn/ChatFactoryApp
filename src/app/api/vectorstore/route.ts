@@ -4,7 +4,7 @@ import { PineconeService } from '@/services/pineconeService';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, chatbotId, indexName, userId, userInputName, embeddingModel, requiredDimensions } = body;
+    const { action, chatbotId, indexName, userId, userInputName, embeddingModel, requiredEmbeddingModel } = body;
 
     switch (action) {
       case 'create':
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
         
-        const listWithDimensionsResult = await PineconeService.listUserIndexesWithDimensions(userId, requiredDimensions);
+        const listWithDimensionsResult = await PineconeService.listUserIndexesWithDimensions(userId, requiredEmbeddingModel);
         return NextResponse.json(listWithDimensionsResult);
 
       case 'validate-name':

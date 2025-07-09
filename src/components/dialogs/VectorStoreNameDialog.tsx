@@ -12,6 +12,7 @@ interface ExistingIndex {
   name: string;
   displayName: string;
   dimensions?: number;
+  embeddingModel?: string;
   stats?: any;
   isCompatible: boolean;
   vectorCount?: number;
@@ -63,7 +64,7 @@ export function VectorStoreNameDialog({
         body: JSON.stringify({
           action: 'list-with-dimensions',
           userId,
-          requiredDimensions: selectedEmbeddingDimensions,
+          requiredEmbeddingModel: embeddingModel,
         }),
       });
 
@@ -231,13 +232,22 @@ export function VectorStoreNameDialog({
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {index.dimensions} dimensions (requires {selectedEmbeddingDimensions})
+                    {index.dimensions} dimensions
                     {index.vectorCount !== undefined && (
                       <span className="ml-2">{index.vectorCount.toLocaleString()} vectors</span>
                     )}
                   </div>
+                  <div className="text-xs text-red-600 mt-1">
+                    Requires embedding model: {index.embeddingModel || 'unknown'}
+                  </div>
                 </div>
               ))}
+            </div>
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-800">
+                💡 <strong>Tip:</strong> Different embedding models create incompatible vector spaces, even with the same dimensions. 
+                To use these indexes, create a new chatbot with the matching embedding model.
+              </p>
             </div>
           </div>
         )}

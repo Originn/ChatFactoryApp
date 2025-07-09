@@ -121,12 +121,13 @@ class PineconeService {
   }
 
   // List all indexes owned by a user with dimensions and compatibility info
-  static async listUserIndexesWithDimensions(userId: string, requiredDimensions?: number): Promise<{ 
+  static async listUserIndexesWithDimensions(userId: string, requiredEmbeddingModel?: string): Promise<{ 
     success: boolean; 
     indexes: Array<{
       name: string, 
       displayName: string, 
       dimensions?: number,
+      embeddingModel?: string,
       isCompatible: boolean,
       vectorCount?: number,
       stats?: any
@@ -145,12 +146,22 @@ class PineconeService {
 
       const indexesWithDetails = await Promise.all(userIndexes.map(async (index) => {
         try {
-          const stats = await pc.index(index.name!).describeIndexStats();
+          // Get both stats and index details (including tags)
+          const [stats, indexDetails] = await Promise.all([
+            pc.index(index.name!).describeIndexStats(),
+            pc.describeIndex(index.name!)
+          ]);
+          
           const displayName = index.name!.replace(new RegExp(`^${userPrefix}-`, 'i'), '').replace(/-/g, ' '); // ✅ Case insensitive replacement
           
           // Get dimensions from index configuration
           const dimensions = index.dimension;
-          const isCompatible = requiredDimensions ? dimensions === requiredDimensions : true;
+          
+          // Get embedding model from tags
+          const embeddingModel = indexDetails.tags?.embeddingModel || 'unknown';
+          
+          // Check compatibility based on embedding model (not just dimensions)
+          const isCompatible = requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true;
           
           // Better vector count extraction - check multiple possible locations
           let vectorCount = 0;
@@ -174,6 +185,7 @@ class PineconeService {
             name: index.name!,
             displayName: displayName,
             dimensions: dimensions,
+            embeddingModel: embeddingModel,
             isCompatible: isCompatible,
             vectorCount: vectorCount,
             stats: stats
@@ -184,8 +196,45 @@ class PineconeService {
           
           // Try to get basic stats even if there's an error
           let vectorCount = 0;
+          let embeddingModel = 'unknown';
+          
           try {
-            const basicStats = await pc.index(index.name!).describeIndexStats();
+            const [basicStats, indexDetails] = await Promise.all([
+              pc.index(index.name!).describeIndexStats(),
+              pc.describeIndex(index.name!)
+            ]);
+            
+            embeddingModel = indexDetails.tags?.embeddingModel || 'unknown';
+            
+            // Try totalRecordCount first (newer API)
+            if (basicStats?.totalRecordCount) {
+              vectorCount = basicStats.totalRecordCount;
+            } 
+            // Try totalVectorCount (older API)
+            else if (basicStats?.totalVectorCount) {
+              vectorCount = basicStats.totalVectorCount;
+            } 
+            // Sum up records from all namespaces
+            else if (basicStats?.namespaces) {
+              vectorCount = Object.values(basicStats.namespaces).reduce((total: number, namespace: any) => {
+                return total + (namespace.recordCount || namespace.vectorCount || 0);
+              }, 0);
+            }
+          } catch (retryError) {
+            console.error('Failed to get basic stats on retry:', retryError);
+          }
+          
+          return {
+            name: index.name!,
+            displayName: displayName,
+            dimensions: index.dimension,
+            embeddingModel: embeddingModel,
+            isCompatible: requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true,
+            vectorCount: vectorCount, // Use the calculated vectorCount
+            stats: null
+          };
+        }
+      }));
             
             // Try totalRecordCount first (newer API)
             if (basicStats?.totalRecordCount) {
@@ -269,6 +318,7 @@ class PineconeService {
         },
         tags: { 
           userId: userId,
+          embeddingModel: embeddingModel, // Store the embedding model used
           createdBy: 'chatfactory-app',
           createdAt: new Date().toISOString()
         },
