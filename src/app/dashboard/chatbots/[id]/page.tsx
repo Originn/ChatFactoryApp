@@ -454,8 +454,8 @@ export default function ChatbotDetailPage() {
       });
       
       // Update vector store state
-      setVectorstoreIndex(indexName);
-      setVectorstoreDisplayName(displayName);
+      setVectorStoreIndexName(indexName);
+      setVectorStoreName(displayName);
       setHasVectorstore(true);
       setVectorStoreName(displayName);
       setVectorStoreIndexName(indexName);
@@ -520,8 +520,8 @@ export default function ChatbotDetailPage() {
       
       // Update vector store state with the created index
       if (data.vectorstoreIndexName) {
-        setVectorstoreIndex(data.vectorstoreIndexName);
-        setVectorstoreDisplayName(displayName);
+        setVectorStoreIndexName(data.vectorstoreIndexName);
+        setVectorStoreName(displayName);
         setHasVectorstore(true);
         setVectorStoreName(displayName);
         setVectorStoreIndexName(data.vectorstoreIndexName);
