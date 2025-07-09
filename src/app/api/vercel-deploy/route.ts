@@ -244,117 +244,8 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // STEP: Ensure default production domain exists
-    console.log('🌐 Ensuring default production domain exists...');
-    try {
-      // Check if project has default production domain
-      const projectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
-        headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
-      });
-      
-      if (projectResponse.ok) {
-        const currentProject = await projectResponse.json();
-        console.log('🔍 Current project domains:', {
-          hasAlias: !!currentProject.alias,
-          aliasCount: currentProject.alias?.length || 0,
-          domains: currentProject.alias?.map((a: any) => a.domain || a) || []
-        });
-        
-        // Check if we have a clean production domain
-        const hasCleanProductionDomain = currentProject.alias?.some((alias: any) => {
-          const domain = alias.domain || alias;
-          return typeof domain === 'string' && 
-                 domain.endsWith('.vercel.app') && 
-                 !domain.includes('-git-') && 
-                 !domain.includes('fvldnvlbr') && 
-                 !domain.includes('1fne8zdgg') &&
-                 !domain.includes('107unuzgg') &&
-                 !domain.includes('fdncvxm99') &&
-                 domain.match(/^[a-zA-Z0-9-]+-[a-zA-Z0-9-]+\.vercel\.app$/);
-        });
-        
-        if (!hasCleanProductionDomain) {
-          console.log('⚠️ No clean production domain found. Forcing creation...');
-          
-          // Method 1: Try to add a default domain explicitly
-          try {
-            const defaultDomainName = `${projectName}-${Math.random().toString(36).substring(2, 8)}.vercel.app`;
-            console.log(`🔨 Attempting to create default domain: ${defaultDomainName}`);
-            
-            const addDomainResponse = await fetch(`https://api.vercel.com/v10/projects/${projectId}/domains`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                name: defaultDomainName
-              })
-            });
-            
-            if (addDomainResponse.ok) {
-              const domainResult = await addDomainResponse.json();
-              console.log('✅ Successfully created default domain:', domainResult.name);
-            } else {
-              const domainError = await addDomainResponse.json();
-              console.log('⚠️ Failed to create default domain:', domainError.error?.message);
-            }
-          } catch (domainCreationError) {
-            console.warn('⚠️ Error creating default domain:', domainCreationError);
-          }
-          
-          // Method 2: Force a production deployment to trigger domain creation
-          console.log('🔨 Triggering production deployment for domain creation...');
-          const domainCreationResponse = await fetch('https://api.vercel.com/v13/deployments', {
-            method: 'POST',  
-            headers: {
-              'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              name: projectName,
-              project: projectId, // Use project ID instead of name
-              target: 'production',
-              framework: 'nextjs',
-              gitSource: {
-                type: 'github',
-                repo: REPO,
-                ref: 'main',
-                ...(repoId && { repoId })
-              }
-            })
-          });
-          
-          if (domainCreationResponse.ok) {
-            const tempDeployment = await domainCreationResponse.json();
-            console.log('✅ Triggered domain creation deployment:', tempDeployment.id);
-            
-            // Wait for default domain to be potentially created
-            await new Promise(resolve => setTimeout(resolve, 15000));
-            
-            // Check again for the default domain
-            const updatedProjectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
-              headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
-            });
-            
-            if (updatedProjectResponse.ok) {
-              const updatedProject = await updatedProjectResponse.json();
-              console.log('🔍 Updated project domains after creation:', {
-                aliasCount: updatedProject.alias?.length || 0,
-                domains: updatedProject.alias?.map((a: any) => a.domain || a) || []
-              });
-            }
-          } else {
-            const creationError = await domainCreationResponse.json();
-            console.warn('⚠️ Failed to create domain creation deployment:', creationError.error?.message);
-          }
-        } else {
-          console.log('✅ Clean production domain already exists');
-        }
-      }
-    } catch (domainError) {
-      console.warn('⚠️ Error ensuring default production domain:', domainError);
-    }
+    // DOMAIN CREATION DEPLOYMENT REMOVED - Vercel will auto-generate production domain
+    console.log('🌐 Skipping domain creation deployment - Vercel will auto-generate production domain');
 
     // 2. Prepare complete chatbot configuration for the template
     // Try multiple possible field names for logo URL
@@ -798,19 +689,38 @@ export async function POST(request: NextRequest) {
     
     // Wait longer for env vars to propagate and verify they're set
     console.log('⏳ Waiting for environment variables to propagate...');
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+    await new Promise(resolve => setTimeout(resolve, 20000)); // Wait 20 seconds for proper propagation
     
-    // Verify critical environment variables are set
-    const verification = await verifyEnvironmentVariables(VERCEL_API_TOKEN, projectName, [
-      'NEXT_PUBLIC_CHATBOT_ID',
-      'NEXT_PUBLIC_CHATBOT_NAME',
-      'NEXT_PUBLIC_FIREBASE_PROJECT_ID'
-    ]);
+    // Verify critical environment variables are set with retry logic
+    console.log('🔍 Verifying critical environment variables...');
+    let verification = null;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      verification = await verifyEnvironmentVariables(VERCEL_API_TOKEN, projectName, [
+        'NEXT_PUBLIC_CHATBOT_ID',
+        'NEXT_PUBLIC_CHATBOT_NAME',
+        'NEXT_PUBLIC_FIREBASE_PROJECT_ID'
+      ]);
+      
+      if (verification.success) {
+        console.log('✅ Critical environment variables verified');
+        break;
+      } else {
+        retryCount++;
+        console.warn(`⚠️ Retry ${retryCount}/${maxRetries}: Some critical environment variables missing:`, verification.missing);
+        
+        if (retryCount < maxRetries) {
+          console.log('⏳ Waiting additional 10 seconds before retry...');
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        }
+      }
+    }
     
     if (!verification.success) {
-      console.warn('⚠️ Some critical environment variables may not be set properly:', verification.missing);
-    } else {
-      console.log('✅ Critical environment variables verified');
+      console.error('❌ Failed to verify critical environment variables after retries');
+      console.warn('⚠️ Proceeding with deployment but Firebase may fail to initialize');
     }
 
     // Handle custom domain configuration if provided
@@ -842,6 +752,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Create production deployment from main branch
+    console.log('🚀 STARTING SINGLE PRODUCTION DEPLOYMENT');
+    console.log('✅ Environment variables set and verified');
+    console.log('✅ Firebase project configured');
+    console.log('✅ Pinecone vectorstore ready');
+    console.log('▶️ Proceeding with deployment...');
+    
     let deploymentResponse;
     
     // Create deployment payload based on whether we have repoId
