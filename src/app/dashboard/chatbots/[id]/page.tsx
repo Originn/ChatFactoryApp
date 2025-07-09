@@ -1124,6 +1124,7 @@ export default function ChatbotDetailPage() {
         onConfirm={handleConfirmVectorStoreName}
         onCancel={() => setShowVectorStoreNaming(false)}
         userId={user?.uid || ''}
+        embeddingModel={chatbot?.aiConfig?.embeddingModel || 'text-embedding-3-small'}
         isValidating={isDeploying}
       />
     </div>

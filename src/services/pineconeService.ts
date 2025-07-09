@@ -170,10 +170,6 @@ class PineconeService {
           if (stats?.totalRecordCount) {
             vectorCount = stats.totalRecordCount;
           } 
-          // Try totalVectorCount (older API)
-          else if (stats?.totalVectorCount) {
-            vectorCount = stats.totalVectorCount;
-          } 
           // Sum up records from all namespaces
           else if (stats?.namespaces) {
             vectorCount = Object.values(stats.namespaces).reduce((total: number, namespace: any) => {
@@ -210,10 +206,6 @@ class PineconeService {
             if (basicStats?.totalRecordCount) {
               vectorCount = basicStats.totalRecordCount;
             } 
-            // Try totalVectorCount (older API)
-            else if (basicStats?.totalVectorCount) {
-              vectorCount = basicStats.totalVectorCount;
-            } 
             // Sum up records from all namespaces
             else if (basicStats?.namespaces) {
               vectorCount = Object.values(basicStats.namespaces).reduce((total: number, namespace: any) => {
@@ -230,35 +222,6 @@ class PineconeService {
             dimensions: index.dimension,
             embeddingModel: embeddingModel,
             isCompatible: requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true,
-            vectorCount: vectorCount, // Use the calculated vectorCount
-            stats: null
-          };
-        }
-      }));
-            
-            // Try totalRecordCount first (newer API)
-            if (basicStats?.totalRecordCount) {
-              vectorCount = basicStats.totalRecordCount;
-            } 
-            // Try totalVectorCount (older API)
-            else if (basicStats?.totalVectorCount) {
-              vectorCount = basicStats.totalVectorCount;
-            } 
-            // Sum up records from all namespaces
-            else if (basicStats?.namespaces) {
-              vectorCount = Object.values(basicStats.namespaces).reduce((total: number, namespace: any) => {
-                return total + (namespace.recordCount || namespace.vectorCount || 0);
-              }, 0);
-            }
-          } catch (retryError) {
-            console.error('Failed to get basic stats on retry:', retryError);
-          }
-          
-          return {
-            name: index.name!,
-            displayName: displayName,
-            dimensions: index.dimension,
-            isCompatible: requiredDimensions ? index.dimension === requiredDimensions : true,
             vectorCount: vectorCount, // Use the calculated vectorCount
             stats: null
           };
