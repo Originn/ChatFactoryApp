@@ -655,6 +655,11 @@ export async function POST(request: NextRequest) {
       // Pinecone configuration - AVAILABLE AFTER PINECONE SETUP
       PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
       PINECONE_NAMESPACE: pineconeNamespace,
+      
+      // GCP Storage bucket names - AVAILABLE AFTER FIREBASE SETUP
+      GCLOUD_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-documents`,
+      GCLOUD_PRIVATE_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-private-images`,
+      GCLOUD_DOCUMENT_IMAGES_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-document-images`,
     };
     
     // Filter out empty values but keep empty strings for optional fields
