@@ -86,6 +86,8 @@ export class PDFService {
 
       console.log(`🔄 Processing PDF with converter: ${request.file.name}`);
       console.log(`📝 Embedding config: ${request.embeddingProvider}/${request.embeddingModel}`);
+      console.log(`🎨 Multimodal: ${request.multimodal ? 'Enabled' : 'Disabled'}`);
+      console.log(`🎯 Dual Embedding: Always enabled (default strategy)`);
       console.log(`🔒 Privacy setting: ${request.isPublic ? 'Public' : 'Private'}`);
 
       const response = await fetch(`${PDF_CONVERTER_URL}/process-pdf`, {
