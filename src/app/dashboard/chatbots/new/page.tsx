@@ -68,10 +68,14 @@ export default function NewChatbotPage() {
     return emailRegex.test(email);
   };
 
-  // Auto-disable multimodal when non-multimodal embedding model is selected
+  // Auto-enable multimodal when multimodal embedding model is selected
   useEffect(() => {
     const multimodalModels = ['jina-embeddings-v4', 'jina-clip-v2'];
-    if (!multimodalModels.includes(formData.embeddingModel)) {
+    if (multimodalModels.includes(formData.embeddingModel)) {
+      // Auto-enable multimodal for multimodal-capable models
+      setFormData(prev => ({ ...prev, multimodal: true }));
+    } else {
+      // Auto-disable multimodal for text-only models
       setFormData(prev => ({ ...prev, multimodal: false }));
     }
   }, [formData.embeddingModel]);
@@ -800,7 +804,7 @@ export default function NewChatbotPage() {
                         <option value="hf-bge-large-en-v1.5">bge-large-en-v1.5</option>
                       </optgroup>
                       <optgroup label="Jina AI Models">
-                        <option value="jina-embeddings-v4">jina-embeddings-v4 (2048 dimensions, multimodal)</option>
+                        <option value="jina-embeddings-v4">jina-embeddings-v4 (512 dimensions, multimodal)</option>
                         <option value="jina-embeddings-v3">jina-embeddings-v3 (1024 dimensions, text-only)</option>
                         <option value="jina-clip-v2">jina-clip-v2 (1024 dimensions, multimodal)</option>
                       </optgroup>

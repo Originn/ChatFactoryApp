@@ -294,7 +294,10 @@ export async function POST(request: NextRequest) {
       MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
       
       // Debug
-      ENABLE_DEBUG_PAGE: 'true'
+      ENABLE_DEBUG_PAGE: 'true',
+      
+      // Multimodal Configuration - Enable image embeddings if multimodal is enabled
+      NEXT_PUBLIC_ENABLE_IMAGE_EMBEDDINGS: (chatbotData?.aiConfig?.multimodal === true).toString(),
     };
 
     // Set Phase 1 environment variables
