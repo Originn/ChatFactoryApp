@@ -1214,7 +1214,7 @@ export class FirebaseAPIService {
         })
       });
 
-      // Define chatbot-specific buckets with their required permissions
+      // Define chatbot-specific buckets with their required permissions (match bucket creation pattern)
       const bucketPermissions = [
         {
           name: `${projectId}-chatbot-documents`,
@@ -1366,13 +1366,8 @@ export class FirebaseAPIService {
         // Auth access (read-only)
         'roles/firebaseauth.viewer',
         
-        // 🔑 COMPREHENSIVE STORAGE PERMISSIONS (essential for all bucket operations)
-        'roles/storage.objectAdmin',         // Full object CRUD across project buckets
-        'roles/storage.legacyBucketReader',  // Read bucket metadata  
-        'roles/storage.legacyBucketWriter',  // Write bucket metadata (includes buckets.get)
-        
-        // Alternative approach: Use broader bucket admin for compatibility
-        // 'roles/storage.admin',             // Full storage admin (too broad but works)
+        // 🔑 FULL STORAGE ADMIN PERMISSIONS (ensures all bucket operations work)
+        'roles/storage.admin',               // Full storage admin access (includes all bucket/object operations)
       ];
       
       const bindings = policy.bindings || [];
@@ -1404,8 +1399,8 @@ export class FirebaseAPIService {
         }
       });
       
-      // 🔐 ADDITIONALLY SET BUCKET-SPECIFIC PERMISSIONS (for extra security)
-      await this.setBucketLevelPermissions(projectId, serviceAccountEmail);
+      // 🔐 BUCKET-LEVEL PERMISSIONS NOT NEEDED - storage.admin provides full access
+      // await this.setBucketLevelPermissions(projectId, serviceAccountEmail);
       
       // 🔍 VERIFY PERMISSIONS WERE APPLIED
       await this.verifyServiceAccountPermissions(projectId, serviceAccountEmail);
