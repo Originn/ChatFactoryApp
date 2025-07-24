@@ -56,6 +56,7 @@ export class PDFService {
     try {
       const formData = new FormData();
       formData.append('file', request.file);
+      formData.append('chatbot_id', request.chatbotId);
       formData.append('pinecone_index', request.pineconeIndex);
       
       if (request.pineconeNamespace) {
