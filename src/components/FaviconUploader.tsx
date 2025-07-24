@@ -9,10 +9,6 @@ import Image from 'next/image';
 
 interface FaviconConfig {
   enabled: boolean;
-  iconUrl?: string;
-  appleTouchIcon?: string;
-  manifestIcon192?: string;
-  manifestIcon512?: string;
   themeColor?: string;
   backgroundColor?: string;
 }
@@ -20,74 +16,44 @@ interface FaviconConfig {
 interface FaviconUploaderProps {
   value: FaviconConfig;
   onChange: (config: FaviconConfig) => void;
-  chatbotId: string;
+  faviconFile: File | null;
+  onFileChange: (file: File | null) => void;
+  faviconPreview: string | null;
+  faviconError: string | null;
 }
 
-export function FaviconUploader({ value, onChange, chatbotId }: FaviconUploaderProps) {
-  const [uploading, setUploading] = useState(false);
+export function FaviconUploader({ 
+  value, 
+  onChange, 
+  faviconFile, 
+  onFileChange, 
+  faviconPreview, 
+  faviconError 
+}: FaviconUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('chatbotId', chatbotId);
-      formData.append('type', 'favicon');
-
-      // Upload to API endpoint
-      const response = await fetch('/api/upload/favicon', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error('Upload failed');
-
-      const { urls } = await response.json();
-      
-      // Update favicon config with generated URLs
-      onChange({
-        ...value,
-        enabled: true,
-        iconUrl: urls.icon32,
-        appleTouchIcon: urls.appleTouchIcon,
-        manifestIcon192: urls.icon192,
-        manifestIcon512: urls.icon512,
-      });
-    } catch (error) {
-      console.error('Favicon upload failed:', error);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       // Validate file type and size
       if (!['image/png', 'image/x-icon', 'image/svg+xml'].includes(file.type)) {
-        alert('Please upload a PNG, ICO, or SVG file');
+        onFileChange(null);
         return;
       }
       if (file.size > 1024 * 1024) {
-        alert('File size must be less than 1MB');
+        onFileChange(null);
         return;
       }
-      handleFileUpload(file);
+      onFileChange(file);
     }
   };
 
   const removeFavicon = () => {
-    onChange({
-      enabled: false,
-      iconUrl: undefined,
-      appleTouchIcon: undefined,
-      manifestIcon192: undefined,
-      manifestIcon512: undefined,
-      themeColor: value.themeColor,
-      backgroundColor: value.backgroundColor,
-    });
+    onFileChange(null);
+    // Reset the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -107,12 +73,12 @@ export function FaviconUploader({ value, onChange, chatbotId }: FaviconUploaderP
             <div className="space-y-2">
               <Label>Favicon Upload</Label>
               <div className="flex items-center gap-4">
-                {value.iconUrl ? (
+                {faviconPreview ? (
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 border rounded flex items-center justify-center bg-white">
                       <Image
-                        src={value.iconUrl}
-                        alt="Favicon"
+                        src={faviconPreview}
+                        alt="Favicon preview"
                         width={16}
                         height={16}
                         className="w-4 h-4"
@@ -133,15 +99,17 @@ export function FaviconUploader({ value, onChange, chatbotId }: FaviconUploaderP
                     type="button"
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
                   >
                     <Upload className="w-4 h-4 mr-2" />
-                    {uploading ? 'Uploading...' : 'Upload Favicon'}
+                    Upload Favicon
                   </Button>
                 )}
               </div>
+              {faviconError && (
+                <p className="text-sm text-red-600">{faviconError}</p>
+              )}
               <p className="text-sm text-muted-foreground">
-                Upload PNG, ICO, or SVG (max 1MB). We'll generate all required sizes.
+                Upload PNG, ICO, or SVG (max 1MB). We'll generate all required sizes after creation.
               </p>
             </div>
 

@@ -4,16 +4,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Settings, Globe, Zap, BarChart } from "lucide-react";
+import { Settings, Globe, Zap, BarChart, Image } from "lucide-react";
 
 // Import your custom domain components
 import CustomDomainManager from '@/components/chatbot/CustomDomainManager';
+import { FaviconUploader } from '@/components/FaviconUploader';
 
 interface ChatbotSettingsPageProps {
   params: {
@@ -35,6 +36,19 @@ interface Chatbot {
   };
   firebaseProject?: {
     projectId?: string;
+  };
+  appearance?: {
+    primaryColor?: string;
+    bubbleStyle?: string;
+    favicon?: {
+      enabled: boolean;
+      iconUrl?: string;
+      appleTouchIcon?: string;
+      manifestIcon192?: string;
+      manifestIcon512?: string;
+      themeColor?: string;
+      backgroundColor?: string;
+    };
   };
   createdAt: any;
   updatedAt: any;
@@ -80,6 +94,41 @@ export default function ChatbotSettingsPage({ params }: ChatbotSettingsPageProps
     // Update local state immediately for better UX
     if (chatbot) {
       setChatbot(prev => prev ? { ...prev, domain: newDomain } : null);
+    }
+  };
+
+  const handleFaviconChange = async (faviconConfig: any) => {
+    if (!chatbot) return;
+
+    try {
+      // Update local state immediately
+      setChatbot(prev => prev ? { 
+        ...prev, 
+        appearance: { 
+          ...prev.appearance, 
+          favicon: faviconConfig 
+        }
+      } : null);
+
+      // Update in Firestore
+      const chatbotRef = doc(db, 'chatbots', chatbot.id);
+      await updateDoc(chatbotRef, {
+        'appearance.favicon': faviconConfig,
+        updatedAt: new Date()
+      });
+
+    } catch (error) {
+      console.error('Error updating favicon:', error);
+      // Revert local state on error
+      if (chatbot) {
+        setChatbot(prev => prev ? { 
+          ...prev, 
+          appearance: { 
+            ...prev.appearance, 
+            favicon: chatbot.appearance?.favicon 
+          }
+        } : null);
+      }
     }
   };
 
@@ -149,11 +198,15 @@ export default function ChatbotSettingsPage({ params }: ChatbotSettingsPageProps
       </div>
 
       {/* Main Settings Tabs */}
-      <Tabs defaultValue="domain" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
             General
+          </TabsTrigger>
+          <TabsTrigger value="branding" className="flex items-center gap-2">
+            <Image className="h-4 w-4" />
+            Branding
           </TabsTrigger>
           <TabsTrigger value="domain" className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
@@ -168,6 +221,18 @@ export default function ChatbotSettingsPage({ params }: ChatbotSettingsPageProps
             Analytics
           </TabsTrigger>
         </TabsList>
+
+        {/* Branding Tab */}
+        <TabsContent value="branding" className="space-y-4">
+          {/* TODO: Update FaviconUploader for settings page */}
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-medium mb-2">Favicon Settings</h3>
+            <p className="text-sm text-gray-500">
+              Favicon editing in settings will be available soon. 
+              You can set favicon during chatbot creation.
+            </p>
+          </div>
+        </TabsContent>
 
         {/* Custom Domain Tab - THIS IS THE KEY INTEGRATION */}
         <TabsContent value="domain" className="space-y-4">

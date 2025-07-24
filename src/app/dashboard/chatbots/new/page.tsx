@@ -14,6 +14,7 @@ import { collection, doc, setDoc, updateDoc, serverTimestamp } from "firebase/fi
 import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
 import { Info } from "lucide-react";
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
+import { FaviconUploader } from '@/components/FaviconUploader';
 
 export default function NewChatbotPage() {
   const router = useRouter();
@@ -41,6 +42,11 @@ export default function NewChatbotPage() {
     // Appearance
     primaryColor: '#3b82f6', // Blue
     bubbleStyle: 'rounded',
+    favicon: {
+      enabled: false,
+      themeColor: '#000000',
+      backgroundColor: '#ffffff',
+    },
   });
   
   const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'behavior' | 'appearance'>('basic');
@@ -52,6 +58,12 @@ export default function NewChatbotPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+
+  // Favicon upload state
+  const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
+  const [faviconError, setFaviconError] = useState<string | null>(null);
+  const [faviconUploading, setFaviconUploading] = useState(false);
 
   // Preview deployment
   const [newChatbotId, setNewChatbotId] = useState<string | null>(null);
@@ -137,6 +149,49 @@ export default function NewChatbotPage() {
   // Handle switch/boolean changes
   const handleSwitchChange = (name: string, checked: boolean) => {
     setFormData(prev => ({ ...prev, [name]: checked }));
+  };
+
+  // Handle favicon config changes (colors, enabled state)
+  const handleFaviconConfigChange = (faviconConfig: any) => {
+    setFormData(prev => ({
+      ...prev,
+      favicon: faviconConfig
+    }));
+  };
+
+  // Handle favicon file selection
+  const handleFaviconChange = (file: File | null) => {
+    if (!file) {
+      setFaviconFile(null);
+      setFaviconPreview(null);
+      setFaviconError(null);
+      return;
+    }
+
+    // Validate the file
+    if (!['image/png', 'image/x-icon', 'image/svg+xml'].includes(file.type)) {
+      setFaviconError('Please upload a PNG, ICO, or SVG file');
+      setFaviconFile(null);
+      setFaviconPreview(null);
+      return;
+    }
+
+    if (file.size > 1024 * 1024) {
+      setFaviconError('File size must be less than 1MB');
+      setFaviconFile(null);
+      setFaviconPreview(null);
+      return;
+    }
+
+    setFaviconFile(file);
+    setFaviconError(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setFaviconPreview(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   // Handle logo file selection
@@ -314,6 +369,7 @@ export default function NewChatbotPage() {
       const newChatbotRef = doc(chatbotsCollectionRef);
       
       let logoUrl: string | null = null;
+      let faviconUrls: any = null;
 
       // Upload logo if one was selected
       if (logoFile) {
@@ -338,6 +394,39 @@ export default function NewChatbotPage() {
           }
         } finally {
           setLogoUploading(false);
+        }
+      }
+
+      // Upload favicon if one was selected
+      if (faviconFile && formData.favicon.enabled) {
+        try {
+          setFaviconUploading(true);
+          
+          // Create FormData for API call
+          const faviconFormData = new FormData();
+          faviconFormData.append('file', faviconFile);
+          
+          // Call API route to process favicon
+          const faviconResponse = await fetch(`/api/chatbots/${newChatbotRef.id}/favicon`, {
+            method: 'POST',
+            body: faviconFormData,
+          });
+
+          if (!faviconResponse.ok) {
+            throw new Error('Favicon upload failed');
+          }
+
+          const { urls } = await faviconResponse.json();
+          faviconUrls = urls;
+          console.log('Favicon uploaded successfully:', faviconUrls);
+        } catch (uploadError: any) {
+          console.error('Favicon upload failed:', uploadError);
+          setError(`Failed to upload favicon: ${uploadError.message}`);
+          setLoading(false);
+          setFaviconUploading(false);
+          return;
+        } finally {
+          setFaviconUploading(false);
         }
       }
       
@@ -368,6 +457,15 @@ export default function NewChatbotPage() {
         appearance: {
           primaryColor: formData.primaryColor,
           bubbleStyle: formData.bubbleStyle,
+          favicon: {
+            enabled: formData.favicon.enabled,
+            iconUrl: faviconUrls?.icon32,
+            appleTouchIcon: faviconUrls?.appleTouchIcon,
+            manifestIcon192: faviconUrls?.icon192,
+            manifestIcon512: faviconUrls?.icon512,
+            themeColor: formData.favicon.themeColor,
+            backgroundColor: formData.favicon.backgroundColor,
+          },
         },
         stats: {
           queries: 0,
@@ -1115,6 +1213,16 @@ export default function NewChatbotPage() {
                     </p>
                   </div>
 
+                  {/* Favicon Upload Section */}
+                  <FaviconUploader
+                    value={formData.favicon}
+                    onChange={handleFaviconConfigChange}
+                    faviconFile={faviconFile}
+                    onFileChange={handleFaviconChange}
+                    faviconPreview={faviconPreview}
+                    faviconError={faviconError}
+                  />
+
                   <div className="space-y-2">
                     <label htmlFor="primaryColor" className="text-sm font-medium">Primary Color</label>
                     <div className="flex items-center space-x-2">
@@ -1216,9 +1324,12 @@ export default function NewChatbotPage() {
             <Button
               onClick={handleSubmit}
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={loading || !formData.name.trim()}
+              disabled={loading || !formData.name.trim() || logoUploading || faviconUploading}
             >
-              {loading ? 'Creating...' : 'Create Chatbot'}
+              {loading ? 'Creating...' : 
+               logoUploading ? 'Uploading logo...' :
+               faviconUploading ? 'Uploading favicon...' : 
+               'Create Chatbot'}
             </Button>
           </CardFooter>
         </Card>
