@@ -1,5 +1,5 @@
 import { ChatbotConfig } from '@/types/chatbot';
-import { generateFaviconEnvVars } from './favicon-processor';
+import { generateFaviconEnvVars } from './utils/faviconUpload';
 
 export function generateDeploymentEnvVars(chatbot: ChatbotConfig): Record<string, string> {
   const envVars: Record<string, string> = {

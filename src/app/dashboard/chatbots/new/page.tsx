@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
+import { uploadFavicon } from "@/lib/utils/faviconUpload";
 import { Info } from "lucide-react";
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import { FaviconUploader } from '@/components/FaviconUploader';
@@ -397,27 +398,11 @@ export default function NewChatbotPage() {
         }
       }
 
-      // Upload favicon if one was selected
+      // Upload favicon if one was selected  
       if (faviconFile && formData.favicon.enabled) {
         try {
           setFaviconUploading(true);
-          
-          // Create FormData for API call
-          const faviconFormData = new FormData();
-          faviconFormData.append('file', faviconFile);
-          
-          // Call API route to process favicon
-          const faviconResponse = await fetch(`/api/chatbots/${newChatbotRef.id}/favicon`, {
-            method: 'POST',
-            body: faviconFormData,
-          });
-
-          if (!faviconResponse.ok) {
-            throw new Error('Favicon upload failed');
-          }
-
-          const { urls } = await faviconResponse.json();
-          faviconUrls = urls;
+          faviconUrls = await uploadFavicon(faviconFile, user.uid, newChatbotRef.id);
           console.log('Favicon uploaded successfully:', faviconUrls);
         } catch (uploadError: any) {
           console.error('Favicon upload failed:', uploadError);

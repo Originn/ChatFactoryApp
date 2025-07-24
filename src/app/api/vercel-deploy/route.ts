@@ -6,6 +6,7 @@ import { DatabaseService } from '@/services/databaseService';
 import { FirebaseAPIService } from '@/services/firebaseAPIService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
 import { getEmbeddingDimensions, getEmbeddingProvider } from '@/lib/embeddingModels';
+import { generateFaviconEnvVars } from '@/lib/utils/faviconUpload';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -640,6 +641,11 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
       NEXT_PUBLIC_CUSTOM_DOMAIN: customDomain || '',
+      
+      // Generate favicon environment variables if favicon is configured
+      ...(chatbotConfig.appearance?.favicon?.enabled ? 
+        generateFaviconEnvVars(chatbotConfig.appearance.favicon, chatbotConfig.name) : 
+        {}),
       
       // Dedicated Firebase client configuration (public) - AVAILABLE AFTER FIREBASE SETUP
       NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject.config.apiKey,
