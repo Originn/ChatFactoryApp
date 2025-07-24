@@ -1,5 +1,7 @@
 import sharp from 'sharp';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import sharp from 'sharp';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase/config';
 
 export interface FaviconUrls {
   icon16: string;
@@ -14,7 +16,6 @@ export async function processFaviconUpload(
   chatbotId: string,
   originalExtension: string
 ): Promise<FaviconUrls> {
-  const storage = getStorage();
   const basePath = `chatbots/${chatbotId}/favicons`;
 
   const sizes = [
