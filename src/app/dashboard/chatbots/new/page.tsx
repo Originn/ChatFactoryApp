@@ -250,6 +250,7 @@ export default function NewChatbotPage() {
           chatbotName: formData.name.trim(),
           userId: user.uid,
           vectorstore: { indexName, displayName },
+          embeddingModel: formData.embeddingModel, // Pass the selected embedding model
           target: 'production',  // Changed from 'preview' to 'production'
         }),
       });
@@ -444,10 +445,10 @@ export default function NewChatbotPage() {
           bubbleStyle: formData.bubbleStyle,
           favicon: {
             enabled: formData.favicon.enabled,
-            iconUrl: faviconUrls?.icon32,
-            appleTouchIcon: faviconUrls?.appleTouchIcon,
-            manifestIcon192: faviconUrls?.icon192,
-            manifestIcon512: faviconUrls?.icon512,
+            iconUrl: faviconUrls?.icon32 || null,
+            appleTouchIcon: faviconUrls?.appleTouchIcon || null,
+            manifestIcon192: faviconUrls?.icon192 || null,
+            manifestIcon512: faviconUrls?.icon512 || null,
             themeColor: formData.favicon.themeColor,
             backgroundColor: formData.favicon.backgroundColor,
           },
