@@ -271,12 +271,22 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
 
     setIsProcessing(true);
     
-    for (const file of uploadedFiles.filter(f => f.status === 'pending')) {
-      if (file.type === 'chm') {
-        await processCHMFile(file, file.isPublic);
-      } else if (file.type === 'pdf') {
-        await processPDFFile(file, file.isPublic);
-      }
+    // Process all files in parallel for better performance
+    const pendingFiles = uploadedFiles.filter(f => f.status === 'pending');
+    
+    try {
+      await Promise.all(
+        pendingFiles.map(file => {
+          if (file.type === 'chm') {
+            return processCHMFile(file, file.isPublic);
+          } else if (file.type === 'pdf') {
+            return processPDFFile(file, file.isPublic);
+          }
+          return Promise.resolve();
+        })
+      );
+    } catch (error) {
+      console.error('Error during parallel file processing:', error);
     }
 
     setIsProcessing(false);
