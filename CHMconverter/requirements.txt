@@ -1,4 +1,0 @@
-# Requirements for CHM to PDF conversion
-beautifulsoup4==4.12.2
-PyPDF2==3.0.1
-chardet>=3.0.0
