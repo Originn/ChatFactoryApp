@@ -6,6 +6,7 @@ import { DatabaseService } from '@/services/databaseService';
 import { FirebaseAPIService } from '@/services/firebaseAPIService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
 import { getEmbeddingDimensions, getEmbeddingProvider } from '@/lib/embeddingModels';
+import { generateFaviconEnvVars } from '@/lib/utils/faviconUpload';
 
 // Repository information
 const REPO_OWNER = 'Originn';
@@ -244,117 +245,72 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // STEP: Ensure default production domain exists
-    console.log('🌐 Ensuring default production domain exists...');
-    try {
-      // Check if project has default production domain
-      const projectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
-        headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
-      });
+    // PHASE 1: SET BASIC ENVIRONMENT VARIABLES IMMEDIATELY
+    console.log('🔧 PHASE 1: Setting basic environment variables immediately after project creation...');
+    
+    const basicEnvVars = {
+      // Basic chatbot config (available immediately)
+      CHATBOT_ID: chatbotId,
+      NEXT_PUBLIC_CHATBOT_ID: chatbotId,
+      NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
       
-      if (projectResponse.ok) {
-        const currentProject = await projectResponse.json();
-        console.log('🔍 Current project domains:', {
-          hasAlias: !!currentProject.alias,
-          aliasCount: currentProject.alias?.length || 0,
-          domains: currentProject.alias?.map((a: any) => a.domain || a) || []
-        });
-        
-        // Check if we have a clean production domain
-        const hasCleanProductionDomain = currentProject.alias?.some((alias: any) => {
-          const domain = alias.domain || alias;
-          return typeof domain === 'string' && 
-                 domain.endsWith('.vercel.app') && 
-                 !domain.includes('-git-') && 
-                 !domain.includes('fvldnvlbr') && 
-                 !domain.includes('1fne8zdgg') &&
-                 !domain.includes('107unuzgg') &&
-                 !domain.includes('fdncvxm99') &&
-                 domain.match(/^[a-zA-Z0-9-]+-[a-zA-Z0-9-]+\.vercel\.app$/);
-        });
-        
-        if (!hasCleanProductionDomain) {
-          console.log('⚠️ No clean production domain found. Forcing creation...');
-          
-          // Method 1: Try to add a default domain explicitly
-          try {
-            const defaultDomainName = `${projectName}-${Math.random().toString(36).substring(2, 8)}.vercel.app`;
-            console.log(`🔨 Attempting to create default domain: ${defaultDomainName}`);
-            
-            const addDomainResponse = await fetch(`https://api.vercel.com/v10/projects/${projectId}/domains`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                name: defaultDomainName
-              })
-            });
-            
-            if (addDomainResponse.ok) {
-              const domainResult = await addDomainResponse.json();
-              console.log('✅ Successfully created default domain:', domainResult.name);
-            } else {
-              const domainError = await addDomainResponse.json();
-              console.log('⚠️ Failed to create default domain:', domainError.error?.message);
-            }
-          } catch (domainCreationError) {
-            console.warn('⚠️ Error creating default domain:', domainCreationError);
-          }
-          
-          // Method 2: Force a production deployment to trigger domain creation
-          console.log('🔨 Triggering production deployment for domain creation...');
-          const domainCreationResponse = await fetch('https://api.vercel.com/v13/deployments', {
-            method: 'POST',  
-            headers: {
-              'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              name: projectName,
-              project: projectId, // Use project ID instead of name
-              target: 'production',
-              framework: 'nextjs',
-              gitSource: {
-                type: 'github',
-                repo: REPO,
-                ref: 'main',
-                ...(repoId && { repoId })
-              }
-            })
-          });
-          
-          if (domainCreationResponse.ok) {
-            const tempDeployment = await domainCreationResponse.json();
-            console.log('✅ Triggered domain creation deployment:', tempDeployment.id);
-            
-            // Wait for default domain to be potentially created
-            await new Promise(resolve => setTimeout(resolve, 15000));
-            
-            // Check again for the default domain
-            const updatedProjectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
-              headers: { 'Authorization': `Bearer ${VERCEL_API_TOKEN}` }
-            });
-            
-            if (updatedProjectResponse.ok) {
-              const updatedProject = await updatedProjectResponse.json();
-              console.log('🔍 Updated project domains after creation:', {
-                aliasCount: updatedProject.alias?.length || 0,
-                domains: updatedProject.alias?.map((a: any) => a.domain || a) || []
-              });
-            }
-          } else {
-            const creationError = await domainCreationResponse.json();
-            console.warn('⚠️ Failed to create domain creation deployment:', creationError.error?.message);
-          }
-        } else {
-          console.log('✅ Clean production domain already exists');
-        }
-      }
-    } catch (domainError) {
-      console.warn('⚠️ Error ensuring default production domain:', domainError);
-    }
+      // API Keys (available from process.env)
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+      MISTRAL_API_KEY: process.env.MISTRAL_API_KEY || '',
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+      COHERE_API_KEY: process.env.COHERE_API_KEY || '',
+      JINA_API_KEY: process.env.JINA_API_KEY || '',
+      HUGGINGFACEHUB_API_KEY: process.env.HUGGINGFACEHUB_API_KEY || '',
+      
+      // Pinecone config (available from process.env)
+      PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
+      PINECONE_ENVIRONMENT: 'us-east-1',
+      
+      // Static configuration
+      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small'),
+      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small').toString(),
+      
+      // App URLs
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'https://chatfactory.ai',
+      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://chatfactory.ai/api',
+      
+      // Database config
+      DATABASE_URL: process.env.DATABASE_URL || '',
+      
+      // Main ChatFactory credentials (for token validation)
+      CHATFACTORY_MAIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
+      CHATFACTORY_MAIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+      CHATFACTORY_MAIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
+      
+      // AI Model defaults
+      MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-3.5-turbo',
+      IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-4-mini',
+      TEMPRATURE: chatbotData?.aiConfig?.temperature?.toString() || process.env.DEFAULT_TEMPERATURE || process.env.TEMPRATURE || '0.7',
+      
+      // Embedding defaults
+      FETCH_K_EMBEDDINGS: process.env.DEFAULT_FETCH_K_EMBEDDINGS || process.env.FETCH_K_EMBEDDINGS || '12',
+      LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
+      K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
+      MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
+      
+      // Debug
+      ENABLE_DEBUG_PAGE: 'true',
+      
+      // Multimodal Configuration - Enable image embeddings if multimodal is enabled
+      NEXT_PUBLIC_ENABLE_IMAGE_EMBEDDINGS: (chatbotData?.aiConfig?.multimodal === true).toString(),
+    };
+
+    // Set Phase 1 environment variables
+    console.log('📤 Setting Phase 1 environment variables...');
+    const phase1Result = await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, basicEnvVars);
+    console.log(`✅ Phase 1 complete: ${phase1Result.success} variables set, ${phase1Result.failed} failed`);
+    
+    // Give Phase 1 vars time to propagate while we do setup work
+    console.log('⏳ Phase 1 variables propagating while setting up services...');
+
+    // DOMAIN CREATION DEPLOYMENT REMOVED - Vercel will auto-generate production domain
+    console.log('🌐 Skipping domain creation deployment - Vercel will auto-generate production domain');
 
     // 2. Prepare complete chatbot configuration for the template
     // Try multiple possible field names for logo URL
@@ -498,7 +454,6 @@ export async function POST(request: NextRequest) {
             metric: 'cosine',
             region: 'us-east-1',
             status: 'ready',
-            embeddingModel: finalEmbeddingModel,
           });
         }
       } catch (pineconeError) {
@@ -672,15 +627,14 @@ export async function POST(request: NextRequest) {
     console.log('  Chatbot Name:', chatbotData?.name);
     console.log('  Generated Namespace:', pineconeNamespace);
     
-    // Set environment variables on the project
-    const envVars = {
-      // Chatbot-specific configuration
-      CHATBOT_ID: chatbotId,
+    // PHASE 2: SET DYNAMIC ENVIRONMENT VARIABLES (Firebase + Pinecone configs)
+    console.log('🔧 PHASE 2: Setting dynamic environment variables after service setup...');
+    
+    const dynamicEnvVars = {
+      // Chatbot-specific configuration (with complete data)
       CHATBOT_CONFIG: JSON.stringify(chatbotConfig),
       
-      // Public environment variables (accessible in browser)
-      NEXT_PUBLIC_CHATBOT_ID: chatbotId,
-      NEXT_PUBLIC_CHATBOT_NAME: chatbotConfig.name,  
+      // Updated public environment variables (with complete chatbot data)
       NEXT_PUBLIC_CHATBOT_DESCRIPTION: chatbotConfig.description,
       NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotConfig.logoUrl,
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
@@ -688,129 +642,127 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
       NEXT_PUBLIC_CUSTOM_DOMAIN: customDomain || '',
       
-      // Dedicated Firebase client configuration (public)
+      // Generate favicon environment variables if favicon is configured
+      ...(chatbotConfig.appearance?.favicon?.enabled ? 
+        generateFaviconEnvVars(chatbotConfig.appearance.favicon, chatbotConfig.name) : 
+        {}),
+      
+      // Dedicated Firebase client configuration (public) - AVAILABLE AFTER FIREBASE SETUP
       NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject.config.apiKey,
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dedicatedFirebaseProject.config.authDomain,
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dedicatedFirebaseProject.config.storageBucket,
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: dedicatedFirebaseProject.config.messagingSenderId,
       NEXT_PUBLIC_FIREBASE_APP_ID: dedicatedFirebaseProject.config.appId,
-      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '', // Keep from main project for analytics
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
       
-      // Dedicated Firebase Admin SDK (Server-side, secure) - NOW GUARANTEED TO BE VALID
+      // Dedicated Firebase Admin SDK (Server-side, secure) - AVAILABLE AFTER FIREBASE SETUP  
       FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
       FIREBASE_CLIENT_EMAIL: dedicatedFirebaseProject.serviceAccount.clientEmail,
       FIREBASE_PRIVATE_KEY: dedicatedFirebaseProject.serviceAccount.privateKey,
       
-      // Main ChatFactory project credentials (for token validation)
-      CHATFACTORY_MAIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
-      CHATFACTORY_MAIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-      CHATFACTORY_MAIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
-      
-      // API Keys (Server-side, secure)
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-      MISTRAL_API_KEY: process.env.MISTRAL_API_KEY || '',
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
-      COHERE_API_KEY: process.env.COHERE_API_KEY || '',
-      
-      // Embedding Provider API Keys
-      JINA_API_KEY: process.env.JINA_API_KEY || '',
-      HUGGINGFACEHUB_API_KEY: process.env.HUGGINGFACEHUB_API_KEY || '',
-      
-      // Pinecone Vector Database Configuration
-      PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
-      PINECONE_ENVIRONMENT: 'us-east-1', // Use us-east-1 for free plan compatibility
+      // Pinecone configuration - AVAILABLE AFTER PINECONE SETUP
       PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
       PINECONE_NAMESPACE: pineconeNamespace,
-      MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
       
-      // Embedding Configuration
-      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small'),
-      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
-      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small').toString(),
-      FETCH_K_EMBEDDINGS: process.env.DEFAULT_FETCH_K_EMBEDDINGS || process.env.FETCH_K_EMBEDDINGS || '12',
-      LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
-      K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
-      
-      // Database Configuration  
-      DATABASE_URL: process.env.DATABASE_URL || '',
-      
-      // Debug: Log what DATABASE_URL we're setting (remove after debugging)
-      DEBUG_DATABASE_URL_CHECK: process.env.DATABASE_URL ? 'DATABASE_URL_SET' : 'DATABASE_URL_MISSING',
-      
-      // AI Model Configuration
-      MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-3.5-turbo',
-      IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-4-mini',
-      TEMPRATURE: chatbotData?.aiConfig?.temperature?.toString() || process.env.DEFAULT_TEMPERATURE || process.env.TEMPRATURE || '0.7',
-      
-      // Application URLs
-      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'https://chatfactory.ai',
-      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://chatfactory.ai/api',
-      
-      // Debug page (temporary - remove after testing)
-      ENABLE_DEBUG_PAGE: 'true'
+      // GCP Storage bucket names - AVAILABLE AFTER FIREBASE SETUP
+      GCLOUD_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-documents`,
+      GCLOUD_PRIVATE_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-private-images`,
+      GCLOUD_DOCUMENT_IMAGES_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-document-images`,
     };
     
     // Filter out empty values but keep empty strings for optional fields
-    const filteredEnvVars = Object.fromEntries(
-      Object.entries(envVars).filter(([key, value]) => value !== undefined && value !== null)
+    const filteredDynamicEnvVars = Object.fromEntries(
+      Object.entries(dynamicEnvVars).filter(([key, value]) => value !== undefined && value !== null)
     );
     
-    // Debug: Log what environment variables we're setting
-    console.log('Setting environment variables on Vercel project:');
-    console.log('Keys:', Object.keys(filteredEnvVars));
-    console.log('Total variables to set:', Object.keys(filteredEnvVars).length);
+    // Debug: Log what Phase 2 environment variables we're setting
+    console.log('📤 Setting Phase 2 environment variables on Vercel project:');
+    console.log('Keys:', Object.keys(filteredDynamicEnvVars));
+    console.log('Total Phase 2 variables to set:', Object.keys(filteredDynamicEnvVars).length);
     console.log('Chatbot Config:', {
       id: chatbotConfig.id,
       name: chatbotConfig.name,
       logoUrl: chatbotConfig.logoUrl ? 'Present' : 'Missing',
-      hasFirebaseConfig: !!filteredEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY
+      hasFirebaseConfig: !!filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY
     });
+    
+    // Debug: Log critical Firebase configuration
+    console.log('🔍 Critical Firebase Configuration Check:');
+    console.log('NEXT_PUBLIC_FIREBASE_API_KEY:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY ? 'SET ✅' : 'MISSING ❌');
+    console.log('NEXT_PUBLIC_FIREBASE_PROJECT_ID:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'SET ✅' : 'MISSING ❌');
+    console.log('FIREBASE_CLIENT_EMAIL:', filteredDynamicEnvVars.FIREBASE_CLIENT_EMAIL ? 'SET ✅' : 'MISSING ❌');
+    console.log('FIREBASE_PRIVATE_KEY:', filteredDynamicEnvVars.FIREBASE_PRIVATE_KEY ? 'SET ✅' : 'MISSING ❌');
     
     // Debug: Log Pinecone configuration specifically
     console.log('🔍 Pinecone Configuration Check:');
-    console.log('PINECONE_API_KEY:', filteredEnvVars.PINECONE_API_KEY ? 'SET ✅' : 'MISSING ❌');
-    console.log('PINECONE_ENVIRONMENT:', filteredEnvVars.PINECONE_ENVIRONMENT ? 'SET ✅' : 'MISSING ❌');
-    console.log('PINECONE_INDEX_NAME:', filteredEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
-    console.log('MINSCORESOURCESTHRESHOLD:', filteredEnvVars.MINSCORESOURCESTHRESHOLD ? 'SET ✅' : 'MISSING ❌');
+    console.log('PINECONE_INDEX_NAME:', filteredDynamicEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
+    console.log('PINECONE_NAMESPACE:', filteredDynamicEnvVars.PINECONE_NAMESPACE ? 'SET ✅' : 'MISSING ❌');
     
-    // Debug: Log Embedding Configuration
-    console.log('🔍 Embedding Configuration Check:');
-    console.log('EMBEDDING_PROVIDER:', filteredEnvVars.EMBEDDING_PROVIDER || 'MISSING ❌');
-    console.log('EMBEDDING_MODEL:', filteredEnvVars.EMBEDDING_MODEL || 'MISSING ❌');
-    console.log('EMBEDDING_DIMENSIONS:', filteredEnvVars.EMBEDDING_DIMENSIONS || 'MISSING ❌');
-    console.log('JINA_API_KEY:', filteredEnvVars.JINA_API_KEY ? 'SET ✅' : 'MISSING ❌');
-    console.log('HUGGINGFACEHUB_API_KEY:', filteredEnvVars.HUGGINGFACEHUB_API_KEY ? 'SET ✅' : 'MISSING ❌');
-    console.log('COHERE_API_KEY:', filteredEnvVars.COHERE_API_KEY ? 'SET ✅' : 'MISSING ❌');
+    // Set Phase 2 environment variables on the project
+    console.log('📤 Setting Phase 2 environment variables on project:', projectName);
+    const phase2Result = await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, filteredDynamicEnvVars);
     
-    // Set environment variables on the project with better error handling
-    console.log('Setting environment variables on project:', projectName);
-    const envSetResults = await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, filteredEnvVars);
+    console.log(`✅ Phase 2 complete: ${phase2Result.success} set, ${phase2Result.skipped} already existed, ${phase2Result.failed} failed`);
     
-    console.log(`📊 Environment variables summary: ${envSetResults.success} set, ${envSetResults.skipped} already existed, ${envSetResults.failed} failed`);
+    // Combine both phases for final summary
+    const totalSuccess = phase1Result.success + phase2Result.success;
+    const totalFailed = phase1Result.failed + phase2Result.failed;
+    console.log(`📊 TOTAL Environment variables summary: ${totalSuccess} set, ${totalFailed} failed`);
     
     // Fail deployment if critical env vars couldn't be set
-    if (envSetResults.failed > 0 && envSetResults.success === 0) {
+    if (totalFailed > 0 && totalSuccess === 0) {
       return NextResponse.json({ 
         error: 'Failed to set required environment variables on Vercel project'
       }, { status: 500 });
     }
     
-    // Wait longer for env vars to propagate and verify they're set
-    console.log('⏳ Waiting for environment variables to propagate...');
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+    // Wait for ALL environment variables to propagate (both phases)
+    console.log('⏳ Waiting for ALL environment variables to propagate...');
+    console.log('🔧 Phase 1 variables have been propagating during service setup');
+    console.log('🔧 Phase 2 variables need additional propagation time');
+    await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds for proper propagation
     
-    // Verify critical environment variables are set
-    const verification = await verifyEnvironmentVariables(VERCEL_API_TOKEN, projectName, [
+    // Verify critical environment variables are set with retry logic
+    console.log('🔍 Verifying critical environment variables from both phases...');
+    let verification = null;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    // Check critical vars from both phases
+    const criticalVars = [
+      // Phase 1 critical vars
       'NEXT_PUBLIC_CHATBOT_ID',
       'NEXT_PUBLIC_CHATBOT_NAME',
-      'NEXT_PUBLIC_FIREBASE_PROJECT_ID'
-    ]);
+      'OPENAI_API_KEY',
+      'PINECONE_API_KEY',
+      // Phase 2 critical vars  
+      'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      'NEXT_PUBLIC_FIREBASE_API_KEY',
+      'FIREBASE_CLIENT_EMAIL',
+      'PINECONE_INDEX_NAME'
+    ];
+    
+    while (retryCount < maxRetries) {
+      verification = await verifyEnvironmentVariables(VERCEL_API_TOKEN, projectName, criticalVars);
+      
+      if (verification.success) {
+        console.log('✅ Critical environment variables verified from both phases');
+        break;
+      } else {
+        retryCount++;
+        console.warn(`⚠️ Retry ${retryCount}/${maxRetries}: Some critical environment variables missing:`, verification.missing);
+        
+        if (retryCount < maxRetries) {
+          console.log('⏳ Waiting additional 15 seconds before retry...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        }
+      }
+    }
     
     if (!verification.success) {
-      console.warn('⚠️ Some critical environment variables may not be set properly:', verification.missing);
-    } else {
-      console.log('✅ Critical environment variables verified');
+      console.error('❌ Failed to verify critical environment variables after retries');
+      console.warn('⚠️ Proceeding with deployment but Firebase may fail to initialize');
     }
 
     // Handle custom domain configuration if provided
@@ -842,6 +794,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Create production deployment from main branch
+    console.log('🚀 STARTING SINGLE PRODUCTION DEPLOYMENT');
+    console.log('✅ Phase 1 environment variables set early (basic config, API keys)');
+    console.log('✅ Phase 2 environment variables set after service setup (Firebase, Pinecone)');
+    console.log('✅ Firebase project configured with dedicated credentials');
+    console.log('✅ Pinecone vectorstore ready');
+    console.log('✅ All environment variables verified and propagated');
+    console.log('▶️ Proceeding with deployment...');
+    
     let deploymentResponse;
     
     // Create deployment payload based on whether we have repoId

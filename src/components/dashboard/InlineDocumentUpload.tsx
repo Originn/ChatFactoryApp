@@ -10,8 +10,8 @@ import { Progress } from "@/components/ui/progress";
 interface UploadedFile {
   file: File;
   id: string;
-  type: 'regular' | 'chm' | 'pdf';
-  status: 'pending' | 'uploading' | 'converting' | 'converting_chm' | 'generating_embeddings' | 'completed' | 'completed_pdf_only' | 'error';
+  type: 'regular' | 'chm' | 'pdf' | 'video';
+  status: 'pending' | 'uploading' | 'converting' | 'converting_chm' | 'transcribing' | 'generating_embeddings' | 'completed' | 'completed_pdf_only' | 'error';
   progress?: number;
   jobId?: string;
   error?: string;
@@ -19,9 +19,14 @@ interface UploadedFile {
   vectorCount?: number;
   embeddingModel?: string;
   embeddingError?: string;
-  pipelineStage?: 'chm_conversion' | 'embedding_generation' | 'completed';
+  pipelineStage?: 'chm_conversion' | 'video_transcription' | 'embedding_generation' | 'completed';
   pineconeIndex?: string;
   mode?: 'enhanced_complete' | 'pdf_only' | 'legacy';
+  // Video specific
+  duration?: number;
+  language?: string;
+  transcription?: string;
+  useGPU?: boolean;
 }
 
 interface InlineDocumentUploadProps {
@@ -34,18 +39,35 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [useGPU, setUseGPU] = useState(false); // GPU processing toggle
 
-  const getProgressForCHM = (status: string, elapsed: number) => {
-    switch(status) {
-      case 'converting_chm': 
-        return Math.min(10 + (elapsed * 0.8), 60);
-      case 'generating_embeddings':
-        return Math.min(60 + (elapsed * 0.4), 95);
-      case 'completed':
-      case 'completed_pdf_only':
-        return 100;
-      default:
-        return Math.min(elapsed * 2, 10);
+  const getProgressForProcessing = (status: string, elapsed: number, type: string) => {
+    if (type === 'chm') {
+      switch(status) {
+        case 'converting_chm': 
+          return Math.min(10 + (elapsed * 0.8), 60);
+        case 'generating_embeddings':
+          return Math.min(60 + (elapsed * 0.4), 95);
+        case 'completed':
+        case 'completed_pdf_only':
+          return 100;
+        default:
+          return Math.min(elapsed * 2, 10);
+      }
+    } else if (type === 'video') {
+      switch(status) {
+        case 'transcribing': 
+          return Math.min(10 + (elapsed * 0.6), 70);
+        case 'generating_embeddings':
+          return Math.min(70 + (elapsed * 0.3), 95);
+        case 'completed':
+          return 100;
+        default:
+          return Math.min(elapsed * 2, 10);
+      }
+    } else {
+      // PDF and other files
+      return Math.min(elapsed * 3, 95);
     }
   };
 
@@ -57,11 +79,15 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         return 'Uploading file...';
       case 'converting_chm':
         return 'Converting CHM to PDF...';
+      case 'transcribing':
+        return 'Transcribing video content...';
       case 'generating_embeddings':
         return `Generating embeddings${file.embeddingModel ? ` with ${file.embeddingModel}` : ''}...`;
       case 'completed':
         if (file.type === 'chm') {
           return '✅ Conversion and ingestion completed successfully';
+        } else if (file.type === 'video') {
+          return `✅ Video transcribed and embedded! ${file.vectorCount || 0} vectors created${file.duration ? ` (${Math.round(file.duration)}s)` : ''}`;
         }
         return `✅ Completed! ${file.vectorCount || 0} vectors created${file.pineconeIndex ? ` in ${file.pineconeIndex}` : ''}`;
       case 'completed_pdf_only':
@@ -78,12 +104,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     if (!files) return;
 
     const newFiles: UploadedFile[] = Array.from(files).map(file => {
-      let fileType: 'regular' | 'chm' | 'pdf' = 'regular';
+      let fileType: 'regular' | 'chm' | 'pdf' | 'video' = 'regular';
       
       if (file.name.toLowerCase().endsWith('.chm')) {
         fileType = 'chm';
       } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         fileType = 'pdf';
+      } else if (file.type.startsWith('video/') || 
+                 ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.wmv'].some(ext => 
+                   file.name.toLowerCase().endsWith(ext))) {
+        fileType = 'video';
       }
 
       return {
@@ -91,11 +121,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         id: `${Date.now()}-${Math.random()}`,
         type: fileType,
         status: 'pending',
-        isPublic: false
+        isPublic: false,
+        ...(fileType === 'video' && { useGPU })
       };
     });
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
+
+    // Warm containers based on file types
+    const fileTypes = new Set(newFiles.map(f => f.type));
+    warmContainers(fileTypes);
   };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -104,12 +139,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     if (!files) return;
 
     const newFiles: UploadedFile[] = Array.from(files).map(file => {
-      let fileType: 'regular' | 'chm' | 'pdf' = 'regular';
+      let fileType: 'regular' | 'chm' | 'pdf' | 'video' = 'regular';
       
       if (file.name.toLowerCase().endsWith('.chm')) {
         fileType = 'chm';
       } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         fileType = 'pdf';
+      } else if (file.type.startsWith('video/') || 
+                 ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.wmv'].some(ext => 
+                   file.name.toLowerCase().endsWith(ext))) {
+        fileType = 'video';
       }
 
       return {
@@ -117,25 +156,30 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         id: `${Date.now()}-${Math.random()}`,
         type: fileType,
         status: 'pending',
-        isPublic: false
+        isPublic: false,
+        ...(fileType === 'video' && { useGPU })
       };
     });
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
+
+    // Warm containers based on file types
+    const fileTypes = new Set(newFiles.map(f => f.type));
+    warmContainers(fileTypes);
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
   };
 
-  const startEstimatedProgress = (fileId: string) => {
+  const startEstimatedProgress = (fileId: string, fileType: string) => {
     const startTime = Date.now();
     const interval = setInterval(() => {
       const elapsed = (Date.now() - startTime) / 1000;
       
       setUploadedFiles(prev => prev.map(f => {
-        if (f.id === fileId && (f.status === 'converting_chm' || f.status === 'generating_embeddings')) {
-          const newProgress = getProgressForCHM(f.status, elapsed);
+        if (f.id === fileId && (f.status === 'converting_chm' || f.status === 'transcribing' || f.status === 'generating_embeddings')) {
+          const newProgress = getProgressForProcessing(f.status, elapsed, fileType);
           return { ...f, progress: newProgress };
         }
         return f;
@@ -157,7 +201,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         } : f
       ));
 
-      const progressInterval = startEstimatedProgress(fileItem.id);
+      const progressInterval = startEstimatedProgress(fileItem.id, 'chm');
 
       const formData = new FormData();
       formData.append('file', fileItem.file);
@@ -266,17 +310,97 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     }
   };
 
+  const processVideoFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
+    try {
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileItem.id ? { 
+          ...f, 
+          status: 'transcribing', 
+          progress: 10,
+          pipelineStage: 'video_transcription',
+          isPublic 
+        } : f
+      ));
+
+      const progressInterval = startEstimatedProgress(fileItem.id, 'video');
+
+      const formData = new FormData();
+      formData.append('file', fileItem.file);
+      formData.append('chatbotId', chatbotId);
+      formData.append('userId', user?.uid || '');
+      formData.append('isPublic', isPublic.toString());
+      formData.append('enableProcessing', 'true'); // Always enable semantic processing for better chunking
+      formData.append('useGPU', (fileItem.useGPU || false).toString()); // GPU processing selection
+
+      const response = await fetch('/api/video-convert', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        clearInterval(progressInterval);
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileItem.id ? { 
+            ...f, 
+            status: 'completed',
+            progress: 100,
+            vectorCount: result.vectorCount,
+            duration: result.duration,
+            language: result.language,
+            transcription: result.transcription,
+            pipelineStage: 'completed'
+          } : f
+        ));
+        
+        if (onUploadComplete) {
+          onUploadComplete();
+        }
+      } else {
+        clearInterval(progressInterval);
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileItem.id ? { 
+            ...f, 
+            status: 'error',
+            error: result.error 
+          } : f
+        ));
+      }
+    } catch (error) {
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileItem.id ? { 
+          ...f, 
+          status: 'error',
+          error: 'Video upload failed' 
+        } : f
+      ));
+    }
+  };
+
   const uploadFiles = async () => {
     if (!user?.uid) return;
 
     setIsProcessing(true);
     
-    for (const file of uploadedFiles.filter(f => f.status === 'pending')) {
-      if (file.type === 'chm') {
-        await processCHMFile(file, file.isPublic);
-      } else if (file.type === 'pdf') {
-        await processPDFFile(file, file.isPublic);
-      }
+    // Process all files in parallel for better performance
+    const pendingFiles = uploadedFiles.filter(f => f.status === 'pending');
+    
+    try {
+      await Promise.all(
+        pendingFiles.map(file => {
+          if (file.type === 'chm') {
+            return processCHMFile(file, file.isPublic);
+          } else if (file.type === 'pdf') {
+            return processPDFFile(file, file.isPublic);
+          } else if (file.type === 'video') {
+            return processVideoFile(file, file.isPublic);
+          }
+          return Promise.resolve();
+        })
+      );
+    } catch (error) {
+      console.error('Error during parallel file processing:', error);
     }
 
     setIsProcessing(false);
@@ -290,6 +414,53 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     setUploadedFiles(prev => prev.map(f => 
       f.id === fileId ? { ...f, isPublic: !f.isPublic } : f
     ));
+  };
+
+  const toggleFileGPU = (fileId: string) => {
+    setUploadedFiles(prev => prev.map(f => 
+      f.id === fileId && f.type === 'video' ? { ...f, useGPU: !f.useGPU } : f
+    ));
+  };
+
+  const warmContainers = async (fileTypes: Set<string>) => {
+    const warmingPromises = [];
+    
+    if (fileTypes.has('video')) {
+      console.log('🔥 Warming video-converter containers (CPU + GPU)...');
+      warmingPromises.push(
+        fetch('/api/video-convert', { method: 'GET' })
+          .then(response => response.json())
+          .then(data => {
+            console.log('✅ Video converters warmed:', {
+              cpu: data.cpu,
+              gpu: data.gpu,
+              service: data.service
+            });
+          })
+          .catch(error => console.log('⚠️ Video converter warming failed:', error))
+      );
+    }
+    
+    if (fileTypes.has('chm')) {
+      console.log('🔥 Warming chm-converter container...');
+      warmingPromises.push(
+        fetch('/api/chm-convert', { method: 'GET' })
+          .then(() => console.log('✅ CHM converter warmed'))
+          .catch(() => console.log('⚠️ CHM converter warming failed'))
+      );
+    }
+    
+    if (fileTypes.has('pdf')) {
+      console.log('🔥 Warming pdf-converter container...');
+      warmingPromises.push(
+        fetch('/api/pdf-convert', { method: 'GET' })
+          .then(() => console.log('✅ PDF converter warmed'))
+          .catch(() => console.log('⚠️ PDF converter warming failed'))
+      );
+    }
+    
+    // Fire and forget - don't block UI
+    Promise.allSettled(warmingPromises);
   };
 
   return (
@@ -306,9 +477,9 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
               />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Documents</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Documents & Videos</h3>
           <p className="text-gray-600 mb-6">
-            Upload your documentation files to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, and <strong className="text-blue-600">CHM files</strong>.
+            Upload your documentation files and videos to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600">CHM files</strong>, and <strong className="text-purple-600">Video files</strong>.
           </p>
           
           <div className="border-2 border-dashed border-blue-300 rounded-lg p-12 bg-gradient-to-br from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 transition-all duration-200">
@@ -322,6 +493,24 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
                   />
                 </svg>
+              </div>
+              
+              {/* GPU Processing Toggle for Videos */}
+              <div className="mb-6">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useGPU}
+                    onChange={(e) => setUseGPU(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-900">Use GPU processing for videos</span>
+                    <div className="text-gray-500">
+                      {useGPU ? '⚡ Faster transcription (8x speed, higher cost)' : '💰 Standard CPU processing (cost-effective)'}
+                    </div>
+                  </div>
+                </label>
               </div>
               
               {/* Upload Area */}
@@ -345,7 +534,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
               </div>
               
               <p className="text-sm text-gray-500">
-                Supports: PDF, MD, HTML, DOCX, TXT, CHM files up to 10MB each
+                Supports: PDF, MD, HTML, DOCX, TXT, CHM files + Video files (MP4, AVI, MOV, MKV, WebM, WMV) up to 10MB each
               </p>
             </div>
           </div>
@@ -355,7 +544,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.chm,.md,.html,.docx,.txt"
+          accept=".pdf,.chm,.md,.html,.docx,.txt,.mp4,.avi,.mov,.mkv,.webm,.wmv,video/*"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -370,7 +559,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   <div className="text-sm font-medium text-gray-900 truncate max-w-xs">
                     {file.file.name}
                   </div>
-                  <Badge variant={file.type === 'chm' ? 'default' : 'secondary'}>
+                  <Badge variant={file.type === 'chm' ? 'default' : file.type === 'video' ? 'secondary' : 'secondary'}>
                     {file.type.toUpperCase()}
                   </Badge>
                   <button
@@ -380,6 +569,15 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   >
                     {file.isPublic ? '🌐 Public' : '🔒 Private'}
                   </button>
+                  {file.type === 'video' && (
+                    <button
+                      onClick={() => toggleFileGPU(file.id)}
+                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                      disabled={file.status !== 'pending'}
+                    >
+                      {file.useGPU ? '⚡ GPU' : '💻 CPU'}
+                    </button>
+                  )}
                 </div>
                 
                 <div className="flex items-center space-x-3">

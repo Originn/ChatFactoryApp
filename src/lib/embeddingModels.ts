@@ -79,10 +79,10 @@ export const EMBEDDING_MODEL_CONFIGS: Record<string, EmbeddingModelConfig> = {
 
   // Jina AI Models
   'jina-embeddings-v4': {
-    dimensions: 2048,
+    dimensions: 512,
     provider: 'jina',
     supportsMultimodal: true,
-    description: 'Jina AI embeddings-v4 (2048 dimensions, multimodal)'
+    description: 'Jina AI embeddings-v4 (512 dimensions, multimodal)'
   },
   'jina-embeddings-v3': {
     dimensions: 1024,

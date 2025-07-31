@@ -40,6 +40,16 @@ export interface ChatbotConfig {
   appearance: {
     primaryColor: string;
     bubbleStyle: string;
+    // Favicon configuration
+    favicon: {
+      enabled: boolean;
+      iconUrl?: string;
+      appleTouchIcon?: string;
+      manifestIcon192?: string;
+      manifestIcon512?: string;
+      themeColor?: string;
+      backgroundColor?: string;
+    };
   };
   stats: {
     queries: number;

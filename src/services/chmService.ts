@@ -74,6 +74,8 @@ export class CHMService {
     try {
       const formData = new FormData();
       formData.append('file', request.file);
+      formData.append('chatbot_id', request.chatbotId);
+      formData.append('user_id', request.userId);
       formData.append('pinecone_index', request.pineconeIndex);
       
       if (request.pineconeNamespace) {

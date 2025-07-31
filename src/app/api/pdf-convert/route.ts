@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
     console.log(`📊 Vectorstore: ${vectorstore.indexName}`);
     console.log(`🤖 Embedding: ${embeddingProvider}/${embeddingModel} (${dimensions}d)`);
     console.log(`🎨 Multimodal: ${multimodal ? 'enabled' : 'disabled'}`);
+    console.log(`🎯 Dual Embedding: Always enabled (default strategy)`);
     console.log(`🪣 Image storage bucket: ${imageStorageBucket}`);
 
     // Process the PDF file with the cloud converter

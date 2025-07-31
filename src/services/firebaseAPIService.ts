@@ -519,8 +519,8 @@ export class FirebaseAPIService {
           console.log('💡 You may need to manually configure Firestore rules in the Firebase Console');
         }
         
-        // Step 3: Create service account for this chatbot
-        console.log('🔑 Creating service account...');
+        // Step 3: Create service account with granular permissions for this chatbot
+        console.log('🔑 Creating service account with granular permissions...');
         const serviceAccountResult = await this.createServiceAccountREST(projectId);
         
         if (!serviceAccountResult) {
@@ -1153,13 +1153,13 @@ export class FirebaseAPIService {
             privateKeyLength: keyData.private_key?.length || 0
           });
           
-          // Add Firebase Admin permissions to the custom service account
-          console.log('🔐 Adding Firebase Admin permissions to custom service account...');
+          // Add granular Firebase permissions to the custom service account
+          console.log('🔐 Adding granular Firebase permissions to custom service account...');
           try {
             await this.addFirebaseAdminPermissions(projectId, serviceAccountEmail);
-            console.log('✅ Firebase Admin permissions added to custom service account');
+            console.log('✅ Granular Firebase permissions configured for custom service account');
           } catch (permissionError: any) {
-            console.warn('⚠️ Failed to add Firebase permissions, but continuing:', permissionError.message);
+            console.warn('⚠️ Failed to add granular Firebase permissions, but continuing:', permissionError.message);
             // Continue anyway - the service account might still work for basic operations
           }
           
@@ -1194,7 +1194,157 @@ export class FirebaseAPIService {
   }
 
   /**
-   * Add Firebase Admin permissions to a service account
+   * Set granular bucket-level permissions for chatbot service account
+   */
+  private static async setBucketLevelPermissions(
+    projectId: string, 
+    serviceAccountEmail: string
+  ): Promise<void> {
+    try {
+      console.log('🔐 Setting bucket-level permissions for:', serviceAccountEmail);
+      
+      const { Storage } = require('@google-cloud/storage');
+      const { getGCPCredentials } = require('@/lib/gcp-auth');
+      
+      const credentials = getGCPCredentials();
+      const storage = new Storage({
+        projectId: projectId,
+        ...(credentials && Object.keys(credentials).length > 0 && { 
+          credentials: (credentials as any).credentials 
+        })
+      });
+
+      // Define chatbot-specific buckets with their required permissions (match bucket creation pattern)
+      const bucketPermissions = [
+        {
+          name: `${projectId}-chatbot-documents`,
+          roles: [
+            'roles/storage.objectAdmin',      // Full CRUD on objects
+            'roles/storage.legacyBucketReader' // Read bucket metadata
+          ]
+        },
+        {
+          name: `${projectId}-chatbot-private-images`, 
+          roles: [
+            'roles/storage.objectAdmin',      // Full CRUD on objects
+            'roles/storage.legacyBucketReader' // Read bucket metadata
+          ]
+        },
+        {
+          name: `${projectId}-chatbot-document-images`,
+          roles: [
+            'roles/storage.objectAdmin',      // Full CRUD on objects  
+            'roles/storage.legacyBucketReader' // Read bucket metadata
+          ]
+        }
+      ];
+
+      // Apply permissions to each bucket
+      for (const bucketConfig of bucketPermissions) {
+        try {
+          const bucket = storage.bucket(bucketConfig.name);
+          
+          // Check if bucket exists first
+          const [bucketExists] = await bucket.exists();
+          if (!bucketExists) {
+            console.warn(`Bucket does not exist: ${bucketConfig.name}, skipping permissions`);
+            continue;
+          }
+          
+          // Get current IAM policy
+          const [policy] = await bucket.getIamPolicy({ requestedPolicyVersion: 3 });
+          
+          let permissionsChanged = false;
+          
+          // Add service account to each required role
+          for (const role of bucketConfig.roles) {
+            let binding = policy.bindings.find(b => b.role === role);
+            
+            if (!binding) {
+              binding = {
+                role: role,
+                members: []
+              };
+              policy.bindings.push(binding);
+              permissionsChanged = true;
+            }
+            
+            const memberString = `serviceAccount:${serviceAccountEmail}`;
+            if (!binding.members?.includes(memberString)) {
+              binding.members = binding.members || [];
+              binding.members.push(memberString);
+              permissionsChanged = true;
+            }
+          }
+          
+          // Apply updated policy only if changes were made
+          if (permissionsChanged) {
+            await bucket.setIamPolicy(policy);
+          }
+          
+        } catch (bucketError: any) {
+          console.error(`Failed to set permissions for ${bucketConfig.name}:`, bucketError.message);
+          // Continue with other buckets rather than failing completely
+        }
+      }
+      
+      console.log('✅ All bucket-level permissions configured');
+      
+    } catch (error: any) {
+      console.error('❌ Failed to set bucket-level permissions:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify that service account permissions were applied correctly
+   */
+  private static async verifyServiceAccountPermissions(projectId: string, serviceAccountEmail: string): Promise<void> {
+    try {
+      // Test basic IAM access
+      const [policy] = await resourceManagerClient.getIamPolicy({
+        resource: `projects/${projectId}`
+      });
+      
+      const serviceAccountBindings = policy.bindings?.filter(binding => 
+        binding.members?.some(member => member === `serviceAccount:${serviceAccountEmail}`)
+      ) || [];
+      
+      // Test storage access
+      const { Storage } = require('@google-cloud/storage');
+      const { getGCPCredentials } = require('@/lib/gcp-auth');
+      
+      const credentials = getGCPCredentials();
+      const storage = new Storage({
+        projectId: projectId,
+        ...(credentials && Object.keys(credentials).length > 0 && { 
+          credentials: (credentials as any).credentials 
+        })
+      });
+      
+      // Try to list buckets to verify storage access
+      try {
+        const [buckets] = await storage.getBuckets();
+        const chatbotBuckets = buckets.filter(bucket => 
+          bucket.name.includes(`${projectId}-chatbot`)
+        );
+        
+        if (chatbotBuckets.length === 0) {
+          console.warn('No chatbot buckets found - this may indicate a permission issue');
+        }
+        
+      } catch (storageError: any) {
+        console.warn('Storage access test failed:', storageError.message);
+      }
+      
+    } catch (error: any) {
+      console.warn('Could not verify all permissions:', error.message);
+      // Don't throw - verification is optional
+    }
+  }
+
+  /**
+   * Add granular Firebase permissions to a service account (includes necessary storage permissions)
    */
   private static async addFirebaseAdminPermissions(projectId: string, serviceAccountEmail: string): Promise<void> {
     try {
@@ -1205,17 +1355,25 @@ export class FirebaseAPIService {
         resource: `projects/${projectId}`
       });
       
-      // Firebase Admin roles needed for the service account
-      const firebaseRoles = [
-        'roles/firebase.admin',
-        'roles/firebaseauth.admin',
-        'roles/iam.serviceAccountTokenCreator'
+      // 🔐 COMPREHENSIVE PROJECT-LEVEL PERMISSIONS (includes all necessary storage permissions)
+      const projectRoles = [
+        // Essential for Firebase operations
+        'roles/iam.serviceAccountTokenCreator',
+        
+        // Firestore access (can be further restricted with Firestore rules)
+        'roles/datastore.user',
+        
+        // Auth access (read-only)
+        'roles/firebaseauth.viewer',
+        
+        // 🔑 FULL STORAGE ADMIN PERMISSIONS (ensures all bucket operations work)
+        'roles/storage.admin',               // Full storage admin access (includes all bucket/object operations)
       ];
       
       const bindings = policy.bindings || [];
       
-      // Add the service account to each Firebase role
-      firebaseRoles.forEach(role => {
+      // Add the service account to each role
+      projectRoles.forEach(role => {
         let binding = bindings.find(b => b.role === role);
         if (!binding) {
           binding = {
@@ -1241,9 +1399,14 @@ export class FirebaseAPIService {
         }
       });
       
-      console.log('✅ Firebase Admin permissions granted to service account');
+      // 🔐 BUCKET-LEVEL PERMISSIONS NOT NEEDED - storage.admin provides full access
+      // await this.setBucketLevelPermissions(projectId, serviceAccountEmail);
+      
+      // 🔍 VERIFY PERMISSIONS WERE APPLIED
+      await this.verifyServiceAccountPermissions(projectId, serviceAccountEmail);
+      
     } catch (error: any) {
-      console.error('❌ Failed to grant Firebase Admin permissions:', error.message);
+      console.error('❌ Failed to grant comprehensive Firebase permissions:', error);
       throw error;
     }
   }

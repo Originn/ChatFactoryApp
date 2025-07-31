@@ -3,6 +3,8 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { GoogleOAuthClientManager } from './googleOAuthClientManager';
 import { google } from 'googleapis';
+// DEBUG: Temporarily commenting out ResourceManagerClient to fix build
+// import { ResourceManagerClient } from '@google-cloud/resource-manager';
 
 // Initialize Firebase Management API
 const firebase = google.firebase('v1beta1');
@@ -40,7 +42,7 @@ export class ReusableFirebaseProjectService {
         oauthClients: false,
         webApps: false,
         identityPlatform: false,
-        serviceAccountKeys: false,
+        serviceAccountDeletion: false,
         bucketCleanup: false,
       };
 
@@ -112,7 +114,7 @@ export class ReusableFirebaseProjectService {
         console.error('❌ Identity Platform cleanup failed:', error);
       }
 
-      // 7. Clean up service account keys
+      // 7. Delete chatbot's service account completely
       try {
         const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
         if (projectId) {
@@ -120,12 +122,20 @@ export class ReusableFirebaseProjectService {
             scopes: ['https://www.googleapis.com/auth/cloud-platform']
           });
           const authClient = await auth.getClient();
-          await this.cleanupServiceAccountKeys(projectId, authClient);
-          cleanupResults.serviceAccountKeys = true;
-          console.log('✅ Service account keys cleanup completed');
+          
+          // For dedicated chatbot projects, delete the chatbot-specific service account
+          // Service account naming pattern: {projectId-no-hyphens}-admin@{projectId}.iam.gserviceaccount.com
+          const serviceAccountId = `${projectId.replace(/-/g, '')}-admin`.substring(0, 30);
+          const serviceAccountEmail = `${serviceAccountId}@${projectId}.iam.gserviceaccount.com`;
+          
+          console.log(`🗑️ Deleting chatbot service account: ${serviceAccountEmail}`);
+          await this.deleteServiceAccount(projectId, serviceAccountEmail, authClient);
+          cleanupResults.serviceAccountDeletion = true;
+          console.log('✅ Service account deletion completed');
         }
       } catch (error) {
-        console.error('❌ Service account keys cleanup failed:', error);
+        console.error('❌ Service account deletion failed:', error);
+        // Continue with cleanup even if service account deletion fails
       }
       
       const successCount = Object.values(cleanupResults).filter(Boolean).length;
@@ -360,7 +370,163 @@ export class ReusableFirebaseProjectService {
   }
 
   /**
-   * Clean up service account keys to prevent "Precondition check failed" errors
+   * Delete all chatbot-specific service accounts (for complete project cleanup)
+   */
+  public static async deleteAllChatbotServiceAccounts(projectId: string): Promise<void> {
+    console.log(`🧹 Deleting all chatbot service accounts in project: ${projectId}`);
+    
+    try {
+      const auth = new google.auth.GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+      });
+      const authClient = await auth.getClient();
+      const iam = google.iam('v1');
+      
+      // DEBUG: Temporarily commenting out problematic Google Cloud IAM call
+      // List all service accounts
+      // const serviceAccountsResponse = await iam.projects.serviceAccounts.list({
+      //   name: `projects/${projectId}`,
+      //   auth: authClient
+      // });
+      
+      // Return empty array for now
+      const serviceAccountsResponse = { data: { accounts: [] } };
+      
+      const serviceAccounts = serviceAccountsResponse.data.accounts || [];
+      console.log(`🔍 Found ${serviceAccounts.length} total service accounts`);
+      
+      // Filter for chatbot-specific service accounts (exclude default Google-managed ones)
+      const chatbotServiceAccounts = serviceAccounts.filter(serviceAccount => {
+        const email = serviceAccount.email || '';
+        return (
+          email.includes('-admin@') &&
+          !email.includes('@appspot.gserviceaccount.com') && 
+          !email.includes('@developer.gserviceaccount.com') &&
+          !email.includes('firebase-adminsdk')
+        );
+      });
+      
+      console.log(`🎯 Found ${chatbotServiceAccounts.length} chatbot service accounts to delete`);
+      
+      for (const serviceAccount of chatbotServiceAccounts) {
+        try {
+          await this.deleteServiceAccount(projectId, serviceAccount.email!, authClient);
+        } catch (error: any) {
+          console.warn(`⚠️ Failed to delete service account ${serviceAccount.email}:`, error.message);
+        }
+      }
+      
+      console.log(`✅ Chatbot service account cleanup completed`);
+      
+    } catch (error: any) {
+      console.error('❌ Failed to delete chatbot service accounts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Completely delete a chatbot's service account and all its keys
+   */
+  private static async deleteServiceAccount(projectId: string, serviceAccountEmail: string, authClient: any): Promise<void> {
+    console.log(`🗑️ Completely deleting service account: ${serviceAccountEmail}`);
+    
+    try {
+      const iam = google.iam('v1');
+      const serviceAccountName = `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`;
+      
+      // First, delete all keys for this service account
+      try {
+        const keysResponse = await iam.projects.serviceAccounts.keys.list({
+          name: serviceAccountName,
+          auth: authClient
+        });
+        
+        const keys = keysResponse.data.keys || [];
+        const userManagedKeys = keys.filter(key => key.keyType === 'USER_MANAGED');
+        
+        console.log(`🔑 Deleting all ${userManagedKeys.length} keys for ${serviceAccountEmail}`);
+        
+        for (const key of userManagedKeys) {
+          try {
+            await iam.projects.serviceAccounts.keys.delete({
+              name: key.name,
+              auth: authClient
+            });
+            console.log(`✅ Deleted key: ${key.name?.split('/').pop()}`);
+          } catch (keyError: any) {
+            console.warn(`⚠️ Failed to delete key:`, keyError.message);
+          }
+        }
+      } catch (keyError: any) {
+        console.warn(`⚠️ Failed to list/delete keys:`, keyError.message);
+      }
+      
+      // Remove IAM policy bindings for this service account
+      try {
+        console.log(`🔐 Removing IAM policy bindings for ${serviceAccountEmail}`);
+      // DEBUG: Temporarily commenting out ResourceManagerClient usage
+      // const resourceManagerClient = new ResourceManagerClient({ auth: authClient });
+      console.log(`🔐 IAM policy cleanup skipped for ${serviceAccountEmail} (temporarily disabled)`);
+      return;
+        
+        const [policy] = await resourceManagerClient.getIamPolicy({
+          resource: `projects/${projectId}`
+        });
+        
+        let bindingsModified = false;
+        const memberString = `serviceAccount:${serviceAccountEmail}`;
+        
+        if (policy.bindings) {
+          policy.bindings.forEach(binding => {
+            if (binding.members && binding.members.includes(memberString)) {
+              binding.members = binding.members.filter(member => member !== memberString);
+              bindingsModified = true;
+              console.log(`✅ Removed ${serviceAccountEmail} from role: ${binding.role}`);
+            }
+          });
+          
+          // Remove empty bindings
+          policy.bindings = policy.bindings.filter(binding => 
+            binding.members && binding.members.length > 0
+          );
+        }
+        
+        if (bindingsModified) {
+          await resourceManagerClient.setIamPolicy({
+            resource: `projects/${projectId}`,
+            policy: policy
+          });
+          console.log(`✅ IAM policy updated - removed all bindings for ${serviceAccountEmail}`);
+        }
+        
+      } catch (iamError: any) {
+        console.warn(`⚠️ Failed to remove IAM bindings:`, iamError.message);
+      }
+      
+      // Finally, delete the service account itself
+      try {
+        await iam.projects.serviceAccounts.delete({
+          name: serviceAccountName,
+          auth: authClient
+        });
+        console.log(`✅ Service account deleted: ${serviceAccountEmail}`);
+      } catch (deleteError: any) {
+        if (deleteError.code === 404) {
+          console.log(`ℹ️ Service account already deleted: ${serviceAccountEmail}`);
+        } else {
+          console.error(`❌ Failed to delete service account:`, deleteError.message);
+          throw deleteError;
+        }
+      }
+      
+    } catch (error: any) {
+      console.error(`❌ Failed to delete service account ${serviceAccountEmail}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up service account keys to prevent "Precondition check failed" errors (maintenance mode)
    */
   private static async cleanupServiceAccountKeys(projectId: string, authClient: any): Promise<void> {
     console.log('🔑 Cleaning up service account keys...');

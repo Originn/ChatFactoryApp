@@ -2,6 +2,7 @@
 import { adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { UserPDFMetadata } from '@/types/pdf';
+import { UserVideoMetadata } from '@/types/video';
 
 interface VectorstoreInfo {
   provider: 'pinecone';
@@ -321,6 +322,146 @@ class DatabaseService {
       return { success: true };
     } catch (error) {
       console.error(`❌ Failed to delete PDF metadata:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  // Video Metadata Management Methods
+  static async createVideoMetadata(
+    videoMetadata: Omit<UserVideoMetadata, 'id' | 'uploadedAt'>
+  ): Promise<{ success: boolean; videoId?: string; error?: string }> {
+    try {
+      const videoRef = adminDb.collection('user_videos').doc();
+      
+      const fullMetadata: UserVideoMetadata = {
+        ...videoMetadata,
+        id: videoRef.id,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      // Filter out undefined values for Firestore compatibility
+      const cleanMetadata = Object.fromEntries(
+        Object.entries(fullMetadata).filter(([_, value]) => value !== undefined)
+      );
+
+      await videoRef.set(cleanMetadata);
+
+      console.log(`✅ Created video metadata for ${videoMetadata.videoFileName}`);
+      return { success: true, videoId: videoRef.id };
+    } catch (error) {
+      console.error(`❌ Failed to create video metadata:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async getUserVideos(
+    userId: string,
+    chatbotId?: string
+  ): Promise<{ success: boolean; videos: UserVideoMetadata[]; error?: string }> {
+    try {
+      let query = adminDb.collection('user_videos').where('userId', '==', userId);
+      
+      if (chatbotId) {
+        query = query.where('chatbotId', '==', chatbotId);
+      }
+      
+      const snapshot = await query.orderBy('uploadedAt', 'desc').get();
+      
+      const videos: UserVideoMetadata[] = snapshot.docs.map(doc => 
+        doc.data() as UserVideoMetadata
+      );
+
+      console.log(`✅ Retrieved ${videos.length} videos for user ${userId}`);
+      return { success: true, videos };
+    } catch (error) {
+      console.error(`❌ Failed to get user videos:`, error);
+      return {
+        success: false,
+        videos: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async updateVideoStatus(
+    videoId: string,
+    status: UserVideoMetadata['status'],
+    error?: string,
+    vectorCount?: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updateData: Partial<UserVideoMetadata> = {
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (error) {
+        updateData.error = error;
+      }
+
+      if (vectorCount !== undefined) {
+        updateData.vectorCount = vectorCount;
+      }
+
+      await adminDb.collection('user_videos').doc(videoId).update(updateData);
+
+      console.log(`✅ Updated video ${videoId} status to ${status}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to update video status:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async updateVideoPrivacy(
+    videoId: string,
+    isPublic: boolean,
+    newUrl?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updateData: Partial<UserVideoMetadata> = {
+        isPublic,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (isPublic && newUrl) {
+        updateData.publicUrl = newUrl;
+      } else if (!isPublic) {
+        updateData.publicUrl = FieldValue.delete();
+      }
+
+      await adminDb.collection('user_videos').doc(videoId).update(updateData);
+
+      console.log(`✅ Updated video ${videoId} privacy to ${isPublic ? 'public' : 'private'}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to update video privacy:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async deleteVideoMetadata(
+    videoId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await adminDb.collection('user_videos').doc(videoId).delete();
+
+      console.log(`✅ Deleted video metadata ${videoId}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to delete video metadata:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

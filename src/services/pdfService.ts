@@ -22,6 +22,8 @@ interface PDFProcessingRequest {
   pineconeNamespace?: string;
   // Image storage configuration
   imageStorageBucket?: string;
+  // PDF source URL for metadata
+  pdfSourceUrl?: string;
 }
 
 interface PDFConversionResult {
@@ -56,6 +58,7 @@ export class PDFService {
     try {
       const formData = new FormData();
       formData.append('file', request.file);
+      formData.append('chatbot_id', request.chatbotId);
       formData.append('pinecone_index', request.pineconeIndex);
       
       if (request.pineconeNamespace) {
@@ -79,6 +82,11 @@ export class PDFService {
         formData.append('image_storage_bucket', request.imageStorageBucket);
       }
 
+      // Add PDF source URL for metadata
+      if (request.pdfSourceUrl) {
+        formData.append('pdf_source', request.pdfSourceUrl);
+      }
+
       // 🔒 SECURITY: Pass privacy flag to cloud converter
       if (request.isPublic !== undefined) {
         formData.append('is_public', request.isPublic.toString());
@@ -86,7 +94,10 @@ export class PDFService {
 
       console.log(`🔄 Processing PDF with converter: ${request.file.name}`);
       console.log(`📝 Embedding config: ${request.embeddingProvider}/${request.embeddingModel}`);
+      console.log(`🎨 Multimodal: ${request.multimodal ? 'Enabled' : 'Disabled'}`);
+      console.log(`🎯 Dual Embedding: Always enabled (default strategy)`);
       console.log(`🔒 Privacy setting: ${request.isPublic ? 'Public' : 'Private'}`);
+      console.log(`📄 PDF source URL: ${request.pdfSourceUrl || 'Not provided'}`);
 
       const response = await fetch(`${PDF_CONVERTER_URL}/process-pdf`, {
         method: 'POST',
@@ -174,6 +185,7 @@ export class PDFService {
           firebaseProjectId,
           `${firebaseProjectId}-default-rtdb`,
           `${firebaseProjectId}-storage`,
+          `${firebaseProjectId}-firebase-chatbot-documents`, // Additional pattern
         ];
         
         let bucketFound = false;
@@ -223,28 +235,17 @@ export class PDFService {
 
       // Handle URL generation based on privacy setting
       if (isPublic) {
-        try {
-          // Generate signed URL for public access (works with uniform bucket-level access)
-          const expirationHours = getPDFExpirationHours('public');
-          const [signedUrl] = await file.getSignedUrl({
-            action: 'read',
-            expires: Date.now() + 1000 * 60 * 60 * expirationHours,
-          });
-          
-          console.log(`✅ Public PDF stored with signed URL: ${filePath}`);
-          return {
-            success: true,
-            storagePath: filePath,
-            publicUrl: signedUrl
-          };
-        } catch (urlError) {
-          console.error('Failed to generate signed URL:', urlError);
-          return {
-            success: false,
-            storagePath: filePath,
-            error: 'Failed to generate public access URL'
-          };
-        }
+        // For public documents, use direct public URL (no expiration needed)
+        const bucketName = bucket.name;
+        const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+        
+        console.log(`✅ Public PDF stored with direct public URL: ${filePath}`);
+        console.log(`📄 Public URL: ${publicUrl}`);
+        return {
+          success: true,
+          storagePath: filePath,
+          publicUrl: publicUrl
+        };
       } else {
         console.log(`✅ Private PDF stored: ${filePath}`);
         return {
@@ -285,8 +286,44 @@ export class PDFService {
         credentials: credentials
       });
       
+      // Use same bucket detection logic as storePDFInFirebase
       const chatbotBucketName = `${firebaseProjectId}-chatbot-documents`;
-      const bucket = projectSpecificStorage.bucket(chatbotBucketName);
+      let bucket;
+      
+      try {
+        bucket = projectSpecificStorage.bucket(chatbotBucketName);
+        await bucket.getMetadata();
+        console.log(`✅ Using chatbot documents bucket for signed URL: ${chatbotBucketName}`);
+        
+      } catch (bucketError) {
+        console.log(`⚠️ Chatbot documents bucket not found, trying fallback bucket names...`);
+        
+        const fallbackBuckets = [
+          `${firebaseProjectId}.appspot.com`,
+          firebaseProjectId,
+          `${firebaseProjectId}-default-rtdb`,
+          `${firebaseProjectId}-storage`,
+          `${firebaseProjectId}-firebase-chatbot-documents`, // Additional pattern
+        ];
+        
+        let bucketFound = false;
+        for (const bucketName of fallbackBuckets) {
+          try {
+            bucket = projectSpecificStorage.bucket(bucketName);
+            await bucket.getMetadata();
+            console.log(`✅ Found working fallback bucket for signed URL: ${bucketName}`);
+            bucketFound = true;
+            break;
+          } catch (err) {
+            console.log(`❌ Fallback bucket ${bucketName} not accessible`);
+          }
+        }
+        
+        if (!bucketFound) {
+          throw new Error(`No accessible storage buckets found in project ${firebaseProjectId}`);
+        }
+      }
+      
       const file = bucket.file(storagePath);
       
       const [signedUrl] = await file.getSignedUrl({
@@ -317,20 +354,10 @@ export class PDFService {
     try {
       console.log(`🔄 Starting PDF processing for: ${request.file.name}`);
 
-      // Step 1: Process PDF with the Cloud Run service (includes vectorization)
-      const processingResult = await this.processPDFWithEmbeddings(request);
-      
-      if (!processingResult.success) {
-        return {
-          success: false,
-          error: `PDF processing failed: ${processingResult.error}`
-        };
-      }
-
-      // Step 2: Get PDF file content for storage (optional - if you want local backup)
+      // Step 1: Get PDF file content for storage
       const pdfBuffer = Buffer.from(await request.file.arrayBuffer());
 
-      // Step 3: Store PDF in Firebase (optional backup)
+      // Step 2: Store PDF in Firebase FIRST to get URL for metadata
       const storageResult = await this.storePDFInFirebase(
         pdfBuffer,
         request.chatbotId,
@@ -341,11 +368,40 @@ export class PDFService {
       );
 
       if (!storageResult.success) {
-        console.warn('⚠️ Failed to store PDF backup in Firebase:', storageResult.error);
-        // Don't fail the entire process if backup storage fails
+        return {
+          success: false,
+          error: `Failed to store PDF: ${storageResult.error}`
+        };
       }
 
-      // Step 4: Create PDF metadata in database
+      // Step 3: Get PDF URL for container metadata
+      let pdfSourceUrl = '';
+      if (request.isPublic && storageResult.publicUrl) {
+        pdfSourceUrl = storageResult.publicUrl;
+      } else if (storageResult.storagePath) {
+        // Generate signed URL for private PDFs
+        const signedUrlResult = await this.generateSignedUrl(
+          storageResult.storagePath,
+          request.firebaseProjectId,
+          getPDFExpirationHours('private')
+        );
+        pdfSourceUrl = signedUrlResult.success ? signedUrlResult.url! : '';
+      }
+
+      // Step 4: Process PDF with the Cloud Run service (now with PDF URL)
+      const processingResult = await this.processPDFWithEmbeddings({
+        ...request,
+        pdfSourceUrl
+      });
+      
+      if (!processingResult.success) {
+        return {
+          success: false,
+          error: `PDF processing failed: ${processingResult.error}`
+        };
+      }
+
+      // Step 5: Create PDF metadata in database
       const pdfMetadataResult = await DatabaseService.createPDFMetadata({
         userId: request.userId,
         chatbotId: request.chatbotId,
@@ -363,7 +419,7 @@ export class PDFService {
         console.warn('⚠️ Failed to create PDF metadata:', pdfMetadataResult.error);
       }
 
-      // Step 5: Update document count (assuming successful vectorization)
+      // Step 6: Update document count (assuming successful vectorization)
       await DatabaseService.updateVectorstoreDocumentCount(request.chatbotId, 1);
 
       // Extract vector count from processing output if available
@@ -381,6 +437,7 @@ export class PDFService {
       }
 
       console.log(`✅ PDF processing completed: ${vectorCount} vectors created`);
+      console.log(`📝 PDF source URL passed to container: ${pdfSourceUrl}`);
 
       return {
         success: true,
