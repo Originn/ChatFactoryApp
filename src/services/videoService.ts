@@ -18,6 +18,7 @@ interface VideoProcessingRequest {
   // Language settings
   language?: string;
   enableProcessing?: boolean;
+  useGPU?: boolean;
 }
 
 interface VideoTranscriptionResult {
@@ -285,11 +286,9 @@ export class VideoService {
       }
 
       // Get video URL for transcription service
+      // Always use signed URLs for all videos (public and private) to avoid 403 errors
       let videoUrl = '';
-      if (request.isPublic && storageResult.publicUrl) {
-        videoUrl = storageResult.publicUrl;
-      } else if (storageResult.storagePath) {
-        // Generate signed URL for private videos
+      if (storageResult.storagePath) {
         const signedUrlResult = await this.generateSignedUrl(
           storageResult.storagePath,
           request.firebaseProjectId,
@@ -321,7 +320,14 @@ export class VideoService {
 
       console.log(`📞 Calling video transcription service...`);
       
-      const response = await fetch(`${VIDEO_TRANSCRIBER_URL}/transcribe`, {
+      // Select service URL based on GPU preference
+      const serviceUrl = request.useGPU 
+        ? (process.env.VIDEO_TRANSCRIBER_GPU_URL || VIDEO_TRANSCRIBER_URL)
+        : (process.env.VIDEO_TRANSCRIBER_CPU_URL || VIDEO_TRANSCRIBER_URL);
+      
+      console.log(`🎯 Using ${request.useGPU ? 'GPU' : 'CPU'} service: ${serviceUrl}`);
+      
+      const response = await fetch(`${serviceUrl}/transcribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -440,6 +446,62 @@ export class VideoService {
 
     } catch (error) {
       console.error('Video transcriber health check failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Service unavailable'
+      };
+    }
+  }
+
+  /**
+   * Health check for CPU video transcription service
+   */
+  static async healthCheckCPU(): Promise<{ success: boolean; status?: string; error?: string }> {
+    try {
+      const cpuUrl = process.env.VIDEO_TRANSCRIBER_CPU_URL || VIDEO_TRANSCRIBER_URL;
+      const response = await fetch(`${cpuUrl}/health`);
+      
+      if (!response.ok) {
+        throw new Error(`CPU health check failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      return {
+        success: true,
+        status: result.status
+      };
+
+    } catch (error) {
+      console.error('Video transcriber CPU health check failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Service unavailable'
+      };
+    }
+  }
+
+  /**
+   * Health check for GPU video transcription service
+   */
+  static async healthCheckGPU(): Promise<{ success: boolean; status?: string; error?: string }> {
+    try {
+      const gpuUrl = process.env.VIDEO_TRANSCRIBER_GPU_URL || VIDEO_TRANSCRIBER_URL;
+      const response = await fetch(`${gpuUrl}/health`);
+      
+      if (!response.ok) {
+        throw new Error(`GPU health check failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      return {
+        success: true,
+        status: result.status
+      };
+
+    } catch (error) {
+      console.error('Video transcriber GPU health check failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Service unavailable'

@@ -26,6 +26,7 @@ interface UploadedFile {
   duration?: number;
   language?: string;
   transcription?: string;
+  useGPU?: boolean;
 }
 
 interface InlineDocumentUploadProps {
@@ -38,6 +39,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [useGPU, setUseGPU] = useState(false); // GPU processing toggle
 
   const getProgressForProcessing = (status: string, elapsed: number, type: string) => {
     if (type === 'chm') {
@@ -119,11 +121,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         id: `${Date.now()}-${Math.random()}`,
         type: fileType,
         status: 'pending',
-        isPublic: false
+        isPublic: false,
+        ...(fileType === 'video' && { useGPU })
       };
     });
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
+
+    // Warm containers based on file types
+    const fileTypes = new Set(newFiles.map(f => f.type));
+    warmContainers(fileTypes);
   };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -149,11 +156,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         id: `${Date.now()}-${Math.random()}`,
         type: fileType,
         status: 'pending',
-        isPublic: false
+        isPublic: false,
+        ...(fileType === 'video' && { useGPU })
       };
     });
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
+
+    // Warm containers based on file types
+    const fileTypes = new Set(newFiles.map(f => f.type));
+    warmContainers(fileTypes);
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
@@ -317,7 +329,8 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
       formData.append('chatbotId', chatbotId);
       formData.append('userId', user?.uid || '');
       formData.append('isPublic', isPublic.toString());
-      formData.append('enableProcessing', 'true'); // Enable 3-agent processing for videos
+      formData.append('enableProcessing', 'true'); // Always enable semantic processing for better chunking
+      formData.append('useGPU', (fileItem.useGPU || false).toString()); // GPU processing selection
 
       const response = await fetch('/api/video-convert', {
         method: 'POST',
@@ -403,6 +416,53 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     ));
   };
 
+  const toggleFileGPU = (fileId: string) => {
+    setUploadedFiles(prev => prev.map(f => 
+      f.id === fileId && f.type === 'video' ? { ...f, useGPU: !f.useGPU } : f
+    ));
+  };
+
+  const warmContainers = async (fileTypes: Set<string>) => {
+    const warmingPromises = [];
+    
+    if (fileTypes.has('video')) {
+      console.log('🔥 Warming video-converter containers (CPU + GPU)...');
+      warmingPromises.push(
+        fetch('/api/video-convert', { method: 'GET' })
+          .then(response => response.json())
+          .then(data => {
+            console.log('✅ Video converters warmed:', {
+              cpu: data.cpu,
+              gpu: data.gpu,
+              service: data.service
+            });
+          })
+          .catch(error => console.log('⚠️ Video converter warming failed:', error))
+      );
+    }
+    
+    if (fileTypes.has('chm')) {
+      console.log('🔥 Warming chm-converter container...');
+      warmingPromises.push(
+        fetch('/api/chm-convert', { method: 'GET' })
+          .then(() => console.log('✅ CHM converter warmed'))
+          .catch(() => console.log('⚠️ CHM converter warming failed'))
+      );
+    }
+    
+    if (fileTypes.has('pdf')) {
+      console.log('🔥 Warming pdf-converter container...');
+      warmingPromises.push(
+        fetch('/api/pdf-convert', { method: 'GET' })
+          .then(() => console.log('✅ PDF converter warmed'))
+          .catch(() => console.log('⚠️ PDF converter warming failed'))
+      );
+    }
+    
+    // Fire and forget - don't block UI
+    Promise.allSettled(warmingPromises);
+  };
+
   return (
     <Card className="mb-8">
       <CardContent className="p-8">
@@ -433,6 +493,24 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
                   />
                 </svg>
+              </div>
+              
+              {/* GPU Processing Toggle for Videos */}
+              <div className="mb-6">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useGPU}
+                    onChange={(e) => setUseGPU(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-900">Use GPU processing for videos</span>
+                    <div className="text-gray-500">
+                      {useGPU ? '⚡ Faster transcription (8x speed, higher cost)' : '💰 Standard CPU processing (cost-effective)'}
+                    </div>
+                  </div>
+                </label>
               </div>
               
               {/* Upload Area */}
@@ -491,6 +569,15 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   >
                     {file.isPublic ? '🌐 Public' : '🔒 Private'}
                   </button>
+                  {file.type === 'video' && (
+                    <button
+                      onClick={() => toggleFileGPU(file.id)}
+                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                      disabled={file.status !== 'pending'}
+                    >
+                      {file.useGPU ? '⚡ GPU' : '💻 CPU'}
+                    </button>
+                  )}
                 </div>
                 
                 <div className="flex items-center space-x-3">

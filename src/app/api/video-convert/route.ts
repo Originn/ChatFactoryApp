@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
     const isPublic = formData.get('isPublic') === 'true';
     const language = formData.get('language') as string;
     const enableProcessing = formData.get('enableProcessing') === 'true';
+    const useGPU = formData.get('useGPU') === 'true';
 
     if (!file || !chatbotId || !userId) {
       return NextResponse.json({ 
@@ -76,15 +77,15 @@ export async function POST(request: NextRequest) {
       if (provider === 'jina') {
         embeddingModel = model;
       } else {
-        // Default to Jina if not Jina provider specified
-        embeddingModel = 'jina-embeddings-v3';
+        // Default to Jina v4 if not Jina provider specified
+        embeddingModel = 'jina-embeddings-v4';
       }
     } else {
       // Auto-detect or default to Jina
       if (aiConfig.embeddingModel.startsWith('jina-')) {
         embeddingModel = aiConfig.embeddingModel;
       } else {
-        embeddingModel = 'jina-embeddings-v3';
+        embeddingModel = 'jina-embeddings-v4';
       }
     }
 
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
     console.log(`🤖 Embedding: jina/${embeddingModel} (${dimensions}d)`);
     console.log(`🎙️ Language: ${language || 'auto-detect'}`);
     console.log(`🔄 3-Agent Processing: ${enableProcessing ? 'enabled' : 'disabled'}`);
+    console.log(`⚡ GPU Processing: ${useGPU ? 'enabled (faster)' : 'disabled (CPU only)'}`);
 
     // Process the video file with the transcription service
     const result = await VideoService.processVideoDocument({
@@ -110,7 +112,8 @@ export async function POST(request: NextRequest) {
       pineconeIndex: vectorstore.indexName,
       pineconeNamespace: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
       language,
-      enableProcessing
+      enableProcessing,
+      useGPU
     });
 
     if (result.success) {
@@ -143,23 +146,50 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Health check for video transcription service
-    const healthResult = await VideoService.healthCheck();
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type'); // 'cpu', 'gpu', or null for default
+    
+    let healthResult;
+    let serviceName;
+    
+    if (type === 'cpu') {
+      healthResult = await VideoService.healthCheckCPU();
+      serviceName = 'video-transcriber-cpu';
+    } else if (type === 'gpu') {
+      healthResult = await VideoService.healthCheckGPU();
+      serviceName = 'video-transcriber-gpu';
+    } else {
+      // Default health check - warm both CPU and GPU
+      const [cpuResult, gpuResult] = await Promise.allSettled([
+        VideoService.healthCheckCPU(),
+        VideoService.healthCheckGPU()
+      ]);
+      
+      const cpuSuccess = cpuResult.status === 'fulfilled' && cpuResult.value.success;
+      const gpuSuccess = gpuResult.status === 'fulfilled' && gpuResult.value.success;
+      
+      return NextResponse.json({
+        success: cpuSuccess || gpuSuccess,
+        cpu: cpuSuccess ? 'healthy' : 'unavailable',
+        gpu: gpuSuccess ? 'healthy' : 'unavailable',
+        service: 'video-transcriber-both'
+      });
+    }
     
     if (healthResult.success) {
       return NextResponse.json({
         success: true,
         status: healthResult.status,
-        service: 'video-transcriber'
+        service: serviceName
       });
     } else {
       return NextResponse.json(
         {
           success: false,
           error: healthResult.error,
-          service: 'video-transcriber'
+          service: serviceName
         },
         { status: 503 }
       );
