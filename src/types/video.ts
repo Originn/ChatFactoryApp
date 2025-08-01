@@ -11,6 +11,7 @@ export interface UserVideoMetadata {
   firebaseProjectId: string;
   publicUrl?: string; // Only set for public videos
   uploadedAt: string; // ISO timestamp
+  updatedAt?: string; // ISO timestamp for last update
   fileSize: number; // In bytes
   duration?: number; // Video duration in seconds
   language?: string; // Detected language

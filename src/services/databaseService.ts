@@ -433,13 +433,16 @@ class DatabaseService {
         updatedAt: new Date().toISOString(),
       };
 
+      // Handle publicUrl field separately to avoid TypeScript issues with FieldValue
+      const dbUpdate: any = { ...updateData };
+      
       if (isPublic && newUrl) {
-        updateData.publicUrl = newUrl;
+        dbUpdate.publicUrl = newUrl;
       } else if (!isPublic) {
-        updateData.publicUrl = FieldValue.delete();
+        dbUpdate.publicUrl = FieldValue.delete();
       }
 
-      await adminDb.collection('user_videos').doc(videoId).update(updateData);
+      await adminDb.collection('user_videos').doc(videoId).update(dbUpdate);
 
       console.log(`✅ Updated video ${videoId} privacy to ${isPublic ? 'public' : 'private'}`);
       return { success: true };

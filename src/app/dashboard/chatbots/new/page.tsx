@@ -498,31 +498,41 @@ export default function NewChatbotPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-25 via-white to-purple-25 relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
+      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
+      
       {/* Dashboard Header */}
-      <header className="bg-white border-b">
+      <header className="relative z-10 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
-              <div className="flex-shrink-0 flex items-center font-bold text-xl">
-                Chat Factory
+              <div className="flex-shrink-0 flex items-center">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
+                    <div className="h-5 w-5 text-white">🤖</div>
+                  </div>
+                  <span className="font-bold text-xl text-gradient">Chat Factory</span>
+                </div>
               </div>
-              <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
                 <Link
                   href="/dashboard"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/dashboard/chatbots"
-                  className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-purple-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chatbots
                 </Link>
                 <Link
                   href="/dashboard/settings"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Settings
                 </Link>
@@ -536,24 +546,40 @@ export default function NewChatbotPage() {
       </header>
 
       {/* New Chatbot Form */}
-      <main className="max-w-4xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Create New Chatbot</h1>
-          <Button
-            asChild
-            variant="outline"
-          >
-            <Link href="/dashboard/chatbots">
-              Cancel
-            </Link>
-          </Button>
+      <main className="relative z-10 max-w-4xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 animate-fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                <div className="h-6 w-6 text-white">✨</div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Create New Chatbot</h1>
+                <p className="text-gray-600 mt-1">Build your AI assistant in just a few steps</p>
+              </div>
+            </div>
+            <Button
+              asChild
+              variant="outline"
+              className="border-purple-200 hover:bg-purple-50"
+            >
+              <Link href="/dashboard/chatbots">
+                Cancel
+              </Link>
+            </Button>
+          </div>
         </div>
 
-        <Card className="mb-8">
+        <Card variant="elevated" className="mb-8 animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <CardHeader>
-            <CardTitle>Create Your Chatbot</CardTitle>
-            <CardDescription>
-              Configure your chatbot's settings to best suit your documentation and user needs.
+            <CardTitle className="text-2xl flex items-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center mr-3">
+                <div className="h-4 w-4 text-white">🤖</div>
+              </div>
+              Create Your Chatbot
+            </CardTitle>
+            <CardDescription className="text-base">
+              Configure your chatbot's settings to best suit your documentation and user needs. Follow the tabs below to customize every aspect of your AI assistant.
             </CardDescription>
           </CardHeader>
           
@@ -564,40 +590,44 @@ export default function NewChatbotPage() {
                 onClick={() => setActiveTab('basic')}
                 className={`${
                   activeTab === 'basic'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    ? 'border-purple-500 text-purple-600 bg-purple-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
+                <div className="w-4 h-4 mr-2">ℹ️</div>
                 Basic Info
               </button>
               <button
                 onClick={() => setActiveTab('ai')}
                 className={`${
                   activeTab === 'ai'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    ? 'border-purple-500 text-purple-600 bg-purple-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
+                <div className="w-4 h-4 mr-2">🧠</div>
                 AI Configuration
               </button>
               <button
                 onClick={() => setActiveTab('behavior')}
                 className={`${
                   activeTab === 'behavior'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    ? 'border-purple-500 text-purple-600 bg-purple-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
+                <div className="w-4 h-4 mr-2">🎭</div>
                 Behavior
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
                 className={`${
                   activeTab === 'appearance'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    ? 'border-purple-500 text-purple-600 bg-purple-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
+                <div className="w-4 h-4 mr-2">🎨</div>
                 Appearance
               </button>
             </nav>
@@ -1298,10 +1328,11 @@ export default function NewChatbotPage() {
             </form>
           </CardContent>
           
-          <CardFooter className="flex justify-between">
+          <CardFooter className="flex justify-between bg-gradient-to-r from-gray-50 to-blue-25/30 border-t border-gray-100">
             <Button
               asChild
               variant="outline"
+              className="border-gray-300 hover:bg-gray-50"
             >
               <Link href="/dashboard/chatbots">
                 Cancel
@@ -1309,63 +1340,107 @@ export default function NewChatbotPage() {
             </Button>
             <Button
               onClick={handleSubmit}
-              className="bg-blue-600 hover:bg-blue-700"
+              variant="gradient"
+              size="lg"
+              className="shadow-lg shadow-purple-500/25"
               disabled={loading || !formData.name.trim() || logoUploading || faviconUploading}
             >
-              {loading ? 'Creating...' : 
-               logoUploading ? 'Uploading logo...' :
-               faviconUploading ? 'Uploading favicon...' : 
-               'Create Chatbot'}
+              {loading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2" />
+                  Creating...
+                </div>
+              ) : logoUploading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2" />
+                  Uploading logo...
+                </div>
+              ) : faviconUploading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2" />
+                  Uploading favicon...
+                </div>
+              ) : (
+                <div className="flex items-center">
+                  <div className="w-4 h-4 mr-2">✨</div>
+                  Create Chatbot
+                </div>
+              )}
             </Button>
           </CardFooter>
         </Card>
 
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>What happens next?</CardTitle>
+        <div className="mt-8 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+          <Card variant="premium" className="overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-purple-500 to-blue-500 text-white">
+              <CardTitle className="text-xl flex items-center">
+                <div className="w-6 h-6 mr-3">🚀</div>
+                What happens next?
+              </CardTitle>
+              <CardDescription className="text-purple-100">
+                Here's your journey to launching your AI chatbot
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex">
+            <CardContent className="p-8">
+              <div className="space-y-6">
+                <div className="flex items-start">
                   <div className="flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold shadow-lg">
                       1
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <h3 className="text-sm font-medium">Upload Documents</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      After creating your chatbot, you'll be prompted to upload documentation files that will train your AI.
+                  <div className="ml-4 flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <div className="w-5 h-5 mr-2">📁</div>
+                      Upload Documents
+                    </h3>
+                    <p className="mt-2 text-gray-600">
+                      After creating your chatbot, you'll be prompted to upload documentation files that will train your AI. Supports PDFs, Word docs, text files, and more.
                     </p>
                   </div>
                 </div>
                 
-                <div className="flex">
+                <div className="flex items-start">
                   <div className="flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white font-bold shadow-lg">
                       2
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <h3 className="text-sm font-medium">Process and Optimize</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Your documents will be processed, chunked, and converted into AI-ready embeddings.
+                  <div className="ml-4 flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <div className="w-5 h-5 mr-2">⚡</div>
+                      Process and Optimize
+                    </h3>
+                    <p className="mt-2 text-gray-600">
+                      Your documents will be processed, chunked, and converted into AI-ready embeddings using advanced vector databases for lightning-fast responses.
                     </p>
                   </div>
                 </div>
                 
-                <div className="flex">
+                <div className="flex items-start">
                   <div className="flex-shrink-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-medium">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white font-bold shadow-lg">
                       3
                     </div>
                   </div>
-                  <div className="ml-4">
-                    <h3 className="text-sm font-medium">Customize and Deploy</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Adjust your chatbot's appearance and behavior, then deploy it to your website or application.
+                  <div className="ml-4 flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <div className="w-5 h-5 mr-2">🎨</div>
+                      Customize and Deploy
+                    </h3>
+                    <p className="mt-2 text-gray-600">
+                      Fine-tune your chatbot's appearance and behavior, then deploy it to your website with a simple embed code or use our hosted solution.
                     </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-8 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-purple-100">
+                <div className="flex items-center">
+                  <div className="w-6 h-6 mr-3">💡</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">Pro Tip</p>
+                    <p className="text-sm text-gray-600">Start with a few high-quality documents for better results, then expand your knowledge base over time.</p>
                   </div>
                 </div>
               </div>

@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +12,25 @@ import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc } from "firebase/firestore";
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
+import { 
+  Bot, 
+  Plus, 
+  Search, 
+  Filter, 
+  MoreVertical, 
+  Edit, 
+  Trash2, 
+  Globe, 
+  MessageCircle, 
+  Activity, 
+  Eye,
+  Settings,
+  Sparkles,
+  ArrowUpRight,
+  CheckCircle,
+  Clock,
+  AlertCircle
+} from "lucide-react";
 
 // Define the Chatbot type for TypeScript
 interface Chatbot {
@@ -339,44 +360,57 @@ export default function ChatbotsPage() {
   }, [fetchChatbots]);
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-25 via-white to-purple-25 relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
+      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
+      
       {/* Dashboard Header */}
-      <header className="bg-white border-b">
+      <header className="relative z-10 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
-              <div className="flex-shrink-0 flex items-center font-bold text-xl">
-                Chat Factory
+              <div className="flex-shrink-0 flex items-center">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
+                    <Bot className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="font-bold text-xl text-gradient">Chat Factory</span>
+                </div>
               </div>
-              <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
                 <Link
                   href="/dashboard"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/dashboard/chatbots"
-                  className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-purple-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chatbots
                 </Link>
                 <Link
                   href="/dashboard/settings"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Settings
                 </Link>
               </nav>
             </div>
-            <div className="flex items-center">
-              <div className="flex-shrink-0 mr-4">
+            <div className="flex items-center space-x-4">
+              <Button
+                asChild
+                variant="gradient"
+                className="shadow-lg shadow-purple-500/25"
+              >
                 <Link href="/dashboard/chatbots/new">
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    Create New Chatbot
-                  </Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create New Chatbot
                 </Link>
-              </div>
+              </Button>
               <UserDropdown />
             </div>
           </div>
@@ -384,143 +418,322 @@ export default function ChatbotsPage() {
       </header>
 
       {/* Chatbots Content */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Your Chatbots</h1>
+      <main className="relative z-10 max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
+        <div className="px-4 sm:px-0">
+          {/* Header Section */}
+          <div className="mb-8 animate-fade-in">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                    <Bot className="h-5 w-5 text-white" />
+                  </div>
+                  Your AI Chatbots
+                </h1>
+                <p className="text-gray-600">
+                  Create, manage, and deploy intelligent chatbots for your business.
+                </p>
+              </div>
+              <div className="hidden md:flex items-center space-x-3">
+                <Badge variant="outline" className="bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 border border-purple-200/50">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {chatbots.length} Active
+                </Badge>
+              </div>
+            </div>
+            
+            {/* Search and Filter Bar */}
+            <Card variant="elevated" className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Search chatbots..."
+                      className="pl-10 border-gray-200 focus:border-purple-300 focus:ring-purple-200"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="border-gray-200 hover:bg-gray-50">
+                      <Filter className="h-4 w-4 mr-1" />
+                      Filter
+                    </Button>
+                    <Button variant="blue-outline" size="sm">
+                      <Plus className="h-4 w-4 mr-1" />
+                      New Chatbot
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-slide-up" style={{ animationDelay: '0.15s' }}>
+            <Card variant="elevated" hover="lift" className="group">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Chatbots</p>
+                    <p className="text-2xl font-bold text-gray-900">{chatbots.length}</p>
+                  </div>
+                  <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Bot className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card variant="elevated" hover="lift" className="group">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Active</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {chatbots.filter(c => c.status === 'active').length}
+                    </p>
+                  </div>
+                  <div className="h-12 w-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <CheckCircle className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card variant="elevated" hover="lift" className="group">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Queries</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {chatbots.reduce((sum, bot) => sum + (bot.stats?.queries || 0), 0)}
+                    </p>
+                  </div>
+                  <div className="h-12 w-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <MessageCircle className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card variant="elevated" hover="lift" className="group">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Avg Success Rate</p>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {chatbots.length > 0 
+                        ? Math.round(chatbots.reduce((sum, bot) => sum + (bot.stats?.successRate || 0), 0) / chatbots.length)
+                        : 0}%
+                    </p>
+                  </div>
+                  <div className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Activity className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
           
+          {/* Content */}
           {isLoading ? (
             // Loading state
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-            </div>
+            <Card variant="elevated" className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <CardContent className="p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading your chatbots...</p>
+              </CardContent>
+            </Card>
           ) : error ? (
             // Error state
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
+            <Card variant="elevated" className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <CardContent className="p-8">
+                <div className="flex items-start space-x-3">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-medium text-red-800">Error Loading Chatbots</h3>
+                    <p className="mt-1 text-sm text-red-600">{error}</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-3" 
+                      onClick={() => window.location.reload()}
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ) : chatbots.length === 0 ? (
             // Empty state
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 text-center">
-              <div className="mx-auto h-12 w-12 text-gray-400">
-                <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={1} 
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" 
-                  />
-                </svg>
-              </div>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No chatbots</h3>
-              <p className="mt-1 text-sm text-gray-500">Get started by creating a new chatbot.</p>
-              <div className="mt-6">
-                <Button 
-                  asChild
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Link href="/dashboard/chatbots/new">
-                    Create Your First Chatbot
-                  </Link>
-                </Button>
-              </div>
-            </div>
+            <Card variant="glow" className="animate-pulse-soft animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <CardContent className="p-16 text-center">
+                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-3xl flex items-center justify-center mb-8">
+                  <Bot className="h-10 w-10 text-purple-600" />
+                </div>
+                <h3 className="text-2xl font-semibold text-gray-900 mb-4">No chatbots yet</h3>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto text-lg">
+                  Ready to create your first AI-powered chatbot? It only takes a few minutes to get started.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button 
+                    asChild
+                    variant="gradient"
+                    size="lg"
+                    className="shadow-lg shadow-purple-500/25"
+                  >
+                    <Link href="/dashboard/chatbots/new">
+                      <Plus className="h-5 w-5 mr-2" />
+                      Create Your First Chatbot
+                    </Link>
+                  </Button>
+                  <Button 
+                    asChild
+                    variant="outline"
+                    size="lg"
+                    className="border-purple-200 hover:bg-purple-50"
+                  >
+                    <Link href="/dashboard">
+                      <ArrowUpRight className="h-4 w-4 mr-2" />
+                      Back to Dashboard
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
-            // Chatbots list
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Name
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Queries
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Success Rate
-                          </th>
-                          <th scope="col" className="relative px-6 py-3">
-                            <span className="sr-only">Actions</span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {chatbots.map((chatbot) => (
-                          <tr key={chatbot.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
-                                  {chatbot.logoUrl ? (
-                                    <img
-                                      src={chatbot.logoUrl}
-                                      alt={`${chatbot.name} logo`}
-                                      className="h-10 w-10 rounded-full object-cover"
-                                    />
-                                  ) : (
-                                    <span className="text-blue-600 font-bold">{chatbot.name.slice(0, 1)}</span>
-                                  )}
-                                </div>
-                                <div className="ml-4">
-                                  <div className="text-sm font-medium text-gray-900">{chatbot.name}</div>
-                                  <div className="text-sm text-gray-500">{chatbot.description}</div>
-                                </div>
+            // Modern Grid Layout for Chatbots
+            <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {chatbots.map((chatbot, index) => {
+                  const animationDelay = `${0.1 + (index * 0.05)}s`;
+                  
+                  return (
+                    <Card 
+                      key={chatbot.id} 
+                      variant="elevated" 
+                      hover="lift" 
+                      className="group animate-slide-up overflow-hidden"
+                      style={{ animationDelay }}
+                    >
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-3">
+                            <div className="relative">
+                              <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center overflow-hidden shadow-lg group-hover:scale-110 transition-transform">
+                                {chatbot.logoUrl ? (
+                                  <img
+                                    src={chatbot.logoUrl}
+                                    alt={`${chatbot.name} logo`}
+                                    className="h-12 w-12 rounded-xl object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-white font-bold text-lg">{chatbot.name.charAt(0)}</span>
+                                )}
                               </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                chatbot.status === 'active'
-                                  ? 'bg-green-100 text-green-800'
-                                  : chatbot.status === 'preview'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : chatbot.status === 'draft'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-gray-100 text-gray-800'
-                              }`}>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 truncate group-hover:text-purple-700 transition-colors">
+                                {chatbot.name}
+                              </h3>
+                              <Badge 
+                                variant="outline"
+                                className={`mt-1 ${
+                                  chatbot.status === 'active'
+                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    : chatbot.status === 'preview'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : chatbot.status === 'draft'
+                                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                    : 'bg-gray-50 text-gray-700 border-gray-200'
+                                }`}
+                              >
+                                <div className={`h-2 w-2 rounded-full mr-1.5 ${
+                                  chatbot.status === 'active' ? 'bg-green-500' :
+                                  chatbot.status === 'preview' ? 'bg-blue-500' :
+                                  chatbot.status === 'draft' ? 'bg-yellow-500' : 'bg-gray-500'
+                                }`} />
                                 {chatbot.status === 'active' ? 'Active' :
                                  chatbot.status === 'preview' ? 'Preview' :
                                  chatbot.status === 'draft' ? 'Draft' : chatbot.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {chatbot.stats?.queries || 0}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {chatbot.stats?.successRate || 0}%
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <Link 
-                                href={`/dashboard/chatbots/${chatbot.id}`}
-                                className="text-blue-600 hover:text-blue-900 mr-4"
-                              >
-                                View
-                              </Link>
-                              <Link 
-                                href={`/dashboard/chatbots/${chatbot.id}/edit`}
-                                className="text-blue-600 hover:text-blue-900 mr-4"
-                              >
-                                Edit
-                              </Link>
-                              <button 
-                                className="text-red-600 hover:text-red-900"
-                                onClick={() => handleDeleteChatbot(chatbot.id)}
-                                disabled={deletingId === chatbot.id}
-                              >
-                                {deletingId === chatbot.id ? 'Deleting...' : 'Delete'}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        <CardDescription className="text-sm text-gray-600 line-clamp-2">
+                          {chatbot.description || 'No description provided'}
+                        </CardDescription>
+                      </CardHeader>
+                      
+                      <CardContent className="pt-0">
+                        {/* Stats */}
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                          <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                            <div className="flex items-center justify-center mb-1">
+                              <MessageCircle className="h-4 w-4 text-blue-600 mr-1" />
+                              <span className="text-lg font-bold text-blue-900">{chatbot.stats?.queries || 0}</span>
+                            </div>
+                            <p className="text-xs text-blue-700">Queries</p>
+                          </div>
+                          <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+                            <div className="flex items-center justify-center mb-1">
+                              <Activity className="h-4 w-4 text-green-600 mr-1" />
+                              <span className="text-lg font-bold text-green-900">{chatbot.stats?.successRate || 0}%</span>
+                            </div>
+                            <p className="text-xs text-green-700">Success Rate</p>
+                          </div>
+                        </div>
+                        
+                        {/* Actions */}
+                        <div className="flex space-x-2">
+                          <Button 
+                            asChild
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1 group-hover:border-blue-300 group-hover:bg-blue-50 transition-colors"
+                          >
+                            <Link href={`/dashboard/chatbots/${chatbot.id}`}>
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Link>
+                          </Button>
+                          <Button 
+                            asChild
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1 group-hover:border-purple-300 group-hover:bg-purple-50 transition-colors"
+                          >
+                            <Link href={`/dashboard/chatbots/${chatbot.id}/edit`}>
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Link>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="group-hover:border-red-300 group-hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors"
+                            onClick={() => handleDeleteChatbot(chatbot.id)}
+                            disabled={deletingId === chatbot.id}
+                          >
+                            {deletingId === chatbot.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-red-500" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

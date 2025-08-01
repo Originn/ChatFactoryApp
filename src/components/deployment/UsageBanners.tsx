@@ -36,7 +36,7 @@ export const UsageWarningBanner: React.FC<UsageWarningBannerProps> = ({
         <Button 
           size="sm" 
           onClick={onUpgrade}
-          className="bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white border-0"
+          variant="gradient"
         >
           <Crown className="h-3 w-3 mr-1" />
           Upgrade

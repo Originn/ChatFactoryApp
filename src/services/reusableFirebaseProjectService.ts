@@ -464,61 +464,29 @@ export class ReusableFirebaseProjectService {
       // Remove IAM policy bindings for this service account
       try {
         console.log(`🔐 Removing IAM policy bindings for ${serviceAccountEmail}`);
-      // DEBUG: Temporarily commenting out ResourceManagerClient usage
-      // const resourceManagerClient = new ResourceManagerClient({ auth: authClient });
-      console.log(`🔐 IAM policy cleanup skipped for ${serviceAccountEmail} (temporarily disabled)`);
-      return;
-        
-        const [policy] = await resourceManagerClient.getIamPolicy({
-          resource: `projects/${projectId}`
-        });
-        
-        let bindingsModified = false;
-        const memberString = `serviceAccount:${serviceAccountEmail}`;
-        
-        if (policy.bindings) {
-          policy.bindings.forEach(binding => {
-            if (binding.members && binding.members.includes(memberString)) {
-              binding.members = binding.members.filter(member => member !== memberString);
-              bindingsModified = true;
-              console.log(`✅ Removed ${serviceAccountEmail} from role: ${binding.role}`);
-            }
-          });
-          
-          // Remove empty bindings
-          policy.bindings = policy.bindings.filter(binding => 
-            binding.members && binding.members.length > 0
-          );
-        }
-        
-        if (bindingsModified) {
-          await resourceManagerClient.setIamPolicy({
-            resource: `projects/${projectId}`,
-            policy: policy
-          });
-          console.log(`✅ IAM policy updated - removed all bindings for ${serviceAccountEmail}`);
-        }
-        
-      } catch (iamError: any) {
-        console.warn(`⚠️ Failed to remove IAM bindings:`, iamError.message);
+        // DEBUG: Temporarily commenting out ResourceManagerClient usage
+        // const resourceManagerClient = new ResourceManagerClient({ auth: authClient });
+        console.log(`🔐 IAM policy cleanup skipped for ${serviceAccountEmail} (temporarily disabled)`);
+      } catch (policyError: any) {
+        console.warn(`⚠️ Failed to remove IAM policy bindings:`, policyError.message);
       }
       
       // Finally, delete the service account itself
       try {
+        console.log(`🗑️ Deleting service account: ${serviceAccountEmail}`);
+        
         await iam.projects.serviceAccounts.delete({
           name: serviceAccountName,
           auth: authClient
         });
-        console.log(`✅ Service account deleted: ${serviceAccountEmail}`);
+        
+        console.log(`✅ Successfully deleted service account: ${serviceAccountEmail}`);
+        
       } catch (deleteError: any) {
-        if (deleteError.code === 404) {
-          console.log(`ℹ️ Service account already deleted: ${serviceAccountEmail}`);
-        } else {
-          console.error(`❌ Failed to delete service account:`, deleteError.message);
-          throw deleteError;
-        }
+        console.error(`❌ Failed to delete service account ${serviceAccountEmail}:`, deleteError.message);
+        throw deleteError;
       }
-      
+
     } catch (error: any) {
       console.error(`❌ Failed to delete service account ${serviceAccountEmail}:`, error.message);
       throw error;

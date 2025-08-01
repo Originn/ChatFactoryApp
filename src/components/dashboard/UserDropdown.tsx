@@ -41,33 +41,33 @@ export default function UserDropdown() {
     <div className="relative ml-4" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center hover:bg-gray-300 transition-colors"
+        className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 border border-blue-200 flex items-center justify-center hover:from-blue-200 hover:to-purple-200 transition-all duration-200"
       >
-        <span className="text-xs font-medium">{userInitials}</span>
+        <span className="text-xs font-medium text-blue-700">{userInitials}</span>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-gray-200">
+        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-purple-200">
           <div className="px-4 py-2 border-b">
             <p className="text-sm font-medium truncate">{user?.email}</p>
           </div>
           <Link
             href="/dashboard/settings"
-            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
             onClick={() => setIsOpen(false)}
           >
             Account Settings
           </Link>
           <Link
             href="/dashboard/settings/profile"
-            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
             onClick={() => setIsOpen(false)}
           >
             Edit Profile
           </Link>
           <button
             onClick={handleSignOut}
-            className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+            className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
             Sign Out
           </button>

@@ -6,65 +6,103 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
- 
+
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
- 
+
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
- 
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
- 
+
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
- 
-    --primary: 222.2 47.4% 11.2%;
+
+    --primary: 262 83% 58%;
     --primary-foreground: 210 40% 98%;
- 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
- 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
- 
+
+    --secondary: 217 91% 60%;
+    --secondary-foreground: 210 40% 98%;
+
+    --accent: 262 83% 95%;
+    --accent-foreground: 262 83% 20%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
- 
-    --ring: 215 20.2% 65.1%;
- 
-    --radius: 0.5rem;
+
+    --ring: 262 83% 58%;
+
+    --radius: 0.75rem;
+
+    /* Enhanced blue and purple color palette */
+    --blue-25: 214 100% 98%;
+    --blue-50: 214 100% 95%;
+    --blue-100: 213 97% 90%;
+    --blue-200: 212 96% 82%;
+    --blue-300: 213 94% 72%;
+    --blue-400: 213 89% 62%;
+    --blue-500: 217 91% 60%;
+    --blue-600: 221 83% 53%;
+    --blue-700: 224 76% 48%;
+    --blue-800: 226 71% 40%;
+    --blue-900: 224 64% 33%;
+    --blue-950: 226 56% 25%;
+    
+    --purple-25: 270 100% 98%;
+    --purple-50: 270 100% 95%;
+    --purple-100: 269 100% 91%;
+    --purple-200: 268 100% 84%;
+    --purple-300: 269 97% 76%;
+    --purple-400: 270 95% 67%;
+    --purple-500: 262 83% 58%;
+    --purple-600: 258 90% 66%;
+    --purple-700: 252 95% 85%;
+    --purple-800: 263 70% 50%;
+    --purple-900: 263 69% 42%;
+    --purple-950: 262 80% 29%;
+    
+    /* Gradient definitions */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--purple-600)), hsl(var(--blue-600)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--blue-500)), hsl(var(--purple-500)));
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--purple-50)), hsl(var(--blue-50)));
+    --gradient-mesh: radial-gradient(at 40% 20%, hsl(var(--purple-400)) 0px, transparent 50%), radial-gradient(at 80% 0%, hsl(var(--blue-400)) 0px, transparent 50%), radial-gradient(at 0% 50%, hsl(var(--purple-300)) 0px, transparent 50%);
   }
  
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
- 
-    --muted: 217.2 32.6% 17.5%;
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --muted: 223 47% 11%;
     --muted-foreground: 215 20.2% 65.1%;
- 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
- 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
- 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
- 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
- 
-    --secondary: 217.2 32.6% 17.5%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+
+    --primary: 262 83% 70%;
+    --primary-foreground: 262 83% 10%;
+
+    --secondary: 217 91% 35%;
     --secondary-foreground: 210 40% 98%;
- 
-    --accent: 217.2 32.6% 17.5%;
+
+    --accent: 216 34% 17%;
     --accent-foreground: 210 40% 98%;
- 
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 85.7% 97.3%;
- 
-    --ring: 217.2 32.6% 17.5%;
+
+    --ring: 262 83% 70%;
+    
+    --gradient-primary: linear-gradient(135deg, hsl(var(--purple-500)), hsl(var(--blue-500)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--blue-600)), hsl(var(--purple-600)));
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--purple-950)), hsl(var(--blue-950)));
+    --gradient-mesh: radial-gradient(at 40% 20%, hsl(var(--purple-900)) 0px, transparent 50%), radial-gradient(at 80% 0%, hsl(var(--blue-900)) 0px, transparent 50%), radial-gradient(at 0% 50%, hsl(var(--purple-800)) 0px, transparent 50%);
   }
 }
  
@@ -72,7 +110,145 @@
   * {
     @apply border-border;
   }
+  
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  
+  .gradient-secondary {
+    background: var(--gradient-secondary);
+  }
+  
+  .gradient-subtle {
+    background: var(--gradient-subtle);
+  }
+  
+  .gradient-mesh {
+    background: var(--gradient-mesh);
+  }
+  
+  .glass-effect {
+    @apply backdrop-blur-xl bg-white/10 border border-white/20;
+  }
+  
+  .glass-card {
+    @apply backdrop-blur-sm bg-white/60 border border-white/20 shadow-xl;
+  }
+  
+  .card-elevated {
+    @apply shadow-lg shadow-blue-500/10 border-blue-200/20;
+  }
+  
+  .card-premium {
+    @apply shadow-xl shadow-purple-500/20 border-purple-200/30;
+  }
+  
+  .card-glow {
+    @apply shadow-2xl shadow-blue-500/25 border-0;
+  }
+  
+  .text-gradient {
+    @apply bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent;
+  }
+  
+  .text-gradient-subtle {
+    @apply bg-gradient-to-r from-purple-700 to-blue-700 bg-clip-text text-transparent;
+  }
+  
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-pulse-soft {
+    animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out;
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.6s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted/50;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gradient-to-b from-purple-400 to-blue-400 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply from-purple-500 to-blue-500;
 }

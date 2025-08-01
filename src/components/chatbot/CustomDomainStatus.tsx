@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +39,7 @@ const CustomDomainStatus: React.FC<CustomDomainStatusProps> = ({
   const [authorizing, setAuthorizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDomainStatus = async () => {
+  const fetchDomainStatus = useCallback(async () => {
     if (!customDomain) return;
     
     setLoading(true);
@@ -71,7 +71,7 @@ const CustomDomainStatus: React.FC<CustomDomainStatusProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [chatbotId, customDomain]);
 
   const authorizeFirebaseDomain = async () => {
     if (!customDomain) return;
@@ -104,7 +104,7 @@ const CustomDomainStatus: React.FC<CustomDomainStatusProps> = ({
 
   useEffect(() => {
     fetchDomainStatus();
-  }, [chatbotId, customDomain]);
+  }, [chatbotId, customDomain, fetchDomainStatus]);
 
   if (!customDomain) {
     return (

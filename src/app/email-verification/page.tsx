@@ -58,7 +58,7 @@ function EmailVerificationContent() {
     });
     
     initializeAndVerify();
-  }, [oobCode, mode, customToken, chatbotId]);
+  }, [oobCode, mode, customToken, chatbotId, continueUrl, email, searchParams]);
 
   const initializeAndVerify = async () => {
     try {
