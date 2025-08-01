@@ -12,6 +12,7 @@ import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc } from "firebase/firestore";
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
+import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialog';
 import { 
   Bot, 
   Plus, 
@@ -45,6 +46,12 @@ interface Chatbot {
     queries: number;
     successRate: number;
   };
+  vectorstore?: {
+    indexName: string;
+    displayName: string;
+  };
+  documents?: any[];
+  userId?: string;
 }
 
 export default function ChatbotsPage() {
@@ -53,6 +60,13 @@ export default function ChatbotsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  // State for deletion dialog
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [chatbotToDelete, setChatbotToDelete] = useState<Chatbot | null>(null);
+  const [hasVectorstore, setHasVectorstore] = useState(false);
+  const [vectorStoreName, setVectorStoreName] = useState<string>('');
+  const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
   
   // Function to fetch chatbots
   const fetchChatbots = useCallback(async () => {
@@ -90,11 +104,50 @@ export default function ChatbotsPage() {
     }
   }, [user]);
   
-  // Delete chatbot function
-  const handleDeleteChatbot = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this chatbot? This action cannot be undone.")) {
-      return;
+  // Check if vectorstore exists for a chatbot
+  const checkVectorstoreExists = (chatbot: Chatbot): { hasVectorstore: boolean; indexName: string; displayName: string } => {
+    // Check for explicit vectorstore configuration
+    if (chatbot.vectorstore?.indexName) {
+      return {
+        hasVectorstore: true,
+        indexName: chatbot.vectorstore.indexName,
+        displayName: chatbot.vectorstore.displayName || 'Knowledge Base'
+      };
     }
+    
+    // Fallback: check if documents exist (legacy chatbots)
+    if (chatbot.documents && chatbot.documents.length > 0) {
+      const legacyIndexName = chatbot.id.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 45);
+      return {
+        hasVectorstore: true,
+        indexName: legacyIndexName,
+        displayName: 'Knowledge Base (Legacy)'
+      };
+    }
+    
+    return {
+      hasVectorstore: false,
+      indexName: '',
+      displayName: ''
+    };
+  };
+  
+  // Show delete dialog
+  const showDeleteChatbotDialog = (chatbot: Chatbot) => {
+    const vectorstoreInfo = checkVectorstoreExists(chatbot);
+    
+    setChatbotToDelete(chatbot);
+    setHasVectorstore(vectorstoreInfo.hasVectorstore);
+    setVectorStoreIndexName(vectorstoreInfo.indexName);
+    setVectorStoreName(vectorstoreInfo.displayName);
+    setShowDeleteDialog(true);
+  };
+  
+  // Delete chatbot function (called from dialog)
+  const handleDeleteChatbot = async (deleteVectorstore: boolean) => {
+    if (!chatbotToDelete) return;
+    
+    const id = chatbotToDelete.id;
     
     setDeletingId(id);
     let firebaseDeleteResult: any = null; // Declare at function scope
@@ -120,6 +173,30 @@ export default function ChatbotsPage() {
           vercelProjectName = (chatbotData.name || `chatbot-${id}`)
             .toLowerCase()
             .replace(/[^a-z0-9-]/g, '-');
+        }
+      }
+      
+      // Delete vectorstore if requested
+      if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
+        console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
+        
+        try {
+          const response = await fetch('/api/vectorstore/index', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              indexName: vectorStoreIndexName,
+              userId: user?.uid
+            }),
+          });
+          
+          if (response.ok) {
+            console.log('✅ Vector store deleted successfully');
+          } else {
+            console.warn('⚠️ Failed to delete vector store, but continuing with chatbot deletion');
+          }
+        } catch (vectorError) {
+          console.warn('⚠️ Error deleting vector store:', vectorError);
         }
       }
       
@@ -352,6 +429,8 @@ export default function ChatbotsPage() {
       setError(`Failed to delete chatbot: ${err.message}`);
     } finally {
       setDeletingId(null);
+      setShowDeleteDialog(false);
+      setChatbotToDelete(null);
     }
   };
   
@@ -719,7 +798,7 @@ export default function ChatbotsPage() {
                             variant="outline" 
                             size="sm" 
                             className="group-hover:border-red-300 group-hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors"
-                            onClick={() => handleDeleteChatbot(chatbot.id)}
+                            onClick={() => showDeleteChatbotDialog(chatbot)}
                             disabled={deletingId === chatbot.id}
                           >
                             {deletingId === chatbot.id ? (
@@ -738,6 +817,19 @@ export default function ChatbotsPage() {
           )}
         </div>
       </main>
+      
+      {/* Deletion Dialog */}
+      {showDeleteDialog && chatbotToDelete && (
+        <ChatbotDeletionDialog
+          chatbotName={chatbotToDelete.name}
+          hasVectorstore={hasVectorstore}
+          vectorStoreName={vectorStoreName}
+          documentsCount={chatbotToDelete.documents?.length || 0}
+          onConfirm={handleDeleteChatbot}
+          onCancel={() => setShowDeleteDialog(false)}
+          isDeleting={deletingId === chatbotToDelete.id}
+        />
+      )}
     </div>
   );
 }
