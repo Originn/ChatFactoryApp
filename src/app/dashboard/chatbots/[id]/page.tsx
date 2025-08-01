@@ -109,7 +109,18 @@ export default function ChatbotDetailPage() {
           setChatbot(chatbotData);
           
           // Check for vector store
-          await checkVectorstoreExists(chatbotId);
+          const vectorstoreExists = await checkVectorstoreExists(chatbotId);
+          
+          // Fallback: also check if documents exist in the chatbot data
+          if (!vectorstoreExists && chatbotData.documents && chatbotData.documents.length > 0) {
+            console.log('🔄 Fallback: Found documents in chatbot data, assuming vectorstore exists');
+            setHasVectorstore(true);
+            setVectorstoreDocCount(chatbotData.documents.length);
+            // For legacy chatbots, generate the index name from chatbot ID
+            const legacyIndexName = chatbotId.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 45);
+            setVectorStoreIndexName(legacyIndexName);
+            setVectorStoreName('Knowledge Base (Legacy)');
+          }
         } else {
           setError('Chatbot not found');
         }
