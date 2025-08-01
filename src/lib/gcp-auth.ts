@@ -15,7 +15,20 @@ export interface GCPCredentials {
  * Works with environment variables in production and gcloud CLI locally
  */
 export function getGCPCredentials(): GCPCredentials | {} {
-  // For Vercel/production - use environment variables
+  // For Vercel/production - prioritize complete service account JSON
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    try {
+      const credentialsJson = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      return {
+        credentials: credentialsJson,
+        projectId: credentialsJson.project_id,
+      };
+    } catch (error) {
+      console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', error);
+    }
+  }
+
+  // Fallback to Firebase credentials
   if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
     return {
       credentials: {
