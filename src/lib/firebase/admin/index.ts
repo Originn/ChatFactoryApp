@@ -1,18 +1,26 @@
 import admin from 'firebase-admin';
+import { getGCPCredentials } from '@/lib/gcp-auth';
 
 // Check if Firebase Admin has already been initialized
 if (!admin.apps.length) {
   // Initialize Firebase Admin with credentials
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    });
-    console.log('Firebase Admin initialized successfully');
+    const credentials = getGCPCredentials() as any;
+    
+    if (credentials && credentials.credentials) {
+      // Use the same credential pattern as Google Cloud SDK
+      admin.initializeApp({
+        credential: admin.credential.cert(credentials.credentials),
+        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      });
+      console.log('Firebase Admin initialized with unified credentials');
+    } else {
+      // Fallback to default credentials for local development
+      admin.initializeApp({
+        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      });
+      console.log('Firebase Admin initialized with default credentials');
+    }
   } catch (error) {
     console.error('Error initializing Firebase Admin:', error);
   }
