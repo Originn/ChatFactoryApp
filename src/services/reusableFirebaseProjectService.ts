@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { GoogleOAuthClientManager } from './googleOAuthClientManager';
 import { google } from 'googleapis';
+import { getAuthClient } from '@/lib/gcp-auth';
 // DEBUG: Temporarily commenting out ResourceManagerClient to fix build
 // import { ResourceManagerClient } from '@google-cloud/resource-manager';
 
@@ -118,10 +119,7 @@ export class ReusableFirebaseProjectService {
       try {
         const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
         if (projectId) {
-          const auth = new google.auth.GoogleAuth({
-            scopes: ['https://www.googleapis.com/auth/cloud-platform']
-          });
-          const authClient = await auth.getClient();
+          const authClient = await getAuthClient();
           
           // For dedicated chatbot projects, delete the chatbot-specific service account
           // Service account naming pattern: {projectId-no-hyphens}-admin@{projectId}.iam.gserviceaccount.com
@@ -339,11 +337,7 @@ export class ReusableFirebaseProjectService {
     
     try {
       // Get auth client for Google Cloud APIs
-      const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
-      });
-      
-      const authClient = await auth.getClient();
+      const authClient = await getAuthClient();
       
       // 1. Delete all OAuth clients
       const oauthClients = await GoogleOAuthClientManager.listOAuthClients(projectId);
@@ -376,10 +370,7 @@ export class ReusableFirebaseProjectService {
     console.log(`🧹 Deleting all chatbot service accounts in project: ${projectId}`);
     
     try {
-      const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
-      });
-      const authClient = await auth.getClient();
+      const authClient = await getAuthClient();
       const iam = google.iam('v1');
       
       // DEBUG: Temporarily commenting out problematic Google Cloud IAM call
@@ -1076,11 +1067,7 @@ export class ReusableFirebaseProjectService {
     
     try {
       // Get auth client for Firebase Management API
-      const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
-      });
-      
-      const authClient = await auth.getClient();
+      const authClient = await getAuthClient();
       
       // List all web apps in the Firebase project
       console.log(`🔍 Listing web apps in project: ${projectId}`);
@@ -1148,11 +1135,7 @@ export class ReusableFirebaseProjectService {
     console.log(`🎯 Target project: ${projectId}`);
     
     try {
-      const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
-      });
-      
-      const authClient = await auth.getClient();
+      const authClient = await getAuthClient();
       const accessToken = await authClient.getAccessToken();
       
       if (!accessToken.token) {
