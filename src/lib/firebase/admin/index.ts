@@ -13,13 +13,13 @@ if (!admin.apps.length) {
         credential: admin.credential.cert(credentials.credentials),
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
-      console.log('Firebase Admin initialized with unified credentials');
+      console.log('✅ Firebase Admin initialized with unified service account credentials');
     } else {
-      // Fallback to default credentials for local development
+      // No credentials found - use default (will likely fail in production)
       admin.initializeApp({
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
-      console.log('Firebase Admin initialized with default credentials');
+      console.warn('⚠️ Firebase Admin initialized without explicit credentials - may fail in production');
     }
   } catch (error) {
     console.error('Error initializing Firebase Admin:', error);

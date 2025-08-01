@@ -40,8 +40,8 @@ export function getGCPCredentials(): GCPCredentials | {} {
     };
   }
 
-  // For local development - use default credentials (gcloud CLI)
-  console.log('🔍 Using default credentials for local development');
+  // No credentials found - this will cause authentication to fail
+  console.warn('⚠️ No service account credentials found. Set GOOGLE_APPLICATION_CREDENTIALS_JSON or Firebase env vars.');
   return {};
 }
 
