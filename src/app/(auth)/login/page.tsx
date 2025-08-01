@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
+import { Mail, Lock, Home, LogIn, Chrome } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -55,7 +56,10 @@ export default function LoginPage() {
           <Link href="/" className="text-xl font-bold">Chat Factory</Link>
           <nav>
             <Link href="/">
-              <Button variant="ghost" className="text-white hover:bg-gray-800">Home</Button>
+              <Button variant="ghost" className="text-white hover:bg-gray-800">
+                <Home className="w-4 h-4 mr-2" />
+                Home
+              </Button>
             </Link>
           </nav>
         </div>
@@ -78,7 +82,10 @@ export default function LoginPage() {
             )}
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">Email</label>
+                <label htmlFor="email" className="flex items-center text-sm font-medium">
+                  <Mail className="w-4 h-4 mr-2" />
+                  Email
+                </label>
                 <Input 
                   id="email" 
                   type="email" 
@@ -90,7 +97,10 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="password" className="text-sm font-medium">Password</label>
+                  <label htmlFor="password" className="flex items-center text-sm font-medium">
+                    <Lock className="w-4 h-4 mr-2" />
+                    Password
+                  </label>
                   <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
                     Forgot password?
                   </Link>
@@ -108,6 +118,7 @@ export default function LoginPage() {
                 className="w-full bg-blue-600 hover:bg-blue-700"
                 disabled={isLoading}
               >
+                <LogIn className="w-4 h-4 mr-2" />
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
