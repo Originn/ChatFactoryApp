@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { UsageOverviewCard, UsageAnalyticsChart } from "@/components/deployment/UsageDashboards";
 import { UsageWarningBanner } from "@/components/deployment/UsageBanners";
 import { db } from "@/lib/firebase/config";
@@ -244,6 +245,11 @@ export default function DashboardPage() {
                   <Menu className="h-5 w-5" />
                 )}
               </Button>
+              
+              {/* Theme toggle */}
+              <div className="hidden sm:block">
+                <ThemeToggle />
+              </div>
               
               {/* User dropdown - hidden on small mobile, shown on larger screens */}
               <div className="hidden sm:block">

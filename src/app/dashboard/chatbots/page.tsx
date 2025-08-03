@@ -13,6 +13,7 @@ import { collection, query, where, getDocs, orderBy, doc, deleteDoc } from "fire
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialog';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { 
   Bot, 
   Plus, 
@@ -508,6 +509,11 @@ export default function ChatbotsPage() {
                   <Menu className="h-5 w-5" />
                 )}
               </Button>
+              
+              {/* Theme toggle */}
+              <div className="hidden sm:block">
+                <ThemeToggle />
+              </div>
               
               {/* User dropdown - hidden on small mobile, shown on larger screens */}
               <div className="hidden sm:block">
