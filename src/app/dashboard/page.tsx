@@ -8,7 +8,6 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
-import { BillingAccessGuide } from "@/components/dashboard/BillingAccessGuide";
 import { useAuth } from "@/contexts/AuthContext";
 import { UsageOverviewCard, UsageAnalyticsChart } from "@/components/deployment/UsageDashboards";
 import { UsageWarningBanner } from "@/components/deployment/UsageBanners";
@@ -387,12 +386,6 @@ export default function DashboardPage() {
             </div>
           </div>
           
-          {/* Billing Access Guide - Shows for free users */}
-          {userProfile?.subscription.plan === 'free' && (
-            <div className="mb-6 animate-slide-up">
-              <BillingAccessGuide />
-            </div>
-          )}
           
           {/* Usage Warning Banner - Shows at critical usage levels */}
           {userProfile && (
