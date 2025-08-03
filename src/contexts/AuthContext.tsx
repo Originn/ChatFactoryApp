@@ -345,7 +345,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       const shouldUseRedirect = isMobileDevice() || isIOSBrowser();
-      console.log('🔀 Should use redirect?', shouldUseRedirect);
+      const isActualIPhone = /iPhone/.test(navigator.userAgent);
+      console.log('🔀 Should use redirect?', shouldUseRedirect, 'Is iPhone?', isActualIPhone);
       
       if (shouldUseRedirect) {
         console.log('📱 Using redirect flow for mobile/iOS');
@@ -398,6 +399,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 timestamp: new Date().toISOString()
               })
             }).catch(e => console.log('Debug log failed:', e));
+          }
+          
+          // Fallback to popup for iPhone Safari if redirect fails
+          if (isActualIPhone) {
+            console.log('🔄 Fallback: Trying popup flow for iPhone');
+            
+            // Send debug info about fallback attempt
+            if (typeof window !== 'undefined') {
+              fetch('/api/debug/iphone-auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event: 'iPhone_popup_fallback',
+                  originalError: redirectError.message,
+                  userAgent: navigator.userAgent,
+                  timestamp: new Date().toISOString()
+                })
+              }).catch(e => console.log('Debug log failed:', e));
+            }
+            
+            try {
+              const result = await signInWithPopup(auth, googleProvider);
+              console.log('✅ iPhone popup fallback success:', result.user?.email);
+              await handleGoogleAuthResult(result.user);
+              return result.user;
+            } catch (popupError) {
+              console.error('❌ iPhone popup fallback also failed:', popupError);
+              throw new Error(`Both redirect and popup failed. Redirect: ${redirectError.message}, Popup: ${popupError.message}`);
+            }
           }
           
           throw redirectError;
