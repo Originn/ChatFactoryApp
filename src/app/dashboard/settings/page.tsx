@@ -259,10 +259,10 @@ export default function SettingsPage() {
                 </div>
                 <Badge 
                   variant="secondary" 
-                  className={`text-xs sm:text-sm px-2 py-1 ${
+                  className={`text-xs sm:text-sm px-2 py-1 font-medium ${
                     isFree 
-                      ? 'bg-purple-100 text-purple-700' 
-                      : 'bg-green-100 text-green-700'
+                      ? 'bg-purple-600 text-white' 
+                      : 'bg-green-600 text-white'
                   }`}
                 >
                   {getPlanDisplayName()} PLAN
@@ -484,8 +484,8 @@ export default function SettingsPage() {
                   <h3 className="font-medium">Current Plan</h3>
                   <div className="p-4 border rounded-lg">
                     <div className="flex items-center justify-between mb-3">
-                      <Badge className={`${
-                        isFree ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                      <Badge className={`font-medium ${
+                        isFree ? 'bg-purple-600 text-white' : 'bg-green-600 text-white'
                       }`}>
                         {getPlanDisplayName()} PLAN
                       </Badge>
@@ -607,20 +607,20 @@ export default function SettingsPage() {
 
               {/* Billing Actions */}
               <div className="border-t pt-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <h3 className="font-medium">Need Help?</h3>
                     <p className="text-sm text-gray-600">
                       Questions about billing or need a custom plan?
                     </p>
                   </div>
-                  <div className="flex space-x-3">
-                    <Link href="/dashboard/settings/billing">
-                      <Button variant="outline">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                    <Link href="/dashboard/settings/billing" className="w-full sm:w-auto">
+                      <Button variant="outline" className="w-full sm:w-auto">
                         View Full Pricing
                       </Button>
                     </Link>
-                    <Button variant="outline">
+                    <Button variant="outline" className="w-full sm:w-auto">
                       Contact Support
                     </Button>
                   </div>
