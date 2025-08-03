@@ -20,4 +20,12 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
+// Configure Google provider for better mobile compatibility
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+  // Force account selection to avoid cached tokens that might cause issues
+  login_hint: '',
+  hd: '', // For G Suite domains if needed
+});
+
 export { auth, db, storage, googleProvider };

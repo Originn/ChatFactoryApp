@@ -56,10 +56,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Utility function to detect mobile devices
+  // Utility function to detect mobile devices with Safari-specific detection
   const isMobileDevice = () => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            window.innerWidth <= 768;
+  };
+
+  // Specifically detect Safari on iOS
+  const isSafariOnIOS = () => {
+    const userAgent = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+    const isSafari = /Safari/.test(userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(userAgent);
+    return isIOS && isSafari;
   };
 
   // Load user profile when user changes
@@ -156,14 +164,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sign in with Google (mobile-aware)
+  // Sign in with Google (mobile-aware with Safari-specific handling)
   const signInWithGoogle = async (): Promise<User> => {
     try {
-      if (isMobileDevice()) {
-        // Use redirect for mobile devices
+      const shouldUseRedirect = isMobileDevice() || isSafariOnIOS();
+      
+      if (shouldUseRedirect) {
+        // Use redirect for mobile devices and Safari
         await signInWithRedirect(auth, googleProvider);
-        // The actual sign-in will be handled by the redirect result in useEffect
-        // We return a promise that will resolve when the redirect completes
+        
+        // For Safari on iOS, we need to handle the redirect differently
+        if (isSafariOnIOS()) {
+          // Safari handles redirects differently, so we just initiate the redirect
+          // The actual sign-in will be handled by the redirect result in useEffect
+          // We don't return a promise here as Safari will navigate away
+          throw new Error('REDIRECT_INITIATED');
+        }
+        
+        // For other mobile devices, use the promise-based approach with longer timeout
         return new Promise((resolve, reject) => {
           const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
@@ -172,19 +190,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           });
           
-          // Set a timeout to prevent hanging
+          // Longer timeout for mobile devices (30 seconds)
           setTimeout(() => {
             unsubscribe();
-            reject(new Error('Sign-in timeout'));
-          }, 10000);
+            reject(new Error('Sign-in timeout - please try again'));
+          }, 30000);
         });
       } else {
-        // Use popup for desktop
+        // Use popup for desktop browsers
         const result = await signInWithPopup(auth, googleProvider);
         await handleGoogleAuthResult(result.user);
         return result.user;
       }
     } catch (error) {
+      // Don't log redirect initiation as an error
+      if (error instanceof Error && error.message === 'REDIRECT_INITIATED') {
+        throw error; // Re-throw to be handled by the calling component
+      }
       console.error('Google sign-in error:', error);
       throw error;
     }

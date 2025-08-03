@@ -41,9 +41,15 @@ export default function LoginPage() {
       await signInWithGoogle();
       router.push('/dashboard');
     } catch (error: any) {
+      // Handle Safari redirect initiation specially
+      if (error.message === 'REDIRECT_INITIATED') {
+        // For Safari, the redirect has been initiated, so we don't set an error
+        // The page will navigate away, so we don't need to set loading to false
+        return;
+      }
+      
       setError(error.message || 'Failed to sign in with Google');
       console.error('Google login error:', error);
-    } finally {
       setIsLoading(false);
     }
   };
