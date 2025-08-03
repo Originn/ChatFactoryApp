@@ -2342,17 +2342,20 @@ export class FirebaseAPIService {
    * Get Firebase access token using the exact method from Firebase documentation
    */
   private static async getFirebaseAccessToken(): Promise<string> {
+    const { getGCPCredentials } = require('@/lib/gcp-auth');
     const { JWT } = require('google-auth-library');
     
-    // Get service account credentials
-    const credentials = {
-      client_email: process.env.FIREBASE_CLIENT_EMAIL || '',
-      private_key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-      project_id: process.env.FIREBASE_PROJECT_ID || ''
-    };
+    // Get service account credentials using unified authentication
+    const credentialsData = getGCPCredentials() as any;
+    
+    if (!credentialsData || !credentialsData.credentials) {
+      throw new Error('Missing Firebase service account credentials - ensure GOOGLE_APPLICATION_CREDENTIALS_JSON is set');
+    }
+    
+    const credentials = credentialsData.credentials;
     
     if (!credentials.client_email || !credentials.private_key) {
-      throw new Error('Missing Firebase service account credentials');
+      throw new Error('Invalid Firebase service account credentials format');
     }
     
     const SCOPES = ['https://www.googleapis.com/auth/cloud-platform'];
