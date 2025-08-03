@@ -70,6 +70,12 @@ export default function NewChatbotPage() {
   const [newChatbotId, setNewChatbotId] = useState<string | null>(null);
   const [showVectorDialog, setShowVectorDialog] = useState(false);
   const [isDeployingPreview, setIsDeployingPreview] = useState(false);
+  
+  // Global deployment state
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deploymentProgress, setDeploymentProgress] = useState<string>('');
+  const [deploymentStep, setDeploymentStep] = useState<number>(0);
+  const [totalSteps] = useState<number>(5);
 
   // Email management for invited users
   const [newEmail, setNewEmail] = useState('');
@@ -92,6 +98,20 @@ export default function NewChatbotPage() {
       setFormData(prev => ({ ...prev, multimodal: false }));
     }
   }, [formData.embeddingModel]);
+
+  // Prevent navigation during deployment
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDeploying) {
+        e.preventDefault();
+        e.returnValue = 'Your chatbot is currently being deployed. Are you sure you want to leave?';
+        return 'Your chatbot is currently being deployed. Are you sure you want to leave?';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDeploying]);
 
   // Add email to invited users
   const addEmailToInvited = () => {
@@ -240,8 +260,15 @@ export default function NewChatbotPage() {
   const deployChatbot = async (indexName: string, displayName: string) => {
     if (!user || !newChatbotId) return;
 
-    setIsDeployingPreview(true);  // TODO: Rename this state variable
+    setIsDeploying(true);
+    setIsDeployingPreview(true);
+    setDeploymentStep(1);
+    setDeploymentProgress('Preparing deployment...');
+    
     try {
+      setDeploymentStep(2);
+      setDeploymentProgress('Creating project infrastructure...');
+      
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -250,18 +277,24 @@ export default function NewChatbotPage() {
           chatbotName: formData.name.trim(),
           userId: user.uid,
           vectorstore: { indexName, displayName },
-          embeddingModel: formData.embeddingModel, // Pass the selected embedding model
-          target: 'production',  // Changed from 'preview' to 'production'
+          embeddingModel: formData.embeddingModel,
+          target: 'production',
         }),
       });
+
+      setDeploymentStep(3);
+      setDeploymentProgress('Configuring Firebase and authentication...');
 
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to deploy chatbot');
       }
 
+      setDeploymentStep(4);
+      setDeploymentProgress('Finalizing chatbot configuration...');
+
       await updateDoc(doc(db, 'chatbots', newChatbotId), {
-        status: 'deployed',  // Changed from 'preview' to match production deployment
+        status: 'deployed',
         deployedUrl: data.url,
         vercelProjectId: data.projectName,
         vercelDeploymentId: data.deploymentId,
@@ -274,11 +307,19 @@ export default function NewChatbotPage() {
         updatedAt: serverTimestamp(),
       });
 
-      router.push(`/dashboard/chatbots/${newChatbotId}`);
+      setDeploymentStep(5);
+      setDeploymentProgress('Deployment complete! Redirecting...');
+      
+      // Small delay to show completion message
+      setTimeout(() => {
+        router.push(`/dashboard/chatbots/${newChatbotId}`);
+      }, 1000);
     } catch (err: any) {
-      console.error('Error deploying preview:', err);
-      setError(err.message || 'Failed to deploy preview');
+      console.error('Error deploying chatbot:', err);
+      setError(err.message || 'Failed to deploy chatbot');
+      setDeploymentProgress('Deployment failed');
     } finally {
+      setIsDeploying(false);
       setIsDeployingPreview(false);
     }
   };
@@ -286,8 +327,15 @@ export default function NewChatbotPage() {
   const deployChatbotWithNewVectorStore = async (displayName: string, desiredIndexName?: string, embeddingModel?: string) => {
     if (!user || !newChatbotId) return;
 
+    setIsDeploying(true);
     setIsDeployingPreview(true);
+    setDeploymentStep(1);
+    setDeploymentProgress('Preparing deployment with new knowledge base...');
+    
     try {
+      setDeploymentStep(2);
+      setDeploymentProgress('Creating vectorstore and project infrastructure...');
+      
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -295,17 +343,23 @@ export default function NewChatbotPage() {
           chatbotId: newChatbotId,
           chatbotName: formData.name.trim(),
           userId: user.uid,
-          vectorstore: null, // This triggers the creation path in deployment script
-          desiredVectorstoreIndexName: desiredIndexName, // Pass the desired index name
-          embeddingModel: embeddingModel, // Pass the embedding model
+          vectorstore: null,
+          desiredVectorstoreIndexName: desiredIndexName,
+          embeddingModel: embeddingModel,
           target: 'production',
         }),
       });
+
+      setDeploymentStep(3);
+      setDeploymentProgress('Configuring Firebase and authentication...');
 
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to deploy chatbot');
       }
+
+      setDeploymentStep(4);
+      setDeploymentProgress('Finalizing chatbot and knowledge base...');
 
       await updateDoc(doc(db, 'chatbots', newChatbotId), {
         status: 'deployed',
@@ -321,11 +375,19 @@ export default function NewChatbotPage() {
         updatedAt: serverTimestamp(),
       });
 
-      router.push(`/dashboard/chatbots/${newChatbotId}`);
+      setDeploymentStep(5);
+      setDeploymentProgress('Deployment complete! Redirecting...');
+      
+      // Small delay to show completion message
+      setTimeout(() => {
+        router.push(`/dashboard/chatbots/${newChatbotId}`);
+      }, 1000);
     } catch (err: any) {
       console.error('Error deploying with new vectorstore:', err);
       setError(err.message || 'Failed to deploy with new vectorstore');
+      setDeploymentProgress('Deployment failed');
     } finally {
+      setIsDeploying(false);
       setIsDeployingPreview(false);
     }
   };
@@ -495,6 +557,84 @@ export default function NewChatbotPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Deployment Progress Overlay
+  const renderDeploymentOverlay = () => {
+    if (!isDeploying) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white" />
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Deploying Your Chatbot</h3>
+            <p className="text-gray-600 mb-6">Please wait while we set up your AI assistant...</p>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+              <div 
+                className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${(deploymentStep / totalSteps) * 100}%` }}
+              />
+            </div>
+            
+            {/* Progress Steps */}
+            <div className="text-sm text-gray-600 mb-4">
+              Step {deploymentStep} of {totalSteps}
+            </div>
+            
+            {/* Current Step Description */}
+            <p className="text-sm text-blue-600 font-medium">
+              {deploymentProgress}
+            </p>
+            
+            {/* Progress Steps List */}
+            <div className="mt-6 text-left">
+              <div className="space-y-2">
+                {[
+                  'Preparing deployment',
+                  'Creating infrastructure', 
+                  'Configuring authentication',
+                  'Finalizing setup',
+                  'Deployment complete'
+                ].map((step, index) => (
+                  <div key={index} className="flex items-center text-sm">
+                    <div className={`w-4 h-4 rounded-full mr-3 flex items-center justify-center ${
+                      index + 1 < deploymentStep 
+                        ? 'bg-green-500 text-white' 
+                        : index + 1 === deploymentStep 
+                          ? 'bg-blue-500 text-white animate-pulse' 
+                          : 'bg-gray-200 text-gray-400'
+                    }`}>
+                      {index + 1 < deploymentStep ? '✓' : index + 1}
+                    </div>
+                    <span className={
+                      index + 1 < deploymentStep 
+                        ? 'text-green-600 font-medium' 
+                        : index + 1 === deploymentStep 
+                          ? 'text-blue-600 font-medium' 
+                          : 'text-gray-400'
+                    }>
+                      {step}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="mt-6 p-3 bg-blue-50 rounded-lg">
+              <p className="text-xs text-blue-800">
+                ⚡ This usually takes 2-3 minutes. Please keep this page open.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1343,9 +1483,14 @@ export default function NewChatbotPage() {
               variant="gradient"
               size="lg"
               className="shadow-lg shadow-purple-500/25"
-              disabled={loading || !formData.name.trim() || logoUploading || faviconUploading}
+              disabled={loading || !formData.name.trim() || logoUploading || faviconUploading || isDeploying}
             >
-              {loading ? (
+              {isDeploying ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2" />
+                  Deploying...
+                </div>
+              ) : loading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2" />
                   Creating...
@@ -1451,11 +1596,18 @@ export default function NewChatbotPage() {
       <VectorStoreNameDialog
         isOpen={showVectorDialog}
         onConfirm={handleConfirmVectorstore}
-        onCancel={() => setShowVectorDialog(false)}
+        onCancel={() => {
+          if (!isDeploying) {
+            setShowVectorDialog(false);
+          }
+        }}
         userId={user?.uid || ''}
         embeddingModel={formData.embeddingModel}
         isValidating={isDeployingPreview}
       />
+      
+      {/* Deployment Progress Overlay */}
+      {renderDeploymentOverlay()}
     </div>
   );
 }
