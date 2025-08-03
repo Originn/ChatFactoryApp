@@ -446,42 +446,373 @@ export default function ChatbotDetailPage() {
                 </div>
               </div>
 
-              {/* Basic Info Card */}
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Chatbot Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <strong>Status:</strong> {chatbot.status || 'Draft'}
-                    </div>
-                    <div>
-                      <strong>Created:</strong> {chatbot.createdAt ? new Date(chatbot.createdAt.seconds * 1000).toLocaleDateString() : 'Unknown'}
-                    </div>
-                    <div>
-                      <strong>Vector Store:</strong> {hasVectorstore ? vectorStoreName : 'Not configured'}
-                    </div>
-                    <div>
-                      <strong>Deployment:</strong> {chatbot.deployment?.status || 'Not deployed'}
-                    </div>
+              {/* Tabs Navigation */}
+              <div className="border-b border-gray-200 mb-6">
+                <nav className="-mb-px flex space-x-8">
+                  <button
+                    onClick={() => setActiveTab('overview')}
+                    className={`${
+                      activeTab === 'overview'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('documents')}
+                    className={`${
+                      activeTab === 'documents'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                  >
+                    Documents
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('users')}
+                    className={`${
+                      activeTab === 'users'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                  >
+                    Users
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('analytics')}
+                    className={`${
+                      activeTab === 'analytics'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                  >
+                    Analytics
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('settings')}
+                    className={`${
+                      activeTab === 'settings'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                  >
+                    Settings
+                  </button>
+                </nav>
+              </div>
+
+              {/* Tab Content */}
+              {activeTab === 'overview' && (
+                <div>
+                  {/* Overview Stats */}
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Status</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center">
+                          <span className={`h-3 w-3 rounded-full ${chatbot.status === 'deployed' ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
+                          <div className="text-sm font-medium">{chatbot.status || 'Draft'}</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Documents</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{chatbot.documents?.length || 0}</div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Success Rate</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{chatbot.stats?.successRate || 0}%</div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Model</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm font-medium">{chatbot.aiConfig?.llmModel || 'Not set'}</div>
+                      </CardContent>
+                    </Card>
                   </div>
                   
+                  {/* Deployment Info */}
                   {chatbot.deployment?.deploymentUrl && (
-                    <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                      <strong>Live URL:</strong>{' '}
-                      <a 
-                        href={chatbot.deployment.deploymentUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        {chatbot.deployment.deploymentUrl}
-                      </a>
-                    </div>
+                    <Card className="mb-6">
+                      <CardHeader>
+                        <CardTitle>Live Deployment</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="p-4 bg-green-50 rounded-lg">
+                          <strong>Live URL:</strong>{' '}
+                          <a 
+                            href={chatbot.deployment.deploymentUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {chatbot.deployment.deploymentUrl}
+                          </a>
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
+
+                  {/* Chatbot Preview */}
+                  <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-4">Chatbot Preview</h2>
+                  <Card className="max-w-md mx-auto">
+                    <CardContent className="p-6">
+                      <div className="border rounded-lg bg-gray-50 p-4 mb-4 h-60 overflow-y-auto">
+                        {/* Simulated chat messages */}
+                        <div className="flex items-start space-x-2 mb-3">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                            {chatbot.logoUrl ? (
+                              <img
+                                src={chatbot.logoUrl}
+                                alt={`${chatbot.name} logo`}
+                                className="h-8 w-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
+                            <p className="text-sm">
+                              Hello! I'm an AI assistant trained on {chatbot.name} documentation. How can I help you today?
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-end mb-3">
+                          <div 
+                            className="p-2 max-w-xs rounded-lg text-white shadow-sm"
+                            style={{ backgroundColor: chatbot.appearance?.primaryColor || '#3b82f6' }}
+                          >
+                            <p className="text-sm">How do I get started?</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                            {chatbot.logoUrl ? (
+                              <img
+                                src={chatbot.logoUrl}
+                                alt={`${chatbot.name} logo`}
+                                className="h-8 w-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
+                            <p className="text-sm">
+                              Great question! Let me walk you through the key steps based on our documentation...
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'documents' && (
+                <div>
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-semibold text-gray-900">Documents & Knowledge Base</h2>
+                    <div className="text-sm text-gray-600">
+                      {vectorstoreDocCount} documents uploaded
+                    </div>
+                  </div>
+
+                  {/* Upload Section */}
+                  <InlineDocumentUpload 
+                    chatbotId={chatbotId}
+                    onUploadComplete={() => {
+                      // Refresh the document list and update document count
+                      setRefreshKey(prev => prev + 1);
+                      // Update the document count (increment by 1 for each successful upload)
+                      setVectorstoreDocCount(prev => prev + 1);
+                    }}
+                  />
+
+                  {/* Knowledge Base Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Total Documents</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-blue-600">{vectorstoreDocCount}</div>
+                        <p className="text-xs text-gray-500 mt-1">Files processed</p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Vector Store</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm font-semibold text-gray-900">{vectorStoreName || 'Knowledge Base'}</div>
+                        <p className="text-xs text-gray-500 mt-1">Index: {vectorStoreIndexName}</p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500">Status</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center">
+                          <span className={`h-3 w-3 rounded-full ${hasVectorstore ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
+                          <div className="text-sm font-medium">
+                            {hasVectorstore ? 'Active' : 'Setup Required'}
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {hasVectorstore ? 'Ready for queries' : 'Upload documents to activate'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Uploaded Documents */}
+                  <UserPDFManager 
+                    key={refreshKey}
+                    chatbotId={chatbotId}
+                    showChatbotFilter={false}
+                  />
+                </div>
+              )}
+
+              {activeTab === 'users' && (
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">User Management</h2>
+                  
+                  <ChatbotUserManagement
+                    chatbot={chatbot}
+                    onUpdate={() => {
+                      // Refresh chatbot data when users are updated
+                      window.location.reload();
+                    }}
+                  />
+                </div>
+              )}
+
+              {activeTab === 'settings' && (
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">Chatbot Settings</h2>
+                  
+                  <div className="space-y-8">
+                    {/* AI Configuration */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">AI Configuration</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Embedding Model</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {chatbot.aiConfig?.embeddingModel || 'Not configured'}
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">LLM Model</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {chatbot.aiConfig?.llmModel || 'Not configured'}
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Temperature</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {chatbot.aiConfig?.temperature || 'Not configured'}
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Context Window</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {chatbot.aiConfig?.contextWindow || 'Not configured'}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Vector Store Configuration */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Vector Store Configuration</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Vector Store Name</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {vectorStoreName || 'Not configured'}
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Index Name</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {vectorStoreIndexName || 'Not configured'}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Appearance Settings */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Appearance</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Primary Color</h4>
+                            <div className="flex items-center space-x-2">
+                              <div 
+                                className="w-6 h-6 rounded border"
+                                style={{ backgroundColor: chatbot.appearance?.primaryColor || '#3b82f6' }}
+                              ></div>
+                              <p className="text-sm">
+                                {chatbot.appearance?.primaryColor || '#3b82f6'}
+                              </p>
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Bubble Style</h4>
+                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                              {chatbot.appearance?.bubbleStyle || 'Not configured'}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'analytics' && (
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">Analytics</h2>
+                  <Card>
+                    <CardContent className="p-6">
+                      <p className="text-gray-500 text-center">Analytics dashboard coming soon...</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </>
           ) : (
             <div>Chatbot not found</div>
