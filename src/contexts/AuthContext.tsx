@@ -77,17 +77,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Detect any iOS browser (Safari, Chrome, etc.) - they all need redirect handling
   const isIOSBrowser = () => {
     const userAgent = navigator.userAgent;
-    const result = /iPad|iPhone|iPod/.test(userAgent);
+    
+    // Standard iOS detection
+    const standardIOSCheck = /iPad|iPhone|iPod/.test(userAgent);
+    
+    // Check for iPhone with "Request Desktop Website" enabled
+    // This shows as macOS user agent but with mobile screen dimensions
+    const screenWidth = window.screen?.width || 0;
+    const screenHeight = window.screen?.height || 0;
+    const isMobileScreenSize = screenWidth <= 428 && screenHeight <= 926; // iPhone Pro Max dimensions
+    const hasMacOSUserAgent = /Macintosh/.test(userAgent);
+    const hasWebKitSafari = /WebKit/.test(userAgent) && /Safari/.test(userAgent);
+    const isMobileWithDesktopUA = hasMacOSUserAgent && hasWebKitSafari && isMobileScreenSize;
+    
+    // Detect touch support (reliable mobile indicator)
+    const hasTouchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    const result = standardIOSCheck || (isMobileWithDesktopUA && hasTouchSupport);
+    
     const deviceInfo = {
       isIPhone: /iPhone/.test(userAgent),
       isIPad: /iPad/.test(userAgent),
       isIPod: /iPod/.test(userAgent),
       isMacOS: /Macintosh/.test(userAgent),
+      isStandardIOS: standardIOSCheck,
+      isMobileWithDesktopUA,
+      hasTouchSupport,
       isIOS: result,
-      screenWidth: window.screen?.width || 'unknown',
-      screenHeight: window.screen?.height || 'unknown',
+      screenWidth,
+      screenHeight,
       windowWidth: window.innerWidth || 'unknown',
-      windowHeight: window.innerHeight || 'unknown'
+      windowHeight: window.innerHeight || 'unknown',
+      maxTouchPoints: navigator.maxTouchPoints || 0
     };
     
     console.log('🔍 isIOSBrowser:', result, 'DeviceInfo:', deviceInfo, 'UserAgent:', userAgent);
