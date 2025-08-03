@@ -51,21 +51,21 @@ export default function BillingPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+        <div className="max-w-4xl mx-auto px-4 py-4 sm:py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0">
               <Link href="/dashboard/settings">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="w-fit">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Settings
                 </Button>
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Upgrade Your Plan</h1>
-                <p className="text-gray-600">Unlock more features and higher limits</p>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Upgrade Your Plan</h1>
+                <p className="text-sm sm:text-base text-gray-600">Unlock more features and higher limits</p>
               </div>
             </div>
-            <Badge variant="secondary" className="bg-purple-100 text-purple-700">
+            <Badge variant="secondary" className="bg-purple-600 text-white font-medium w-fit">
               <Crown className="h-3 w-3 mr-1" />
               Current: {currentPlan.toUpperCase()}
             </Badge>
@@ -73,7 +73,7 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
         {/* Current Usage Alert */}
         {currentPlan === 'free' && usagePercentage >= 80 && (
           <Alert className="mb-8 border-amber-200 bg-amber-50">
@@ -86,7 +86,7 @@ export default function BillingPage() {
         )}
 
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
           {/* Pro Plan */}
           <Card className={`relative ${selectedPlan === 'pro' ? 'ring-2 ring-purple-500' : ''}`}>
             <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -96,12 +96,12 @@ export default function BillingPage() {
               </Badge>
             </div>
             <CardHeader className="text-center pb-4">
-              <CardTitle className="text-2xl font-bold">Pro Plan</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold">Pro Plan</CardTitle>
               <div className="mt-4">
-                <span className="text-4xl font-bold text-gray-900">$19</span>
-                <span className="text-gray-600">/month</span>
+                <span className="text-3xl sm:text-4xl font-bold text-gray-900">$19</span>
+                <span className="text-sm sm:text-base text-gray-600">/month</span>
               </div>
-              <p className="text-gray-600 mt-2">Perfect for growing businesses</p>
+              <p className="text-sm sm:text-base text-gray-600 mt-2">Perfect for growing businesses</p>
             </CardHeader>
             <CardContent className="space-y-6">
               <ul className="space-y-3">
@@ -159,12 +159,12 @@ export default function BillingPage() {
           {/* Enterprise Plan */}
           <Card className={`relative ${selectedPlan === 'enterprise' ? 'ring-2 ring-gray-800' : ''}`}>
             <CardHeader className="text-center pb-4">
-              <CardTitle className="text-2xl font-bold">Enterprise</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold">Enterprise</CardTitle>
               <div className="mt-4">
-                <span className="text-4xl font-bold text-gray-900">$99</span>
-                <span className="text-gray-600">/month</span>
+                <span className="text-3xl sm:text-4xl font-bold text-gray-900">$99</span>
+                <span className="text-sm sm:text-base text-gray-600">/month</span>
               </div>
-              <p className="text-gray-600 mt-2">For large organizations</p>
+              <p className="text-sm sm:text-base text-gray-600 mt-2">For large organizations</p>
             </CardHeader>
             <CardContent className="space-y-6">
               <ul className="space-y-3">
@@ -221,13 +221,13 @@ export default function BillingPage() {
         </div>
 
         {/* Free Plan Comparison */}
-        <Card className="mb-8">
+        <Card className="mb-6 sm:mb-8">
           <CardHeader>
-            <CardTitle className="text-center">Plan Comparison</CardTitle>
+            <CardTitle className="text-center text-lg sm:text-xl">Plan Comparison</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-3 font-medium">Feature</th>
@@ -282,32 +282,32 @@ export default function BillingPage() {
         {/* FAQ */}
         <Card>
           <CardHeader>
-            <CardTitle>Frequently Asked Questions</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">Frequently Asked Questions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <h4 className="font-medium mb-2">Can I change plans anytime?</h4>
-              <p className="text-sm text-gray-600">Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.</p>
+              <h4 className="font-medium mb-2 text-sm sm:text-base">Can I change plans anytime?</h4>
+              <p className="text-xs sm:text-sm text-gray-600">Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.</p>
             </div>
             <div>
-              <h4 className="font-medium mb-2">What happens to my data if I downgrade?</h4>
-              <p className="text-sm text-gray-600">Your data is preserved, but you'll be subject to the new plan's limitations. Extra chatbots will be paused until you're within limits.</p>
+              <h4 className="font-medium mb-2 text-sm sm:text-base">What happens to my data if I downgrade?</h4>
+              <p className="text-xs sm:text-sm text-gray-600">Your data is preserved, but you'll be subject to the new plan's limitations. Extra chatbots will be paused until you're within limits.</p>
             </div>
             <div>
-              <h4 className="font-medium mb-2">Do you offer refunds?</h4>
-              <p className="text-sm text-gray-600">We offer a 14-day money-back guarantee for all paid plans. Contact support for assistance.</p>
+              <h4 className="font-medium mb-2 text-sm sm:text-base">Do you offer refunds?</h4>
+              <p className="text-xs sm:text-sm text-gray-600">We offer a 14-day money-back guarantee for all paid plans. Contact support for assistance.</p>
             </div>
             <div>
-              <h4 className="font-medium mb-2">How are queries counted?</h4>
-              <p className="text-sm text-gray-600">Each message sent to your chatbot counts as one query. This includes both user questions and AI responses.</p>
+              <h4 className="font-medium mb-2 text-sm sm:text-base">How are queries counted?</h4>
+              <p className="text-xs sm:text-sm text-gray-600">Each message sent to your chatbot counts as one query. This includes both user questions and AI responses.</p>
             </div>
           </CardContent>
         </Card>
 
         {/* Bottom CTA */}
         {currentPlan === 'free' && (
-          <div className="text-center mt-8">
-            <p className="text-gray-600 mb-4">
+          <div className="text-center mt-6 sm:mt-8">
+            <p className="text-sm sm:text-base text-gray-600 mb-4">
               Questions about upgrading? <a href="mailto:support@chatfactory.ai" className="text-blue-600 hover:underline">Contact our team</a>
             </p>
           </div>
