@@ -13,34 +13,41 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 function ThemeSync() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
   const { setTheme, theme } = useTheme();
 
-  // Sync theme from user profile on mount
+  // Sync theme from user profile on mount, but only when auth is ready
   useEffect(() => {
+    if (authLoading || !user) return; // Wait for auth to be ready
+    
     if (userProfile?.preferences?.theme && userProfile.preferences.theme !== theme) {
       setTheme(userProfile.preferences.theme);
     }
-  }, [userProfile?.preferences?.theme, setTheme, theme]);
+  }, [userProfile?.preferences?.theme, setTheme, theme, authLoading, user]);
 
   return null;
 }
 
 export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
 
   const syncThemeWithProfile = async (theme: string) => {
-    if (user && userProfile) {
-      try {
-        await UserService.updateUserProfile(user.uid, {
-          preferences: {
-            ...userProfile.preferences,
-            theme: theme as 'light' | 'dark' | 'system'
-          }
-        });
-      } catch (error) {
-        console.error('Failed to sync theme with profile:', error);
-      }
+    // Only sync if user is authenticated and profile is loaded
+    if (!user || !userProfile || authLoading) {
+      console.log('Skipping theme sync - auth not ready');
+      return;
+    }
+
+    try {
+      await UserService.updateUserProfile(user.uid, {
+        preferences: {
+          ...userProfile.preferences,
+          theme: theme as 'light' | 'dark' | 'system'
+        }
+      });
+      console.log('Theme synced with profile:', theme);
+    } catch (error) {
+      console.error('Failed to sync theme with profile:', error);
     }
   };
 
@@ -63,7 +70,12 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
 export const useThemeContext = () => {
   const context = useContext(ThemeContext);
   if (context === undefined) {
-    throw new Error('useThemeContext must be used within a ThemeProvider');
+    // Return a safe default instead of throwing
+    return {
+      syncThemeWithProfile: async (theme: string) => {
+        console.log('Theme context not available, skipping sync');
+      }
+    };
   }
   return context;
 };
