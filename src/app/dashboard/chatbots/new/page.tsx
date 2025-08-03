@@ -13,7 +13,7 @@ import { db } from "@/lib/firebase/config";
 import { collection, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { uploadLogo, validateLogoFile } from "@/lib/utils/logoUpload";
 import { uploadFavicon } from "@/lib/utils/faviconUpload";
-import { Info } from "lucide-react";
+import { Info, Brain, Bot, Palette } from "lucide-react";
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import { FaviconUploader } from '@/components/FaviconUploader';
 
@@ -734,7 +734,7 @@ export default function NewChatbotPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
-                <div className="w-4 h-4 mr-2">ℹ️</div>
+                <Info className="w-4 h-4 mr-2" />
                 Basic Info
               </button>
               <button
@@ -745,7 +745,7 @@ export default function NewChatbotPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
-                <div className="w-4 h-4 mr-2">🧠</div>
+                <Brain className="w-4 h-4 mr-2" />
                 AI Configuration
               </button>
               <button
@@ -756,7 +756,7 @@ export default function NewChatbotPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
-                <div className="w-4 h-4 mr-2">🎭</div>
+                <Bot className="w-4 h-4 mr-2" />
                 Behavior
               </button>
               <button
@@ -767,7 +767,7 @@ export default function NewChatbotPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
-                <div className="w-4 h-4 mr-2">🎨</div>
+                <Palette className="w-4 h-4 mr-2" />
                 Appearance
               </button>
             </nav>

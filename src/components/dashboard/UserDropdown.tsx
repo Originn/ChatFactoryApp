@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import { Settings, User, LogOut } from 'lucide-react';
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -53,22 +54,25 @@ export default function UserDropdown() {
           </div>
           <Link
             href="/dashboard/settings"
-            className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
             onClick={() => setIsOpen(false)}
           >
+            <Settings className="h-4 w-4 mr-2" />
             Account Settings
           </Link>
           <Link
             href="/dashboard/settings/profile"
-            className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
+            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
             onClick={() => setIsOpen(false)}
           >
+            <User className="h-4 w-4 mr-2" />
             Edit Profile
           </Link>
           <button
             onClick={handleSignOut}
-            className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
+            <LogOut className="h-4 w-4 mr-2" />
             Sign Out
           </button>
         </div>
