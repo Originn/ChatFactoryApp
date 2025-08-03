@@ -96,6 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(user);
       await loadUserProfile(user);
       setLoading(false);
+      
+      // If user just authenticated and we're on login page, redirect to dashboard
+      if (user && typeof window !== 'undefined' && window.location.pathname === '/login') {
+        window.location.href = '/dashboard';
+      }
     });
 
     // Handle redirect result for mobile Google sign-in
@@ -105,6 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result && result.user) {
           // Handle the redirect result (create profile if needed)
           await handleGoogleAuthResult(result.user);
+          
+          // Redirect to dashboard after successful OAuth
+          if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+            window.location.href = '/dashboard';
+          }
         }
       } catch (error) {
         console.error('Redirect result error:', error);

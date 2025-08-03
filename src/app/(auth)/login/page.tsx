@@ -39,7 +39,8 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle();
-      router.push('/dashboard');
+      // Don't manually redirect here - let AuthContext handle it
+      // This prevents race conditions with ProtectedRoute
     } catch (error: any) {
       // Handle Safari redirect initiation specially
       if (error.message === 'REDIRECT_INITIATED') {
