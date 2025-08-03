@@ -245,7 +245,7 @@ export default function SettingsPage() {
         </TabsList>
 
         {/* Usage & Plan Tab */}
-        <TabsContent value="usage" className="space-y-6">
+        <TabsContent value="usage" className="space-y-4 sm:space-y-6">
           {/* Current Plan Card */}
           <Card>
             <CardHeader>
@@ -467,7 +467,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Billing Tab */}
-        <TabsContent value="billing" className="space-y-6">
+        <TabsContent value="billing" className="space-y-4 sm:space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -631,7 +631,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Profile Tab */}
-        <TabsContent value="profile">
+        <TabsContent value="profile" className="space-y-4 sm:space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Profile Information</CardTitle>
@@ -667,7 +667,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Security Tab */}
-        <TabsContent value="security">
+        <TabsContent value="security" className="space-y-4 sm:space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Password & Security</CardTitle>
@@ -731,7 +731,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Danger Zone Tab */}
-        <TabsContent value="danger">
+        <TabsContent value="danger" className="space-y-4 sm:space-y-6">
           <Card className="border-red-200">
             <CardHeader>
               <CardTitle className="text-red-600">Danger Zone</CardTitle>
