@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { Settings, User, LogOut, Palette } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { SimpleThemeToggle } from '@/components/ui/simple-theme-toggle';
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -63,6 +64,14 @@ export default function UserDropdown() {
               </span>
             </div>
             <ThemeToggle variant="dropdown" />
+            
+            {/* Simple Toggle Test */}
+            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Test Toggle:</span>
+                <SimpleThemeToggle />
+              </div>
+            </div>
           </div>
           
           <Link
