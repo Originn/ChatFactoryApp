@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,7 @@ export default function DashboardPage() {
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const hasFetchedRef = useRef(false);
   const [stats, setStats] = useState({
     totalChatbots: 0,
     totalDocuments: 0,
@@ -78,11 +79,15 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    // Reset fetch flag when user changes
+    hasFetchedRef.current = false;
+    
     async function fetchData() {
-      if (!user) {
+      if (!user?.uid || hasFetchedRef.current) {
         return;
       }
       
+      hasFetchedRef.current = true;
       setIsLoading(true);
       
       try {
@@ -135,7 +140,7 @@ export default function DashboardPage() {
     }
     
     fetchData();
-  }, [user]);
+  }, [user?.uid]);
 
   const handleUpgrade = () => {
     window.location.href = '/dashboard/settings/billing?upgrade=pro&source=dashboard';
