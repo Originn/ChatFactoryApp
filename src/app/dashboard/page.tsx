@@ -56,7 +56,7 @@ interface Chatbot {
 }
 
 export default function DashboardPage() {
-  const { user, userProfile, signOut } = useAuth();
+  const { user, userProfile, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -554,11 +554,11 @@ export default function DashboardPage() {
               </Button>
             </div>
 
-            {!user || isLoading ? (
+            {authLoading || isLoading || !user || !userProfile ? (
               <Card variant="elevated">
                 <CardContent className="p-8 text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading your chatbots...</p>
+                  <p className="text-gray-600">Loading dashboard...</p>
                 </CardContent>
               </Card>
             ) : chatbots.length === 0 ? (
