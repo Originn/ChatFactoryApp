@@ -483,11 +483,12 @@ export default function ChatbotsPage() {
               <Button
                 asChild
                 variant="gradient"
-                className="shadow-lg shadow-purple-500/25"
+                className="shadow-lg shadow-purple-500/25 h-9 px-3 sm:h-10 sm:px-4 text-sm"
               >
                 <Link href="/dashboard/chatbots/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create New Chatbot
+                  <Plus className="h-4 w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Create New Chatbot</span>
+                  <span className="sm:hidden">Create</span>
                 </Link>
               </Button>
               <UserDropdown />
@@ -533,13 +534,14 @@ export default function ChatbotsPage() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="border-gray-200 hover:bg-gray-50">
-                      <Filter className="h-4 w-4 mr-1" />
+                    <Button variant="outline" size="sm" className="border-gray-200 hover:bg-gray-50 h-8 px-2 sm:h-9 sm:px-3">
+                      <Filter className="h-4 w-4 mr-0.5 sm:mr-1" />
                       Filter
                     </Button>
-                    <Button variant="blue-outline" size="sm">
-                      <Plus className="h-4 w-4 mr-1" />
-                      New Chatbot
+                    <Button variant="blue-outline" size="sm" className="h-8 px-2 sm:h-9 sm:px-3">
+                      <Plus className="h-4 w-4 mr-0.5 sm:mr-1" />
+                      <span className="hidden sm:inline">New Chatbot</span>
+                      <span className="sm:hidden">New</span>
                     </Button>
                   </div>
                 </div>
