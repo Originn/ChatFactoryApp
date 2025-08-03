@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { Settings, User, LogOut } from 'lucide-react';
+import { Settings, User, LogOut, Palette } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,13 +49,25 @@ export default function UserDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-[9999] border border-purple-200">
-          <div className="px-4 py-2 border-b">
-            <p className="text-sm font-medium truncate">{user?.email}</p>
+        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-[9999] border border-purple-200 dark:border-gray-600">
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-600">
+            <p className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">{user?.email}</p>
           </div>
+          
+          {/* Theme Section */}
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-600">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+                <Palette className="h-4 w-4 mr-2" />
+                Theme
+              </span>
+            </div>
+            <ThemeToggle variant="dropdown" />
+          </div>
+          
           <Link
             href="/dashboard/settings"
-            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
             onClick={() => setIsOpen(false)}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -62,7 +75,7 @@ export default function UserDropdown() {
           </Link>
           <Link
             href="/dashboard/settings/profile"
-            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors"
             onClick={() => setIsOpen(false)}
           >
             <User className="h-4 w-4 mr-2" />
@@ -70,7 +83,7 @@ export default function UserDropdown() {
           </Link>
           <button
             onClick={handleSignOut}
-            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out

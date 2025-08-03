@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { 
   Crown, 
   Zap, 
@@ -662,6 +663,17 @@ export default function SettingsPage() {
                   {isLoading ? 'Updating...' : 'Update Profile'}
                 </Button>
               </form>
+            </CardContent>
+          </Card>
+          
+          {/* Theme Preferences Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Appearance</CardTitle>
+              <CardDescription>Customize how the application looks</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ThemeToggle variant="settings" />
             </CardContent>
           </Card>
         </TabsContent>
