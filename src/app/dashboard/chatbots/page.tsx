@@ -30,7 +30,9 @@ import {
   ArrowUpRight,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Menu,
+  X
 } from "lucide-react";
 
 // Define the Chatbot type for TypeScript
@@ -60,6 +62,7 @@ export default function ChatbotsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // State for deletion dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -479,7 +482,7 @@ export default function ChatbotsPage() {
                 </Link>
               </nav>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               <Button
                 asChild
                 variant="gradient"
@@ -491,11 +494,81 @@ export default function ChatbotsPage() {
                   <span className="sm:hidden">Create</span>
                 </Link>
               </Button>
-              <UserDropdown />
+              
+              {/* Mobile menu button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden h-10 w-10"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                {isMobileMenuOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
+              </Button>
+              
+              {/* User dropdown - hidden on small mobile, shown on larger screens */}
+              <div className="hidden sm:block">
+                <UserDropdown />
+              </div>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Mobile Navigation Menu */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden border-t border-white/20 bg-white/80 backdrop-blur-sm">
+          <div className="px-2 pt-2 pb-3 space-y-1">
+            <Link
+              href="/dashboard"
+              className="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/dashboard/chatbots"
+              className="bg-purple-50 border-purple-500 text-purple-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Chatbots
+            </Link>
+            <Link
+              href="/dashboard/settings"
+              className="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Settings
+            </Link>
+            
+            {/* Mobile User Profile Section */}
+            <div className="pt-3 border-t border-gray-200 mt-3">
+              <div className="px-3 py-2">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
+                      <span className="text-sm font-medium text-purple-600">
+                        {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-base font-medium text-gray-800">
+                      {user?.displayName || 'User'}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {user?.email}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chatbots Content */}
       <main className="relative max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
