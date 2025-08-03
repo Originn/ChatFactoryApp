@@ -78,6 +78,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isIOSBrowser = () => {
     const result = /iPad|iPhone|iPod/.test(navigator.userAgent);
     console.log('🔍 isIOSBrowser:', result, 'UserAgent:', navigator.userAgent);
+    
+    // Send debug info to server for iPhone devices
+    if (result && typeof window !== 'undefined') {
+      fetch('/api/debug/iphone-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'isIOSBrowser_called',
+          result,
+          userAgent: navigator.userAgent,
+          location: window.location.href,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(e => console.log('Debug log failed:', e));
+    }
+    
     return result;
   };
 
@@ -109,6 +125,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('🔄 Auth state changed:', user ? `User: ${user.email}` : 'No user');
       console.log('📍 Current location:', window.location.pathname);
       console.log('🏁 Loading state before:', loading);
+      
+      // Send debug info to server about auth state changes
+      if (typeof window !== 'undefined') {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (isIOS) {
+          fetch('/api/debug/iphone-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'auth_state_changed',
+              hasUser: !!user,
+              userEmail: user?.email || null,
+              currentPath: window.location.pathname,
+              userAgent: navigator.userAgent,
+              timestamp: new Date().toISOString()
+            })
+          }).catch(e => console.log('Debug log failed:', e));
+        }
+      }
       
       setUser(user);
       await loadUserProfile(user);
@@ -259,6 +294,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async (): Promise<User> => {
     console.log('🚀 signInWithGoogle called');
     
+    // Send debug info to server for all signInWithGoogle attempts
+    if (typeof window !== 'undefined') {
+      fetch('/api/debug/iphone-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'signInWithGoogle_called',
+          userAgent: navigator.userAgent,
+          location: window.location.href,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(e => console.log('Debug log failed:', e));
+    }
+    
     try {
       const shouldUseRedirect = isMobileDevice() || isIOSBrowser();
       console.log('🔀 Should use redirect?', shouldUseRedirect);
@@ -272,6 +321,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // For iOS browsers, we need to handle the redirect differently
         if (isIOSBrowser()) {
           console.log('🍎 iOS browser detected, throwing REDIRECT_INITIATED');
+          
+          // Send debug info to server about redirect initiation
+          if (typeof window !== 'undefined') {
+            fetch('/api/debug/iphone-auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'iOS_redirect_initiated',
+                userAgent: navigator.userAgent,
+                location: window.location.href,
+                timestamp: new Date().toISOString()
+              })
+            }).catch(e => console.log('Debug log failed:', e));
+          }
+          
           // iOS browsers handle redirects differently, so we just initiate the redirect
           // The actual sign-in will be handled by the redirect result in useEffect
           // We don't return a promise here as iOS browsers will navigate away
