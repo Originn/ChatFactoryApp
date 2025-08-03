@@ -252,3 +252,92 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply from-purple-500 to-blue-500;
 }
+
+/* Force all Lucide React icons to be black and white only */
+@layer components {
+  /* Target all SVG elements that are Lucide icons */
+  svg[data-lucide],
+  .lucide,
+  svg.lucide {
+    color: black !important;
+    fill: none !important;
+    stroke: currentColor !important;
+  }
+  
+  /* Dark mode - icons should be white */
+  .dark svg[data-lucide],
+  .dark .lucide,
+  .dark svg.lucide {
+    color: white !important;
+  }
+  
+  /* Override any existing color classes for icons */
+  .text-red-500 svg[data-lucide],
+  .text-red-600 svg[data-lucide],
+  .text-green-500 svg[data-lucide],
+  .text-green-600 svg[data-lucide],
+  .text-blue-500 svg[data-lucide],
+  .text-blue-600 svg[data-lucide],
+  .text-purple-500 svg[data-lucide],
+  .text-purple-600 svg[data-lucide],
+  .text-purple-700 svg[data-lucide],
+  .text-amber-500 svg[data-lucide],
+  .text-amber-600 svg[data-lucide],
+  .text-yellow-500 svg[data-lucide],
+  .text-yellow-600 svg[data-lucide],
+  .text-orange-500 svg[data-lucide],
+  .text-orange-600 svg[data-lucide],
+  svg[data-lucide].text-red-500,
+  svg[data-lucide].text-red-600,
+  svg[data-lucide].text-green-500,
+  svg[data-lucide].text-green-600,
+  svg[data-lucide].text-blue-500,
+  svg[data-lucide].text-blue-600,
+  svg[data-lucide].text-purple-500,
+  svg[data-lucide].text-purple-600,
+  svg[data-lucide].text-purple-700,
+  svg[data-lucide].text-amber-500,
+  svg[data-lucide].text-amber-600,
+  svg[data-lucide].text-yellow-500,
+  svg[data-lucide].text-yellow-600,
+  svg[data-lucide].text-orange-500,
+  svg[data-lucide].text-orange-600 {
+    color: black !important;
+    stroke: black !important;
+  }
+  
+  /* Dark mode overrides for colored icons */
+  .dark .text-red-500 svg[data-lucide],
+  .dark .text-red-600 svg[data-lucide],
+  .dark .text-green-500 svg[data-lucide],
+  .dark .text-green-600 svg[data-lucide],
+  .dark .text-blue-500 svg[data-lucide],
+  .dark .text-blue-600 svg[data-lucide],
+  .dark .text-purple-500 svg[data-lucide],
+  .dark .text-purple-600 svg[data-lucide],
+  .dark .text-purple-700 svg[data-lucide],
+  .dark .text-amber-500 svg[data-lucide],
+  .dark .text-amber-600 svg[data-lucide],
+  .dark .text-yellow-500 svg[data-lucide],
+  .dark .text-yellow-600 svg[data-lucide],
+  .dark .text-orange-500 svg[data-lucide],
+  .dark .text-orange-600 svg[data-lucide],
+  .dark svg[data-lucide].text-red-500,
+  .dark svg[data-lucide].text-red-600,
+  .dark svg[data-lucide].text-green-500,
+  .dark svg[data-lucide].text-green-600,
+  .dark svg[data-lucide].text-blue-500,
+  .dark svg[data-lucide].text-blue-600,
+  .dark svg[data-lucide].text-purple-500,
+  .dark svg[data-lucide].text-purple-600,
+  .dark svg[data-lucide].text-purple-700,
+  .dark svg[data-lucide].text-amber-500,
+  .dark svg[data-lucide].text-amber-600,
+  .dark svg[data-lucide].text-yellow-500,
+  .dark svg[data-lucide].text-yellow-600,
+  .dark svg[data-lucide].text-orange-500,
+  .dark svg[data-lucide].text-orange-600 {
+    color: white !important;
+    stroke: white !important;
+  }
+}
