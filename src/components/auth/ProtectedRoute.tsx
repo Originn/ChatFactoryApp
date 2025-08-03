@@ -21,7 +21,37 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       (localStorage.getItem('devEmailVerified') === 'true' || 
        (user && localStorage.getItem(`user_${user.uid}_verified`) === 'true'));
     
-    if (!loading && !user && pathname !== '/login' && pathname !== '/signup' && !pathname.startsWith('/auth/') && pathname !== '/email-verification') {
+    // Don't redirect if we're still loading authentication state
+    if (loading) return;
+    
+    // Don't redirect if we're already on a public page
+    if (pathname === '/login' || pathname === '/signup' || pathname.startsWith('/auth/') || pathname === '/email-verification') {
+      return;
+    }
+    
+    // Check if we might be in the middle of an OAuth redirect
+    // Look for common OAuth callback indicators in the URL
+    const isOAuthCallback = typeof window !== 'undefined' && (
+      window.location.search.includes('code=') ||
+      window.location.search.includes('state=') ||
+      window.location.hash.includes('access_token=') ||
+      document.referrer.includes('accounts.google.com')
+    );
+    
+    // If we're potentially in an OAuth callback, give it more time to complete
+    if (isOAuthCallback && !user) {
+      const timeoutId = setTimeout(() => {
+        // Only redirect if user is still null after OAuth processing time
+        if (!user && !loading) {
+          router.push('/login');
+        }
+      }, 2000); // Wait 2 seconds for OAuth to complete
+      
+      return () => clearTimeout(timeoutId);
+    }
+    
+    // Standard redirect for unauthenticated users
+    if (!user) {
       router.push('/login');
     }
   }, [user, loading, router, pathname]);
