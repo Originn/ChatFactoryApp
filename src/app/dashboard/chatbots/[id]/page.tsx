@@ -152,10 +152,18 @@ export default function ChatbotDetailPage() {
   };
 
   const confirmDeleteChatbot = async (deleteVectorstore: boolean) => {
+    if (!chatbot) return;
+    
     setIsDeleting(true);
     setError(null);
     
     try {
+      // Get Vercel project info from the chatbot data
+      const vercelProjectId = chatbot.deployment?.vercelProjectId;
+      const vercelProjectName = vercelProjectId || (chatbot.name ? 
+        chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
+      
+      // Delete vector store if requested
       if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
         console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
         
@@ -179,11 +187,45 @@ export default function ChatbotDetailPage() {
         }
       }
       
-      await deleteDoc(doc(db, 'chatbots', chatbot!.id));
+      // Delete from Vercel if we have project info
+      if (vercelProjectId || vercelProjectName) {
+        try {
+          console.log('🚀 Deleting from Vercel:', vercelProjectId || vercelProjectName);
+          const vercelDeleteResponse = await fetch('/api/vercel-delete', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              projectId: vercelProjectId,
+              projectName: vercelProjectName,
+            }),
+          });
+          
+          const vercelResult = await vercelDeleteResponse.json();
+          
+          if (vercelResult.success) {
+            console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
+          } else {
+            console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
+            // Continue with Firestore deletion even if Vercel deletion fails
+          }
+        } catch (vercelError) {
+          console.error('❌ Error deleting from Vercel:', vercelError);
+          // Continue with Firestore deletion even if Vercel deletion fails
+        }
+      } else {
+        console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
+      }
       
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'chatbots', chatbot.id));
+      
+      // Delete chatbot folder from Firebase Storage
       if (chatbot?.logoUrl) {
         try {
           await deleteChatbotFolder(user!.uid, chatbot.id);
+          console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
         } catch (logoError) {
           console.warn('⚠️ Error deleting logo folder:', logoError);
         }
