@@ -32,9 +32,14 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   const { user, userProfile, loading: authLoading } = useAuth();
 
   const syncThemeWithProfile = async (theme: string) => {
+    console.log('🔄 Sync theme with profile requested:', theme);
+    console.log('🔄 User:', !!user);
+    console.log('🔄 UserProfile:', !!userProfile);
+    console.log('🔄 AuthLoading:', authLoading);
+    
     // Only sync if user is authenticated and profile is loaded
     if (!user || !userProfile || authLoading) {
-      console.log('Skipping theme sync - auth not ready');
+      console.log('🔄 Skipping theme sync - auth not ready');
       return;
     }
 
@@ -45,9 +50,9 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
           theme: theme as 'light' | 'dark' | 'system'
         }
       });
-      console.log('Theme synced with profile:', theme);
+      console.log('🔄 Theme synced with profile:', theme);
     } catch (error) {
-      console.error('Failed to sync theme with profile:', error);
+      console.error('🔄 Failed to sync theme with profile:', error);
     }
   };
 
@@ -57,7 +62,7 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
         attribute="class"
         defaultTheme="system"
         enableSystem
-        disableTransitionOnChange
+        storageKey="chatfactory-theme"
         {...props}
       >
         <ThemeSync />

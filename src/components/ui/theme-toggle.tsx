@@ -21,8 +21,14 @@ export function ThemeToggle({ showLabel = false, variant = 'icon' }: ThemeToggle
   }, []);
 
   const handleThemeChange = async (newTheme: string) => {
+    console.log('🎨 Theme change requested:', newTheme);
+    console.log('🎨 Current theme before change:', theme);
+    console.log('🎨 Current resolvedTheme before change:', resolvedTheme);
+    
     setTheme(newTheme);
     await syncThemeWithProfile(newTheme);
+    
+    console.log('🎨 Theme change completed');
   };
 
   if (!mounted) {
