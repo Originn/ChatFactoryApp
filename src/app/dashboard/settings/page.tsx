@@ -186,29 +186,33 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center space-x-4">
-          <Link href="/dashboard">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">Account Settings</h1>
-            <p className="text-gray-600 mt-1">Manage your account and usage</p>
+    <div className="container mx-auto py-4 sm:py-8 px-4 max-w-4xl">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0">
+            <Link href="/dashboard">
+              <Button variant="outline" size="sm" className="w-fit">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold">Account Settings</h1>
+              <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage your account and usage</p>
+            </div>
           </div>
+          {isFree && (
+            <Button 
+              onClick={handleUpgrade}
+              className="bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 w-fit"
+              size="sm"
+            >
+              <Crown className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Upgrade to Pro</span>
+              <span className="sm:hidden">Upgrade</span>
+            </Button>
+          )}
         </div>
-        {isFree && (
-          <Button 
-            onClick={handleUpgrade}
-            className="bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700"
-          >
-            <Crown className="h-4 w-4 mr-2" />
-            Upgrade to Pro
-          </Button>
-        )}
       </div>
       
       {message && (
@@ -226,12 +230,18 @@ export default function SettingsPage() {
       )}
 
       <Tabs defaultValue="usage" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="usage">Usage & Plan</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="danger">Danger Zone</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-1 h-auto p-1">
+          <TabsTrigger value="usage" className="text-xs sm:text-sm px-2 py-2">
+            <span className="hidden sm:inline">Usage & Plan</span>
+            <span className="sm:hidden">Usage</span>
+          </TabsTrigger>
+          <TabsTrigger value="billing" className="text-xs sm:text-sm px-2 py-2">Billing</TabsTrigger>
+          <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-2">Profile</TabsTrigger>
+          <TabsTrigger value="security" className="text-xs sm:text-sm px-2 py-2">Security</TabsTrigger>
+          <TabsTrigger value="danger" className="text-xs sm:text-sm px-2 py-2 col-span-2 sm:col-span-1">
+            <span className="hidden sm:inline">Danger Zone</span>
+            <span className="sm:hidden">Danger</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Usage & Plan Tab */}
@@ -239,13 +249,13 @@ export default function SettingsPage() {
           {/* Current Plan Card */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
                     <Crown className="h-5 w-5" />
                     Current Plan
                   </CardTitle>
-                  <CardDescription>Your subscription and usage details</CardDescription>
+                  <CardDescription className="text-sm">Your subscription and usage details</CardDescription>
                 </div>
                 <Badge 
                   variant="secondary" 
