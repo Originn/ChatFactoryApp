@@ -259,7 +259,7 @@ export default function SettingsPage() {
                 </div>
                 <Badge 
                   variant="secondary" 
-                  className={`${
+                  className={`text-xs sm:text-sm px-2 py-1 ${
                     isFree 
                       ? 'bg-purple-100 text-purple-700' 
                       : 'bg-green-100 text-green-700'
@@ -269,7 +269,7 @@ export default function SettingsPage() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6">
               {/* Plan Features */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-3">
