@@ -97,9 +97,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadUserProfile(user);
       setLoading(false);
       
-      // If user just authenticated and we're on login page, redirect to dashboard
+      // Clear OAuth redirect flag when user is authenticated
+      if (user && typeof window !== 'undefined') {
+        sessionStorage.removeItem('oauth_redirect_pending');
+      }
+      
+      // For Safari, delay the redirect to allow OAuth completion
       if (user && typeof window !== 'undefined' && window.location.pathname === '/login') {
-        window.location.href = '/dashboard';
+        if (isSafariOnIOS()) {
+          // Safari needs more time to complete OAuth flow
+          setTimeout(() => {
+            if (window.location.pathname === '/login') {
+              window.location.href = '/dashboard';
+            }
+          }, 1000);
+        } else {
+          window.location.href = '/dashboard';
+        }
       }
     });
 
@@ -111,13 +125,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Handle the redirect result (create profile if needed)
           await handleGoogleAuthResult(result.user);
           
-          // Redirect to dashboard after successful OAuth
+          // Clear OAuth redirect flag
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('oauth_redirect_pending');
+          }
+          
+          // For Safari, use delayed redirect to avoid race conditions
           if (typeof window !== 'undefined' && window.location.pathname === '/login') {
-            window.location.href = '/dashboard';
+            if (isSafariOnIOS()) {
+              setTimeout(() => {
+                if (window.location.pathname === '/login') {
+                  window.location.href = '/dashboard';
+                }
+              }, 1500);
+            } else {
+              window.location.href = '/dashboard';
+            }
           }
         }
       } catch (error) {
         console.error('Redirect result error:', error);
+        // Clear flag on error too
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('oauth_redirect_pending');
+        }
       }
     };
 

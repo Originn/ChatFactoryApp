@@ -35,17 +35,30 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       window.location.search.includes('code=') ||
       window.location.search.includes('state=') ||
       window.location.hash.includes('access_token=') ||
-      document.referrer.includes('accounts.google.com')
+      document.referrer.includes('accounts.google.com') ||
+      sessionStorage.getItem('oauth_redirect_pending') === 'true'
     );
     
+    // Safari-specific detection
+    const isSafariOnIOS = () => {
+      if (typeof window === 'undefined') return false;
+      const userAgent = navigator.userAgent;
+      const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+      const isSafari = /Safari/.test(userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(userAgent);
+      return isIOS && isSafari;
+    };
+    
     // If we're potentially in an OAuth callback, give it more time to complete
+    // Safari needs extra time due to its security restrictions
     if (isOAuthCallback && !user) {
+      const safariDelay = isSafariOnIOS() ? 4000 : 2000; // 4 seconds for Safari, 2 for others
+      
       const timeoutId = setTimeout(() => {
         // Only redirect if user is still null after OAuth processing time
         if (!user && !loading) {
           router.push('/login');
         }
-      }, 2000); // Wait 2 seconds for OAuth to complete
+      }, safariDelay);
       
       return () => clearTimeout(timeoutId);
     }
