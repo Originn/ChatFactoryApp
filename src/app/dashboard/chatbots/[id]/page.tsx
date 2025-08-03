@@ -154,16 +154,20 @@ export default function ChatbotDetailPage() {
   const confirmDeleteChatbot = async (deleteVectorstore: boolean) => {
     if (!chatbot) return;
     
+    const id = chatbot.id;
+    
     setIsDeleting(true);
     setError(null);
+    let firebaseDeleteResult: any = null; // Declare at function scope
     
     try {
-      // Get Vercel project info from the chatbot data
+      // Get the chatbot data to retrieve Vercel project info and user info
       const vercelProjectId = chatbot.deployment?.vercelProjectId;
       const vercelProjectName = vercelProjectId || (chatbot.name ? 
         chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
+      const chatbotUserId = chatbot.userId;
       
-      // Delete vector store if requested
+      // Delete vectorstore if requested
       if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
         console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
         
@@ -190,7 +194,7 @@ export default function ChatbotDetailPage() {
       // Delete from Vercel if we have project info
       if (vercelProjectId || vercelProjectName) {
         try {
-          console.log('🚀 Deleting from Vercel:', vercelProjectId || vercelProjectName);
+          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
           const vercelDeleteResponse = await fetch('/api/vercel-delete', {
             method: 'DELETE',
             headers: {
@@ -208,29 +212,106 @@ export default function ChatbotDetailPage() {
             console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
           } else {
             console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
-            // Continue with Firestore deletion even if Vercel deletion fails
+            // Continue with deletion even if Vercel deletion fails
           }
         } catch (vercelError) {
           console.error('❌ Error deleting from Vercel:', vercelError);
-          // Continue with Firestore deletion even if Vercel deletion fails
+          // Continue with deletion even if Vercel deletion fails
         }
       } else {
         console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
       }
       
-      // Delete from Firestore
-      await deleteDoc(doc(db, 'chatbots', chatbot.id));
-      
-      // Delete chatbot folder from Firebase Storage
-      if (chatbot?.logoUrl) {
+      // Delete chatbot folder from Firebase Storage (includes logos and any other files)
+      if (chatbotUserId) {
         try {
-          await deleteChatbotFolder(user!.uid, chatbot.id);
+          console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
+          await deleteChatbotFolder(chatbotUserId, id);
           console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
-        } catch (logoError) {
-          console.warn('⚠️ Error deleting logo folder:', logoError);
+        } catch (storageError) {
+          console.error('❌ Error deleting chatbot folder:', storageError);
+          // Continue with deletion even if storage deletion fails
         }
+      } else {
+        console.log('ℹ️ No user ID found, skipping storage deletion');
       }
       
+      // Handle Firebase project deletion or cleanup
+      try {
+        // Check if we're using reusable Firebase project mode
+        const useReusableFirebase = process.env.NEXT_PUBLIC_USE_REUSABLE_FIREBASE_PROJECT === 'true';
+        
+        if (useReusableFirebase) {
+          console.log('🧹 Cleaning up reusable Firebase project data for chatbot:', id);
+          
+          // Call the cleanup API route
+          try {
+            const cleanupResponse = await fetch('/api/cleanup-reusable-firebase', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                chatbotId: id,
+                userId: chatbotUserId || user?.uid
+              }),
+            });
+
+            const cleanupResult = await cleanupResponse.json();
+            
+            if (cleanupResult.success) {
+              console.log('✅ Reusable Firebase project cleanup completed:', cleanupResult.message);
+            } else {
+              console.warn('⚠️ Reusable Firebase project cleanup had issues:', cleanupResult.message);
+            }
+          } catch (cleanupError: any) {
+            console.error('❌ Error calling cleanup API:', cleanupError);
+          }
+          
+        } else {
+          console.log('🔥 Attempting automated Firebase project deletion for chatbot:', id);
+          
+          if (!user) {
+            console.error('❌ No authenticated user');
+            throw new Error('No authenticated user');
+          }
+
+          // Get auth token from Firebase user
+          const token = await user.getIdToken();
+          firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(id, token);
+          
+          if (firebaseDeleteResult.success) {
+            if (firebaseDeleteResult.error) {
+              console.warn('⚠️ Firebase project deletion completed with warnings:', firebaseDeleteResult.error);
+            } else {
+              console.log('✅ Successfully deleted Firebase project automatically');
+            }
+          } else {
+            console.error('❌ Failed to delete Firebase project:', firebaseDeleteResult.error);
+          }
+        }
+      } catch (firebaseError: any) {
+        console.error('❌ Error with Firebase project cleanup:', firebaseError);
+        firebaseDeleteResult = { success: false, error: firebaseError.message };
+      }
+      
+      // Only delete from Firestore if Firebase project deletion didn't handle it
+      if (!firebaseDeleteResult?.success) {
+        try {
+          // Delete the document from Firestore
+          await deleteDoc(doc(db, "chatbots", id));
+          console.log('✅ Deleted chatbot document from Firestore');
+        } catch (firestoreError: any) {
+          console.warn('⚠️ Firestore deletion failed (document might already be deleted):', firestoreError.message);
+          // Don't throw error - chatbot might already be deleted by Firebase project cleanup
+        }
+      } else {
+        console.log('✅ Chatbot document already deleted by Firebase project cleanup');
+      }
+      
+      console.log('✅ Chatbot deleted successfully from all services');
+      
+      // Navigate back to chatbots list
       router.push("/dashboard/chatbots");
     } catch (err: any) {
       console.error("❌ Error deleting chatbot:", err);
