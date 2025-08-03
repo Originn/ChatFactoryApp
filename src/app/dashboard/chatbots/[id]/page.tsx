@@ -555,7 +555,7 @@ export default function ChatbotDetailPage() {
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center">
-                          <span className={`h-3 w-3 rounded-full ${chatbot.status === 'deployed' ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
+                          <span className={`h-3 w-3 rounded-full ${chatbot.deployment?.status === 'deployed' ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
                           <div className="text-sm font-medium">{chatbot.status || 'Draft'}</div>
                         </div>
                       </CardContent>
