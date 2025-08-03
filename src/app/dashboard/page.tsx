@@ -567,7 +567,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             ) : chatbots.length === 0 ? (
-              <Card variant="glow" className="animate-pulse-soft">
+              <Card variant="glow">
                 <CardContent className="p-12 text-center">
                   <Bot className="h-16 w-16 text-purple-600 mx-auto mb-6" />
                   <h3 className="text-xl font-semibold text-gray-900 mb-3">No chatbots yet</h3>
