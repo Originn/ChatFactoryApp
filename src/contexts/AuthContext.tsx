@@ -344,9 +344,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      const shouldUseRedirect = isMobileDevice() || isIOSBrowser();
       const isActualIPhone = /iPhone/.test(navigator.userAgent);
-      console.log('🔀 Should use redirect?', shouldUseRedirect, 'Is iPhone?', isActualIPhone);
+      console.log('🔀 iPhone detected:', isActualIPhone);
+      
+      // Use popup for iPhone (like SolidCam), redirect for other mobile devices
+      if (isActualIPhone) {
+        console.log('🍎 Using popup flow for iPhone (like SolidCam)');
+        
+        // Send debug info about iPhone popup approach
+        if (typeof window !== 'undefined') {
+          fetch('/api/debug/iphone-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'iPhone_using_popup_like_solidcam',
+              userAgent: navigator.userAgent,
+              location: window.location.href,
+              timestamp: new Date().toISOString()
+            })
+          }).catch(e => console.log('Debug log failed:', e));
+        }
+        
+        try {
+          const result = await signInWithPopup(auth, googleProvider);
+          console.log('✅ iPhone popup success:', result.user?.email);
+          await handleGoogleAuthResult(result.user);
+          return result.user;
+        } catch (popupError) {
+          console.error('❌ iPhone popup failed:', popupError);
+          
+          // Send debug info about popup failure
+          if (typeof window !== 'undefined') {
+            fetch('/api/debug/iphone-auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'iPhone_popup_failed',
+                error: popupError.message,
+                userAgent: navigator.userAgent,
+                timestamp: new Date().toISOString()
+              })
+            }).catch(e => console.log('Debug log failed:', e));
+          }
+          
+          throw popupError;
+        }
+      }
+      
+      // For non-iPhone mobile devices, still use redirect
+      const shouldUseRedirect = isMobileDevice() || isIOSBrowser();
+      console.log('🔀 Should use redirect for non-iPhone mobile?', shouldUseRedirect);
       
       if (shouldUseRedirect) {
         console.log('📱 Using redirect flow for mobile/iOS');
