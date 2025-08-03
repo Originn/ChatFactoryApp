@@ -48,7 +48,7 @@ export default function UserDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-purple-200">
+        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-[9999] border border-purple-200">
           <div className="px-4 py-2 border-b">
             <p className="text-sm font-medium truncate">{user?.email}</p>
           </div>

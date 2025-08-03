@@ -36,8 +36,10 @@ import {
   Star,
   Rocket,
   Menu,
-  X
+  X,
+  LogOut
 } from "lucide-react";
+import { useRouter } from 'next/navigation';
 
 // Define the Chatbot type
 interface Chatbot {
@@ -55,7 +57,8 @@ interface Chatbot {
 }
 
 export default function DashboardPage() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, signOut } = useAuth();
+  const router = useRouter();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -65,6 +68,15 @@ export default function DashboardPage() {
     totalQueries: 0,
     successRate: 0
   });
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -137,7 +149,7 @@ export default function DashboardPage() {
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-10 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
+      <header className="relative z-50 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Left section with logo */}
@@ -310,6 +322,17 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 )}
+                
+                {/* Mobile logout button */}
+                <div className="mt-3 px-4">
+                  <button
+                    onClick={handleSignOut}
+                    className="flex items-center w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -317,7 +340,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Dashboard Content */}
-      <main className="relative z-10 max-w-7xl mx-auto py-4 sm:py-6 lg:py-8 px-4 sm:px-6 lg:px-8">
+      <main className="relative max-w-7xl mx-auto py-4 sm:py-6 lg:py-8 px-4 sm:px-6 lg:px-8">
           {/* Welcome Section */}
           <div className="mb-6 sm:mb-8 animate-fade-in">
             <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">

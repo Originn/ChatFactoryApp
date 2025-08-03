@@ -96,6 +96,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Handle any pending redirect results (for edge cases or cached states)
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result && result.user) {
+          await handleGoogleAuthResult(result.user);
+        }
+      } catch (error) {
+        console.error('Redirect result error:', error);
+      }
+    };
+
+    handleRedirectResult();
     return () => unsubscribe();
   }, []);
 

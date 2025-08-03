@@ -446,7 +446,7 @@ export default function ChatbotsPage() {
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-10 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
+      <header className="relative z-50 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
@@ -497,7 +497,7 @@ export default function ChatbotsPage() {
       </header>
 
       {/* Chatbots Content */}
-      <main className="relative z-10 max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
+      <main className="relative max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
         <div className="px-4 sm:px-0">
           {/* Header Section */}
           <div className="mb-8 animate-fade-in">
