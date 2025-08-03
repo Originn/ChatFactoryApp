@@ -154,9 +154,7 @@ export default function DashboardPage() {
             {/* Left section with logo */}
             <div className="flex items-center">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-                  <Bot className="h-5 w-5 text-white" />
-                </div>
+                <Bot className="h-8 w-8 text-purple-600" />
                 <span className="font-bold text-lg sm:text-xl text-gradient">Chat Factory</span>
               </div>
               
@@ -410,9 +408,7 @@ export default function DashboardPage() {
               <CardHeader className="pb-2 sm:pb-3">
                 <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                    </div>
+                    <Bot className="h-5 w-5 text-blue-600" />
                     <span className="text-xs sm:text-sm">Total Chatbots</span>
                   </div>
                   {userProfile?.subscription.plan === 'free' && (
@@ -436,9 +432,7 @@ export default function DashboardPage() {
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
                 <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center space-x-2">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                  </div>
+                  <MessageCircle className="h-5 w-5 text-green-600" />
                   <span className="text-xs sm:text-sm">Monthly Queries</span>
                 </CardTitle>
               </CardHeader>
@@ -461,9 +455,7 @@ export default function DashboardPage() {
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
                 <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center space-x-2">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                  </div>
+                  <FileText className="h-5 w-5 text-purple-600" />
                   <span className="text-xs sm:text-sm">Total Documents</span>
                 </CardTitle>
               </CardHeader>
@@ -479,9 +471,7 @@ export default function DashboardPage() {
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
                 <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center space-x-2">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Target className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                  </div>
+                  <Target className="h-5 w-5 text-amber-600" />
                   <span className="text-xs sm:text-sm">Success Rate</span>
                 </CardTitle>
               </CardHeader>
@@ -551,9 +541,7 @@ export default function DashboardPage() {
           <div className="mb-6 sm:mb-8 animate-slide-up" style={{ animationDelay: '0.7s' }}>
             <div className="flex items-center justify-between mb-4 sm:mb-6">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center mr-3">
-                  <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                </div>
+                <Bot className="h-6 w-6 text-blue-600 mr-3" />
                 Your Chatbots
               </h2>
               <Button asChild variant="outline" className="border-purple-200 hover:bg-purple-50 h-10 sm:h-11">
@@ -575,9 +563,7 @@ export default function DashboardPage() {
             ) : chatbots.length === 0 ? (
               <Card variant="glow" className="animate-pulse-soft">
                 <CardContent className="p-12 text-center">
-                  <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl flex items-center justify-center mb-6">
-                    <Bot className="h-8 w-8 text-purple-600" />
-                  </div>
+                  <Bot className="h-16 w-16 text-purple-600 mx-auto mb-6" />
                   <h3 className="text-xl font-semibold text-gray-900 mb-3">No chatbots yet</h3>
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     {userProfile?.subscription.plan === 'free' 
@@ -805,17 +791,13 @@ export default function DashboardPage() {
           {/* Enhanced Quick Actions */}
           <div className="animate-slide-up" style={{ animationDelay: '0.8s' }}>
             <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-3">
-                <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-              </div>
+              <Sparkles className="h-6 w-6 text-purple-600 mr-3" />
               Quick Actions
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <Card variant="elevated" hover="lift" className="group">
                 <CardContent className="p-4 sm:p-6 flex flex-col items-center text-center h-full">
-                  <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform shadow-lg">
-                    <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
-                  </div>
+                  <Plus className="h-12 w-12 sm:h-16 sm:w-16 text-blue-600 mb-3 sm:mb-4 group-hover:scale-110 transition-transform" />
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Create New Chatbot</h3>
                   <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6 flex-grow">
                     {userProfile?.subscription.plan === 'free' 
@@ -837,9 +819,7 @@ export default function DashboardPage() {
 
               <Card variant="elevated" hover="lift" className="group">
                 <CardContent className="p-4 sm:p-6 flex flex-col items-center text-center h-full">
-                  <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform shadow-lg">
-                    <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
-                  </div>
+                  <Upload className="h-12 w-12 sm:h-16 sm:w-16 text-green-600 mb-3 sm:mb-4 group-hover:scale-110 transition-transform" />
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Upload Documents</h3>
                   <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6 flex-grow">
                     Add new documentation files to your knowledge base and train your chatbots.

@@ -50,15 +50,13 @@ export const UsageOverviewCard: React.FC = () => {
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-              <Activity className="h-5 w-5 text-white" />
-            </div>
+            <Activity className="h-8 w-8 text-purple-600" />
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Usage Overview</h3>
               <p className="text-sm text-gray-500">Track your free plan limits</p>
             </div>
           </div>
-          <Badge className="bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 border border-purple-200 shadow-sm">
+          <Badge className="bg-gradient-to-r from-purple-500 to-blue-500 text-white border border-purple-600 shadow-lg">
             <Crown className="h-3 w-3 mr-1" />
             Free Plan
           </Badge>
@@ -70,9 +68,7 @@ export const UsageOverviewCard: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-green-500 rounded-lg flex items-center justify-center">
-                <Activity className="h-3 w-3 text-white" />
-              </div>
+              <Activity className="h-5 w-5 text-green-600" />
               <span className="text-sm font-semibold text-gray-800">Monthly Queries</span>
             </div>
             <span className={`text-sm font-bold ${
@@ -127,11 +123,9 @@ export const UsageOverviewCard: React.FC = () => {
         </div>
 
         {/* Free Tier Benefits */}
-        <div className="bg-gradient-to-br from-purple-25 to-blue-25 p-5 rounded-xl border border-purple-200/30">
+        <div className="bg-gradient-to-br from-purple-100 to-blue-100 p-5 rounded-xl border border-purple-300">
           <div className="flex items-center mb-3">
-            <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-2">
-              <Crown className="h-3 w-3 text-white" />
-            </div>
+            <Crown className="h-6 w-6 text-purple-600 mr-2" />
             <h3 className="font-semibold text-sm text-gray-900">Free Plan Includes</h3>
           </div>
           <div className="grid grid-cols-1 gap-2 text-xs">
@@ -223,9 +217,7 @@ export const UsageAnalyticsChart: React.FC = () => {
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-              <BarChart3 className="h-5 w-5 text-white" />
-            </div>
+            <BarChart3 className="h-8 w-8 text-blue-600" />
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Weekly Analytics</h3>
               <p className="text-sm text-gray-500">Your query patterns this week</p>
