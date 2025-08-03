@@ -1,23 +1,18 @@
 // src/services/firebaseAuthorizedDomainsService.ts
+import { getAuthClient } from '@/lib/gcp-auth';
 
 export class FirebaseAuthorizedDomainsService {
   private static readonly API_BASE = 'https://identitytoolkit.googleapis.com/admin/v2';
   
   private static async getAccessToken(): Promise<string> {
-    const { GoogleAuth } = require('google-auth-library');
-    
-    const auth = new GoogleAuth({
-      scopes: [
-        'https://www.googleapis.com/auth/cloud-platform',
-        'https://www.googleapis.com/auth/firebase',
-        'https://www.googleapis.com/auth/identitytoolkit'
-      ],
-      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
-    });
-
-    const client = await auth.getClient();
-    const tokenResponse = await client.getAccessToken();
-    return tokenResponse.token!;
+    try {
+      const client = await getAuthClient();
+      const tokenResponse = await client.getAccessToken();
+      return tokenResponse.token!;
+    } catch (error) {
+      console.error('❌ Failed to get access token for Firebase Auth domains:', error);
+      throw error;
+    }
   }
 
   /**
