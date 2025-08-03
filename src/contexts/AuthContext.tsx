@@ -76,18 +76,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Detect any iOS browser (Safari, Chrome, etc.) - they all need redirect handling
   const isIOSBrowser = () => {
-    const result = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    console.log('🔍 isIOSBrowser:', result, 'UserAgent:', navigator.userAgent);
+    const userAgent = navigator.userAgent;
+    const result = /iPad|iPhone|iPod/.test(userAgent);
+    const deviceInfo = {
+      isIPhone: /iPhone/.test(userAgent),
+      isIPad: /iPad/.test(userAgent),
+      isIPod: /iPod/.test(userAgent),
+      isMacOS: /Macintosh/.test(userAgent),
+      isIOS: result,
+      screenWidth: window.screen?.width || 'unknown',
+      screenHeight: window.screen?.height || 'unknown',
+      windowWidth: window.innerWidth || 'unknown',
+      windowHeight: window.innerHeight || 'unknown'
+    };
     
-    // Send debug info to server for iPhone devices
-    if (result && typeof window !== 'undefined') {
+    console.log('🔍 isIOSBrowser:', result, 'DeviceInfo:', deviceInfo, 'UserAgent:', userAgent);
+    
+    // Send debug info to server for all devices (not just iOS) to see what we're getting
+    if (typeof window !== 'undefined') {
       fetch('/api/debug/iphone-auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event: 'isIOSBrowser_called',
           result,
-          userAgent: navigator.userAgent,
+          deviceInfo,
+          userAgent,
           location: window.location.href,
           timestamp: new Date().toISOString()
         })
