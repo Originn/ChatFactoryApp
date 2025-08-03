@@ -510,10 +510,8 @@ export default function ChatbotsPage() {
                 )}
               </Button>
               
-              {/* Theme toggle */}
-              <div className="hidden sm:block">
-                <ThemeToggle />
-              </div>
+              {/* Theme toggle - always visible */}
+              <ThemeToggle />
               
               {/* User dropdown - hidden on small mobile, shown on larger screens */}
               <div className="hidden sm:block">
@@ -568,6 +566,14 @@ export default function ChatbotsPage() {
                     <div className="text-sm text-gray-500">
                       {user?.email}
                     </div>
+                  </div>
+                </div>
+                
+                {/* Mobile Theme Toggle */}
+                <div className="mt-3 px-3">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</span>
+                    <ThemeToggle />
                   </div>
                 </div>
               </div>
