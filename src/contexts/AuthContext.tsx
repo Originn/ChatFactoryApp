@@ -70,6 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return isIOS && isSafari;
   };
 
+  // Detect any iOS browser (Safari, Chrome, etc.) - they all need redirect handling
+  const isIOSBrowser = () => {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent);
+  };
+
   // Load user profile when user changes
   const loadUserProfile = async (user: User | null) => {
     if (user) {
@@ -102,15 +107,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem('oauth_redirect_pending');
       }
       
-      // For Safari, delay the redirect to allow OAuth completion
-      if (user && typeof window !== 'undefined' && window.location.pathname === '/login') {
-        if (isSafariOnIOS()) {
-          // Safari needs more time to complete OAuth flow
+      // Handle redirect for all iOS browsers and login page variants
+      if (user && typeof window !== 'undefined' && 
+          (window.location.pathname === '/login' || window.location.pathname.startsWith('/login'))) {
+        if (isIOSBrowser()) {
+          // iOS browsers (Safari, Chrome, etc.) need more time to complete OAuth flow
+          const delay = isSafariOnIOS() ? 1000 : 800; // Safari gets 1s, Chrome gets 0.8s
           setTimeout(() => {
-            if (window.location.pathname === '/login') {
+            if (window.location.pathname === '/login' || window.location.pathname.startsWith('/login')) {
               window.location.href = '/dashboard';
             }
-          }, 1000);
+          }, delay);
         } else {
           window.location.href = '/dashboard';
         }
@@ -130,14 +137,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             sessionStorage.removeItem('oauth_redirect_pending');
           }
           
-          // For Safari, use delayed redirect to avoid race conditions
-          if (typeof window !== 'undefined' && window.location.pathname === '/login') {
-            if (isSafariOnIOS()) {
+          // For iOS browsers, use delayed redirect to avoid race conditions  
+          if (typeof window !== 'undefined' && 
+              (window.location.pathname === '/login' || window.location.pathname.startsWith('/login'))) {
+            if (isIOSBrowser()) {
+              const delay = isSafariOnIOS() ? 1500 : 1000; // Safari gets 1.5s, Chrome gets 1s
               setTimeout(() => {
-                if (window.location.pathname === '/login') {
+                if (window.location.pathname === '/login' || window.location.pathname.startsWith('/login')) {
                   window.location.href = '/dashboard';
                 }
-              }, 1500);
+              }, delay);
             } else {
               window.location.href = '/dashboard';
             }
@@ -205,20 +214,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sign in with Google (mobile-aware with Safari-specific handling)
+  // Sign in with Google (mobile-aware with iOS-specific handling)
   const signInWithGoogle = async (): Promise<User> => {
     try {
-      const shouldUseRedirect = isMobileDevice() || isSafariOnIOS();
+      const shouldUseRedirect = isMobileDevice() || isIOSBrowser();
       
       if (shouldUseRedirect) {
-        // Use redirect for mobile devices and Safari
+        // Use redirect for mobile devices and iOS browsers
         await signInWithRedirect(auth, googleProvider);
         
-        // For Safari on iOS, we need to handle the redirect differently
-        if (isSafariOnIOS()) {
-          // Safari handles redirects differently, so we just initiate the redirect
+        // For iOS browsers, we need to handle the redirect differently
+        if (isIOSBrowser()) {
+          // iOS browsers handle redirects differently, so we just initiate the redirect
           // The actual sign-in will be handled by the redirect result in useEffect
-          // We don't return a promise here as Safari will navigate away
+          // We don't return a promise here as iOS browsers will navigate away
           throw new Error('REDIRECT_INITIATED');
         }
         
