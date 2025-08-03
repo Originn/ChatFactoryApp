@@ -16,11 +16,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Check for dev mode verification bypass
-    const devEmailVerified = process.env.NODE_ENV === 'development' && 
-      (localStorage.getItem('devEmailVerified') === 'true' || 
-       (user && localStorage.getItem(`user_${user.uid}_verified`) === 'true'));
-    
     // Don't redirect if we're still loading authentication state
     if (loading) return;
     
@@ -29,46 +24,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    // Check if we might be in the middle of an OAuth redirect
-    // Look for common OAuth callback indicators in the URL
-    const isOAuthCallback = typeof window !== 'undefined' && (
-      window.location.search.includes('code=') ||
-      window.location.search.includes('state=') ||
-      window.location.hash.includes('access_token=') ||
-      document.referrer.includes('accounts.google.com') ||
-      sessionStorage.getItem('oauth_redirect_pending') === 'true'
-    );
-    
-    // iOS browser detection (Safari, Chrome, etc.)
-    const isIOSBrowser = () => {
-      if (typeof window === 'undefined') return false;
-      return /iPad|iPhone|iPod/.test(navigator.userAgent);
-    };
-    
-    const isSafariOnIOS = () => {
-      if (typeof window === 'undefined') return false;
-      const userAgent = navigator.userAgent;
-      const isIOS = /iPad|iPhone|iPod/.test(userAgent);
-      const isSafari = /Safari/.test(userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(userAgent);
-      return isIOS && isSafari;
-    };
-    
-    // If we're potentially in an OAuth callback, give it more time to complete
-    // iOS browsers need extra time due to security restrictions
-    if (isOAuthCallback && !user) {
-      const iosDelay = isIOSBrowser() ? (isSafariOnIOS() ? 4000 : 3000) : 2000; // Safari=4s, Chrome=3s, others=2s
-      
-      const timeoutId = setTimeout(() => {
-        // Only redirect if user is still null after OAuth processing time
-        if (!user && !loading) {
-          router.push('/login');
-        }
-      }, iosDelay);
-      
-      return () => clearTimeout(timeoutId);
-    }
-    
-    // Standard redirect for unauthenticated users
+    // Redirect unauthenticated users to login
     if (!user) {
       router.push('/login');
     }

@@ -56,80 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Utility function to detect mobile devices with Safari-specific detection
+  // Simple mobile detection
   const isMobileDevice = () => {
-    const result = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-                   window.innerWidth <= 768;
-    console.log('🔍 isMobileDevice:', result, 'UserAgent:', navigator.userAgent, 'Width:', window.innerWidth);
-    return result;
-  };
-
-  // Specifically detect Safari on iOS
-  const isSafariOnIOS = () => {
-    const userAgent = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(userAgent);
-    const isSafari = /Safari/.test(userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(userAgent);
-    const result = isIOS && isSafari;
-    console.log('🔍 isSafariOnIOS:', result, 'isIOS:', isIOS, 'isSafari:', isSafari, 'UserAgent:', userAgent);
-    return result;
-  };
-
-  // Detect any iOS browser (Safari, Chrome, etc.) - they all need redirect handling
-  const isIOSBrowser = () => {
-    const userAgent = navigator.userAgent;
-    
-    // Standard iOS detection
-    const standardIOSCheck = /iPad|iPhone|iPod/.test(userAgent);
-    
-    // Check for iPhone with "Request Desktop Website" enabled
-    // This shows as macOS user agent but with mobile screen dimensions
-    const screenWidth = window.screen?.width || 0;
-    const screenHeight = window.screen?.height || 0;
-    const isMobileScreenSize = screenWidth <= 428 && screenHeight <= 926; // iPhone Pro Max dimensions
-    const hasMacOSUserAgent = /Macintosh/.test(userAgent);
-    const hasWebKitSafari = /WebKit/.test(userAgent) && /Safari/.test(userAgent);
-    const isMobileWithDesktopUA = hasMacOSUserAgent && hasWebKitSafari && isMobileScreenSize;
-    
-    // Detect touch support (reliable mobile indicator)
-    const hasTouchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
-    const result = standardIOSCheck || (isMobileWithDesktopUA && hasTouchSupport);
-    
-    const deviceInfo = {
-      isIPhone: /iPhone/.test(userAgent),
-      isIPad: /iPad/.test(userAgent),
-      isIPod: /iPod/.test(userAgent),
-      isMacOS: /Macintosh/.test(userAgent),
-      isStandardIOS: standardIOSCheck,
-      isMobileWithDesktopUA,
-      hasTouchSupport,
-      isIOS: result,
-      screenWidth,
-      screenHeight,
-      windowWidth: window.innerWidth || 'unknown',
-      windowHeight: window.innerHeight || 'unknown',
-      maxTouchPoints: navigator.maxTouchPoints || 0
-    };
-    
-    console.log('🔍 isIOSBrowser:', result, 'DeviceInfo:', deviceInfo, 'UserAgent:', userAgent);
-    
-    // Send debug info to server for all devices (not just iOS) to see what we're getting
-    if (typeof window !== 'undefined') {
-      fetch('/api/debug/iphone-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'isIOSBrowser_called',
-          result,
-          deviceInfo,
-          userAgent,
-          location: window.location.href,
-          timestamp: new Date().toISOString()
-        })
-      }).catch(e => console.log('Debug log failed:', e));
-    }
-    
-    return result;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           window.innerWidth <= 768;
   };
 
   // Load user profile when user changes
@@ -154,125 +84,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    console.log('🚀 AuthContext useEffect: Setting up auth state listener');
-    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('🔄 Auth state changed:', user ? `User: ${user.email}` : 'No user');
-      console.log('📍 Current location:', window.location.pathname);
-      console.log('🏁 Loading state before:', loading);
-      
-      // Send debug info to server about auth state changes
-      if (typeof window !== 'undefined') {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        if (isIOS) {
-          fetch('/api/debug/iphone-auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'auth_state_changed',
-              hasUser: !!user,
-              userEmail: user?.email || null,
-              currentPath: window.location.pathname,
-              userAgent: navigator.userAgent,
-              timestamp: new Date().toISOString()
-            })
-          }).catch(e => console.log('Debug log failed:', e));
-        }
-      }
-      
       setUser(user);
       await loadUserProfile(user);
       setLoading(false);
       
-      console.log('🏁 Loading state after:', false);
-      
-      // Clear OAuth redirect flag when user is authenticated
-      if (user && typeof window !== 'undefined') {
-        console.log('🧹 Clearing oauth_redirect_pending flag');
-        sessionStorage.removeItem('oauth_redirect_pending');
-      }
-      
-      // Handle redirect for all iOS browsers and login page variants
-      const shouldRedirect = user && typeof window !== 'undefined' && 
-          (window.location.pathname === '/login' || window.location.pathname.startsWith('/login'));
-      
-      console.log('🔀 Should redirect?', shouldRedirect);
-      console.log('📱 Device detection - iOS:', isIOSBrowser(), 'Safari:', isSafariOnIOS(), 'Mobile:', isMobileDevice());
-      
-      if (shouldRedirect) {
-        if (isIOSBrowser()) {
-          // iOS browsers (Safari, Chrome, etc.) need more time to complete OAuth flow
-          const delay = isSafariOnIOS() ? 1000 : 800; // Safari gets 1s, Chrome gets 0.8s
-          console.log(`⏰ iOS browser detected, redirecting in ${delay}ms`);
-          setTimeout(() => {
-            console.log('🔀 Executing iOS redirect to dashboard');
-            if (window.location.pathname === '/login' || window.location.pathname.startsWith('/login')) {
-              window.location.href = '/dashboard';
-            } else {
-              console.log('❌ Path changed, skipping redirect. Current path:', window.location.pathname);
-            }
-          }, delay);
-        } else {
-          console.log('🔀 Non-iOS browser, redirecting immediately');
-          window.location.href = '/dashboard';
-        }
+      // Redirect to dashboard after successful authentication
+      if (user && typeof window !== 'undefined' && 
+          (window.location.pathname === '/login' || window.location.pathname.startsWith('/login'))) {
+        window.location.href = '/dashboard';
       }
     });
 
-    // Handle redirect result for mobile Google sign-in
-    const handleRedirectResult = async () => {
-      console.log('🔄 Checking for redirect result...');
-      try {
-        const result = await getRedirectResult(auth);
-        console.log('📨 Redirect result:', result ? `User: ${result.user?.email}` : 'No result');
-        
-        if (result && result.user) {
-          console.log('✅ Got redirect result, handling Google auth...');
-          // Handle the redirect result (create profile if needed)
-          await handleGoogleAuthResult(result.user);
-          
-          // Clear OAuth redirect flag
-          if (typeof window !== 'undefined') {
-            console.log('🧹 Clearing oauth_redirect_pending flag from redirect result');
-            sessionStorage.removeItem('oauth_redirect_pending');
-          }
-          
-          // For iOS browsers, use delayed redirect to avoid race conditions  
-          const shouldRedirectFromResult = typeof window !== 'undefined' && 
-              (window.location.pathname === '/login' || window.location.pathname.startsWith('/login'));
-          
-          console.log('🔀 Should redirect from result?', shouldRedirectFromResult);
-          
-          if (shouldRedirectFromResult) {
-            if (isIOSBrowser()) {
-              const delay = isSafariOnIOS() ? 1500 : 1000; // Safari gets 1.5s, Chrome gets 1s
-              console.log(`⏰ iOS redirect result, redirecting in ${delay}ms`);
-              setTimeout(() => {
-                console.log('🔀 Executing iOS redirect result to dashboard');
-                if (window.location.pathname === '/login' || window.location.pathname.startsWith('/login')) {
-                  window.location.href = '/dashboard';
-                } else {
-                  console.log('❌ Path changed during redirect result, skipping. Current path:', window.location.pathname);
-                }
-              }, delay);
-            } else {
-              console.log('🔀 Non-iOS redirect result, redirecting immediately');
-              window.location.href = '/dashboard';
-            }
-          }
-        } else {
-          console.log('ℹ️ No redirect result found');
-        }
-      } catch (error) {
-        console.error('❌ Redirect result error:', error);
-        // Clear flag on error too
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('oauth_redirect_pending');
-        }
-      }
-    };
-
-    handleRedirectResult();
     return () => unsubscribe();
   }, []);
 
@@ -325,219 +148,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sign in with Google (mobile-aware with iOS-specific handling)
+  // Sign in with Google - use popup for all devices (simplified like SolidCam)
   const signInWithGoogle = async (): Promise<User> => {
-    console.log('🚀 signInWithGoogle called');
-    
-    // Send debug info to server for all signInWithGoogle attempts
-    if (typeof window !== 'undefined') {
-      fetch('/api/debug/iphone-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'signInWithGoogle_called',
-          userAgent: navigator.userAgent,
-          location: window.location.href,
-          timestamp: new Date().toISOString()
-        })
-      }).catch(e => console.log('Debug log failed:', e));
-    }
-    
     try {
-      const isActualIPhone = /iPhone/.test(navigator.userAgent);
-      console.log('🔀 iPhone detected:', isActualIPhone);
-      
-      // Use popup for iPhone (like SolidCam), redirect for other mobile devices
-      if (isActualIPhone) {
-        console.log('🍎 Using popup flow for iPhone (like SolidCam)');
-        
-        // Send debug info about iPhone popup approach
-        if (typeof window !== 'undefined') {
-          fetch('/api/debug/iphone-auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'iPhone_using_popup_like_solidcam',
-              userAgent: navigator.userAgent,
-              location: window.location.href,
-              timestamp: new Date().toISOString()
-            })
-          }).catch(e => console.log('Debug log failed:', e));
-        }
-        
-        try {
-          const result = await signInWithPopup(auth, googleProvider);
-          console.log('✅ iPhone popup success:', result.user?.email);
-          await handleGoogleAuthResult(result.user);
-          return result.user;
-        } catch (popupError) {
-          console.error('❌ iPhone popup failed:', popupError);
-          
-          // Send debug info about popup failure
-          if (typeof window !== 'undefined') {
-            fetch('/api/debug/iphone-auth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                event: 'iPhone_popup_failed',
-                error: popupError.message,
-                userAgent: navigator.userAgent,
-                timestamp: new Date().toISOString()
-              })
-            }).catch(e => console.log('Debug log failed:', e));
-          }
-          
-          throw popupError;
-        }
-      }
-      
-      // For non-iPhone mobile devices, still use redirect
-      const shouldUseRedirect = isMobileDevice() || isIOSBrowser();
-      console.log('🔀 Should use redirect for non-iPhone mobile?', shouldUseRedirect);
-      
-      if (shouldUseRedirect) {
-        console.log('📱 Using redirect flow for mobile/iOS');
-        
-        // Send debug info before redirect
-        if (typeof window !== 'undefined') {
-          fetch('/api/debug/iphone-auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'before_signInWithRedirect',
-              userAgent: navigator.userAgent,
-              location: window.location.href,
-              timestamp: new Date().toISOString()
-            })
-          }).catch(e => console.log('Debug log failed:', e));
-        }
-        
-        // Use redirect for mobile devices and iOS browsers
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          console.log('✅ signInWithRedirect called successfully');
-          
-          // Send debug info after successful redirect call
-          if (typeof window !== 'undefined') {
-            fetch('/api/debug/iphone-auth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                event: 'signInWithRedirect_success',
-                userAgent: navigator.userAgent,
-                location: window.location.href,
-                timestamp: new Date().toISOString()
-              })
-            }).catch(e => console.log('Debug log failed:', e));
-          }
-        } catch (redirectError) {
-          console.error('❌ signInWithRedirect failed:', redirectError);
-          
-          // Send debug info about redirect failure
-          if (typeof window !== 'undefined') {
-            fetch('/api/debug/iphone-auth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                event: 'signInWithRedirect_error',
-                error: redirectError.message,
-                userAgent: navigator.userAgent,
-                location: window.location.href,
-                timestamp: new Date().toISOString()
-              })
-            }).catch(e => console.log('Debug log failed:', e));
-          }
-          
-          // Fallback to popup for iPhone Safari if redirect fails
-          if (isActualIPhone) {
-            console.log('🔄 Fallback: Trying popup flow for iPhone');
-            
-            // Send debug info about fallback attempt
-            if (typeof window !== 'undefined') {
-              fetch('/api/debug/iphone-auth', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  event: 'iPhone_popup_fallback',
-                  originalError: redirectError.message,
-                  userAgent: navigator.userAgent,
-                  timestamp: new Date().toISOString()
-                })
-              }).catch(e => console.log('Debug log failed:', e));
-            }
-            
-            try {
-              const result = await signInWithPopup(auth, googleProvider);
-              console.log('✅ iPhone popup fallback success:', result.user?.email);
-              await handleGoogleAuthResult(result.user);
-              return result.user;
-            } catch (popupError) {
-              console.error('❌ iPhone popup fallback also failed:', popupError);
-              throw new Error(`Both redirect and popup failed. Redirect: ${redirectError.message}, Popup: ${popupError.message}`);
-            }
-          }
-          
-          throw redirectError;
-        }
-        
-        // For iOS browsers, we need to handle the redirect differently
-        if (isIOSBrowser()) {
-          console.log('🍎 iOS browser detected, throwing REDIRECT_INITIATED');
-          
-          // Send debug info to server about redirect initiation
-          if (typeof window !== 'undefined') {
-            fetch('/api/debug/iphone-auth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                event: 'iOS_redirect_initiated',
-                userAgent: navigator.userAgent,
-                location: window.location.href,
-                timestamp: new Date().toISOString()
-              })
-            }).catch(e => console.log('Debug log failed:', e));
-          }
-          
-          // iOS browsers handle redirects differently, so we just initiate the redirect
-          // The actual sign-in will be handled by the redirect result in useEffect
-          // We don't return a promise here as iOS browsers will navigate away
-          throw new Error('REDIRECT_INITIATED');
-        }
-        
-        console.log('📱 Non-iOS mobile, using promise-based approach');
-        // For other mobile devices, use the promise-based approach with longer timeout
-        return new Promise((resolve, reject) => {
-          console.log('⏱️ Setting up 30s timeout for mobile auth');
-          const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (user) {
-              console.log('✅ Mobile auth success:', user.email);
-              unsubscribe();
-              resolve(user);
-            }
-          });
-          
-          // Longer timeout for mobile devices (30 seconds)
-          setTimeout(() => {
-            console.log('⏰ Mobile auth timeout after 30s');
-            unsubscribe();
-            reject(new Error('Sign-in timeout - please try again'));
-          }, 30000);
-        });
-      } else {
-        console.log('🖥️ Using popup flow for desktop');
-        // Use popup for desktop browsers
-        const result = await signInWithPopup(auth, googleProvider);
-        console.log('✅ Popup auth success:', result.user?.email);
-        await handleGoogleAuthResult(result.user);
-        return result.user;
-      }
+      const result = await signInWithPopup(auth, googleProvider);
+      await handleGoogleAuthResult(result.user);
+      return result.user;
     } catch (error) {
-      // Don't log redirect initiation as an error
-      if (error instanceof Error && error.message === 'REDIRECT_INITIATED') {
-        console.log('🔀 REDIRECT_INITIATED - this is expected for iOS');
-        throw error; // Re-throw to be handled by the calling component
-      }
-      console.error('❌ Google sign-in error:', error);
+      console.error('Google sign-in error:', error);
       throw error;
     }
   };
