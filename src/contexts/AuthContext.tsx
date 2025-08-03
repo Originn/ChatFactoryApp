@@ -349,9 +349,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (shouldUseRedirect) {
         console.log('📱 Using redirect flow for mobile/iOS');
+        
+        // Send debug info before redirect
+        if (typeof window !== 'undefined') {
+          fetch('/api/debug/iphone-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'before_signInWithRedirect',
+              userAgent: navigator.userAgent,
+              location: window.location.href,
+              timestamp: new Date().toISOString()
+            })
+          }).catch(e => console.log('Debug log failed:', e));
+        }
+        
         // Use redirect for mobile devices and iOS browsers
-        await signInWithRedirect(auth, googleProvider);
-        console.log('✅ signInWithRedirect called successfully');
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          console.log('✅ signInWithRedirect called successfully');
+          
+          // Send debug info after successful redirect call
+          if (typeof window !== 'undefined') {
+            fetch('/api/debug/iphone-auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'signInWithRedirect_success',
+                userAgent: navigator.userAgent,
+                location: window.location.href,
+                timestamp: new Date().toISOString()
+              })
+            }).catch(e => console.log('Debug log failed:', e));
+          }
+        } catch (redirectError) {
+          console.error('❌ signInWithRedirect failed:', redirectError);
+          
+          // Send debug info about redirect failure
+          if (typeof window !== 'undefined') {
+            fetch('/api/debug/iphone-auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'signInWithRedirect_error',
+                error: redirectError.message,
+                userAgent: navigator.userAgent,
+                location: window.location.href,
+                timestamp: new Date().toISOString()
+              })
+            }).catch(e => console.log('Debug log failed:', e));
+          }
+          
+          throw redirectError;
+        }
         
         // For iOS browsers, we need to handle the redirect differently
         if (isIOSBrowser()) {
