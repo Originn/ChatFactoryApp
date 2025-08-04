@@ -4,9 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { Settings, User, LogOut, Palette } from 'lucide-react';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { SimpleThemeToggle } from '@/components/ui/simple-theme-toggle';
+import { Settings, User, LogOut } from 'lucide-react';
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -55,24 +53,6 @@ export default function UserDropdown() {
             <p className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">{user?.email}</p>
           </div>
           
-          {/* Theme Section */}
-          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-600">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
-                <Palette className="h-4 w-4 mr-2" />
-                Theme
-              </span>
-            </div>
-            <ThemeToggle variant="dropdown" />
-            
-            {/* Simple Toggle Test */}
-            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">Test Toggle:</span>
-                <SimpleThemeToggle />
-              </div>
-            </div>
-          </div>
           
           <Link
             href="/dashboard/settings"

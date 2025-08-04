@@ -48,14 +48,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-gray-900 text-white py-4">
+      <header className="bg-card border-b border-border py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">Chat Factory</Link>
+          <Link href="/" className="text-xl font-bold text-foreground">Chat Factory</Link>
           <nav>
             <Link href="/">
-              <Button variant="ghost" className="text-white hover:bg-gray-800">
+              <Button variant="ghost" className="text-foreground hover:bg-muted">
                 <Home className="h-4 w-4 mr-2" />
                 Home
               </Button>
@@ -66,22 +66,22 @@ export default function LoginPage() {
 
       {/* Login Form */}
       <div className="flex items-center justify-center py-12 px-4">
-        <Card className="w-full max-w-md shadow-lg border-blue-100">
+        <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-gray-900">Log in to Chat Factory</CardTitle>
+            <CardTitle className="text-2xl font-bold text-foreground">Log in to Chat Factory</CardTitle>
             <CardDescription>
               Enter your email and password to access your account
             </CardDescription>
           </CardHeader>
           <CardContent>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded mb-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-2 rounded mb-4">
                 {error}
               </div>
             )}
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium flex items-center">
+                <label htmlFor="email" className="text-sm font-medium text-foreground flex items-center">
                   <Mail className="h-4 w-4 mr-2" />
                   Email
                 </label>
@@ -96,11 +96,11 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="password" className="text-sm font-medium flex items-center">
+                  <label htmlFor="password" className="text-sm font-medium text-foreground flex items-center">
                     <Lock className="h-4 w-4 mr-2" />
                     Password
                   </label>
-                  <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
+                  <Link href="/forgot-password" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
                     Forgot password?
                   </Link>
                 </div>
@@ -124,10 +124,10 @@ export default function LoginPage() {
             
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
+                <div className="w-full border-t border-border"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
               </div>
             </div>
             
@@ -149,9 +149,9 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted-foreground">
               Don't have an account?{" "}
-              <Link href="/signup" className="text-blue-600 hover:text-blue-800 font-medium">
+              <Link href="/signup" className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium">
                 Sign up
               </Link>
             </div>

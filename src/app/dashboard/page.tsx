@@ -167,8 +167,8 @@ export default function DashboardPage() {
               {/* Free plan badge - hidden on mobile, shown on tablet+ */}
               {userProfile?.subscription.plan === 'free' && (
                 <div className="hidden md:flex items-center space-x-3 ml-4">
-                  <Badge variant="secondary" className="bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 border border-purple-200/50 shadow-sm">
-                    <Crown className="h-3 w-3 mr-1" />
+                  <Badge variant="secondary" className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-800 dark:to-blue-800 text-purple-900 dark:text-purple-100 border-2 border-purple-400 dark:border-purple-500 shadow-md font-bold">
+                    <Crown className="h-3 w-3 mr-1 text-purple-800 dark:text-purple-200" />
                     Free Plan
                   </Badge>
                   <div className="flex items-center space-x-2 bg-background/60 rounded-full px-3 py-1 backdrop-blur-sm">
@@ -314,10 +314,10 @@ export default function DashboardPage() {
                 {/* Mobile plan info */}
                 {userProfile?.subscription.plan === 'free' && (
                   <div className="mt-3 px-4">
-                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-100">
+                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-800 dark:to-blue-800 rounded-lg border-2 border-purple-400 dark:border-purple-500 shadow-md">
                       <div className="flex items-center space-x-2">
-                        <Crown className="h-4 w-4 text-purple-600" />
-                        <span className="text-sm font-medium text-purple-700">Free Plan</span>
+                        <Crown className="h-4 w-4 text-purple-800 dark:text-purple-200" />
+                        <span className="text-sm font-bold text-purple-900 dark:text-purple-100">Free Plan</span>
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {userProfile.usage.monthlyQueries || 0}/100 queries

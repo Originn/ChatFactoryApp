@@ -464,7 +464,7 @@ export default function ChatbotsPage() {
               <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
                 <Link
                   href="/dashboard"
-                  className="border-transparent text-muted-foreground hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Dashboard
                 </Link>
@@ -476,7 +476,7 @@ export default function ChatbotsPage() {
                 </Link>
                 <Link
                   href="/dashboard/settings"
-                  className="border-transparent text-muted-foreground hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Settings
                 </Link>
@@ -524,39 +524,39 @@ export default function ChatbotsPage() {
           <div className="px-2 pt-2 pb-3 space-y-1">
             <Link
               href="/dashboard"
-              className="border-transparent text-muted-foreground hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+              className="border-transparent text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/50 hover:text-foreground block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Dashboard
             </Link>
             <Link
               href="/dashboard/chatbots"
-              className="bg-purple-50 border-purple-500 text-purple-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg"
+              className="bg-purple-50 dark:bg-purple-900/30 border-purple-500 text-purple-800 dark:text-purple-200 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Chatbots
             </Link>
             <Link
               href="/dashboard/settings"
-              className="border-transparent text-muted-foreground hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+              className="border-transparent text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/50 hover:text-foreground block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Settings
             </Link>
             
             {/* Mobile User Profile Section */}
-            <div className="pt-3 border-t border-gray-200 mt-3">
+            <div className="pt-3 border-t border-border mt-3">
               <div className="px-3 py-2">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
-                      <span className="text-sm font-medium text-purple-600">
+                      <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
                         {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
                       </span>
                     </div>
                   </div>
                   <div className="ml-3">
-                    <div className="text-base font-medium text-gray-800">
+                    <div className="text-base font-medium text-foreground">
                       {user?.displayName || 'User'}
                     </div>
                     <div className="text-sm text-muted-foreground">
@@ -583,12 +583,12 @@ export default function ChatbotsPage() {
                   </div>
                   Your AI Chatbots
                 </h1>
-                <p className="text-gray-600">
+                <p className="text-muted-foreground">
                   Create, manage, and deploy intelligent chatbots for your business.
                 </p>
               </div>
               <div className="hidden md:flex items-center space-x-3">
-                <Badge variant="outline" className="bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 border border-purple-200/50">
+                <Badge variant="outline" className="bg-white dark:bg-gray-800 text-purple-900 dark:text-purple-200 border-2 border-purple-400 dark:border-purple-500 shadow-sm font-semibold">
                   <Sparkles className="h-3 w-3 mr-1" />
                   {chatbots.length} Active
                 </Badge>
@@ -603,11 +603,11 @@ export default function ChatbotsPage() {
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                     <Input
                       placeholder="Search chatbots..."
-                      className="pl-10 border-gray-200 focus:border-purple-300 focus:ring-purple-200"
+                      className="pl-10 border-border focus:border-purple-300 focus:ring-purple-200"
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="border-gray-200 hover:bg-gray-50 h-8 px-2 sm:h-9 sm:px-3">
+                    <Button variant="outline" size="sm" className="border-border hover:bg-muted/50 h-8 px-2 sm:h-9 sm:px-3">
                       <Filter className="h-4 w-4 mr-0.5 sm:mr-1" />
                       Filter
                     </Button>
@@ -628,7 +628,7 @@ export default function ChatbotsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Total Chatbots</p>
+                    <p className="text-sm text-muted-foreground">Total Chatbots</p>
                     <p className="text-2xl font-bold text-foreground">{chatbots.length}</p>
                   </div>
                   <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -642,8 +642,8 @@ export default function ChatbotsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Active</p>
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-sm text-muted-foreground">Active</p>
+                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">
                       {chatbots.filter(c => c.status === 'active').length}
                     </p>
                   </div>
@@ -658,8 +658,8 @@ export default function ChatbotsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Total Queries</p>
-                    <p className="text-2xl font-bold text-purple-600">
+                    <p className="text-sm text-muted-foreground">Total Queries</p>
+                    <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
                       {chatbots.reduce((sum, bot) => sum + (bot.stats?.queries || 0), 0)}
                     </p>
                   </div>
@@ -674,8 +674,8 @@ export default function ChatbotsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Avg Success Rate</p>
-                    <p className="text-2xl font-bold text-orange-600">
+                    <p className="text-sm text-muted-foreground">Avg Success Rate</p>
+                    <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">
                       {chatbots.length > 0 
                         ? Math.round(chatbots.reduce((sum, bot) => sum + (bot.stats?.successRate || 0), 0) / chatbots.length)
                         : 0}%
@@ -695,7 +695,7 @@ export default function ChatbotsPage() {
             <Card variant="elevated" className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <CardContent className="p-12 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading your chatbots...</p>
+                <p className="text-muted-foreground">Loading your chatbots...</p>
               </CardContent>
             </Card>
           ) : error ? (
@@ -724,10 +724,10 @@ export default function ChatbotsPage() {
             <Card variant="glow" className="animate-pulse-soft animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <CardContent className="p-16 text-center">
                 <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-3xl flex items-center justify-center mb-8">
-                  <Bot className="h-10 w-10 text-purple-600" />
+                  <Bot className="h-10 w-10 text-purple-700 dark:text-purple-400" />
                 </div>
                 <h3 className="text-2xl font-semibold text-foreground mb-4">No chatbots yet</h3>
-                <p className="text-gray-600 mb-8 max-w-md mx-auto text-lg">
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto text-lg">
                   Ready to create your first AI-powered chatbot? It only takes a few minutes to get started.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -800,7 +800,7 @@ export default function ChatbotsPage() {
                                     ? 'bg-blue-50 text-blue-700 border-blue-200'
                                     : chatbot.status === 'draft'
                                     ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                    : 'bg-gray-50 text-gray-700 border-gray-200'
+                                    : 'bg-gray-50 text-foreground border-border'
                                 }`}
                               >
                                 <div className={`h-2 w-2 rounded-full mr-1.5 ${
@@ -821,7 +821,7 @@ export default function ChatbotsPage() {
                           </div>
                         </div>
                         
-                        <CardDescription className="text-sm text-gray-600 line-clamp-2">
+                        <CardDescription className="text-sm text-muted-foreground line-clamp-2">
                           {chatbot.description || 'No description provided'}
                         </CardDescription>
                       </CardHeader>
@@ -838,7 +838,7 @@ export default function ChatbotsPage() {
                           </div>
                           <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
                             <div className="flex items-center justify-center mb-1">
-                              <Activity className="h-4 w-4 text-green-600 mr-1" />
+                              <Activity className="h-4 w-4 text-green-700 dark:text-green-400 mr-1" />
                               <span className="text-lg font-bold text-green-900">{chatbot.stats?.successRate || 0}%</span>
                             </div>
                             <p className="text-xs text-green-700">Success Rate</p>
