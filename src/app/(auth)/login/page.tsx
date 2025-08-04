@@ -39,7 +39,8 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle();
-      // AuthContext will handle redirect to dashboard
+      // Explicitly redirect to dashboard after successful Google auth
+      router.push('/dashboard');
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google');
       console.error('Google login error:', error);

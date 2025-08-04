@@ -89,10 +89,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadUserProfile(user);
       setLoading(false);
       
-      // Redirect to dashboard after successful authentication
-      if (user && typeof window !== 'undefined' && 
-          (window.location.pathname === '/login' || window.location.pathname.startsWith('/login'))) {
-        window.location.href = '/dashboard';
+      // Handle redirect after authentication (avoid conflicts with popup auth)
+      if (user && typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        // Only auto-redirect for direct email login or page refresh scenarios
+        if (path === '/login' && !window.opener) {
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 100);
+        }
       }
     });
 
