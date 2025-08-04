@@ -146,23 +146,23 @@ export function VectorStoreNameDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto border dark:border-gray-700">
         <div className="flex items-center space-x-3 mb-4">
-          <Database className="h-6 w-6 text-blue-600" />
+          <Database className="h-6 w-6 text-blue-600 dark:text-blue-400" />
           <div>
-            <h3 className="text-lg font-medium">Name Your Knowledge Base</h3>
-            <p className="text-sm text-gray-500">Choose a memorable name for your vector store</p>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Name Your Knowledge Base</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Choose a memorable name for your vector store</p>
           </div>
         </div>
 
         {/* Current embedding model info */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
           <div className="flex items-center space-x-2">
-            <Info className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-medium text-blue-900">Selected Embedding Model:</span>
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm font-medium text-blue-900 dark:text-blue-200">Selected Embedding Model:</span>
           </div>
-          <p className="text-sm text-blue-800 mt-1">
+          <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">
             {embeddingModel} ({selectedEmbeddingDimensions} dimensions)
             {selectedEmbeddingConfig?.supportsMultimodal && ' - Multimodal'}
           </p>
@@ -170,10 +170,10 @@ export function VectorStoreNameDialog({
 
         {/* Loading state */}
         {loadingIndexes && (
-          <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
             <div className="flex items-center space-x-2">
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span className="text-sm text-gray-600">Loading existing indexes...</span>
+              <RefreshCw className="h-4 w-4 animate-spin text-gray-600 dark:text-gray-400" />
+              <span className="text-sm text-gray-600 dark:text-gray-300">Loading existing indexes...</span>
             </div>
           </div>
         )}
@@ -181,10 +181,10 @@ export function VectorStoreNameDialog({
         {/* Compatible existing indexes */}
         {!loadingIndexes && compatibleIndexes.length > 0 && (
           <div className="mb-6">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">Compatible Existing Indexes</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Compatible Existing Indexes</h4>
             <div className="space-y-2">
               {compatibleIndexes.map((index) => (
-                <div key={index.name} className="border border-gray-200 rounded-lg p-3">
+                <div key={index.name} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <label className="flex items-center space-x-3 cursor-pointer">
                     <input
                       type="radio"
@@ -195,16 +195,16 @@ export function VectorStoreNameDialog({
                         setSelectedExistingIndex(index.name);
                         setShowCreateNew(false);
                       }}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                     />
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-900">{index.displayName}</span>
-                        <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{index.displayName}</span>
+                        <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
                           ✓ Compatible
                         </span>
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {index.dimensions} dimensions
                         {index.vectorCount !== undefined && (
                           <span className="ml-2">{index.vectorCount.toLocaleString()} vectors</span>
@@ -221,30 +221,30 @@ export function VectorStoreNameDialog({
         {/* Incompatible indexes info */}
         {!loadingIndexes && incompatibleIndexes.length > 0 && (
           <div className="mb-6">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">Incompatible Indexes</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Incompatible Indexes</h4>
             <div className="space-y-2">
               {incompatibleIndexes.map((index) => (
-                <div key={index.name} className="border border-gray-200 rounded-lg p-3 opacity-60">
+                <div key={index.name} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 opacity-60">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">{index.displayName}</span>
-                    <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{index.displayName}</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-2 py-1 rounded">
                       ⚠ Incompatible
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {index.dimensions} dimensions
                     {index.vectorCount !== undefined && (
                       <span className="ml-2">{index.vectorCount.toLocaleString()} vectors</span>
                     )}
                   </div>
-                  <div className="text-xs text-red-600 mt-1">
+                  <div className="text-xs text-red-600 dark:text-red-400 mt-1">
                     Requires embedding model: {index.embeddingModel || 'unknown'}
                   </div>
                 </div>
               ))}
             </div>
-            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-xs text-amber-800">
+            <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-xs text-amber-800 dark:text-amber-300">
                 💡 <strong>Tip:</strong> Different embedding models create incompatible vector spaces, even with the same dimensions. 
                 To use these indexes, create a new chatbot with the matching embedding model.
               </p>
@@ -264,45 +264,45 @@ export function VectorStoreNameDialog({
                 setShowCreateNew(true);
                 setSelectedExistingIndex(null);
               }}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
             />
-            <span className="text-sm font-medium text-gray-900">Create New Knowledge Base</span>
+            <span className="text-sm font-medium text-gray-900 dark:text-white">Create New Knowledge Base</span>
           </div>
 
           {showCreateNew && (
             <div className="ml-7 space-y-4">
               <div>
-                <Label htmlFor="vectorstore-name">Knowledge Base Name</Label>
+                <Label htmlFor="vectorstore-name" className="text-gray-700 dark:text-gray-300">Knowledge Base Name</Label>
                 <Input
                   id="vectorstore-name"
                   type="text"
                   value={inputName}
                   onChange={(e) => setInputName(e.target.value)}
                   placeholder="e.g., Company Docs, Product Manual, FAQ Database"
-                  className={`mt-1 ${
-                    error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 
-                    isAvailable === true ? 'border-green-300 focus:border-green-500 focus:ring-green-500' : ''
+                  className={`mt-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${
+                    error ? 'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500' : 
+                    isAvailable === true ? 'border-green-300 dark:border-green-600 focus:border-green-500 focus:ring-green-500' : ''
                   }`}
                 />
                 
                 {/* Validation feedback */}
                 <div className="mt-2 min-h-[20px]">
                   {isChecking && (
-                    <p className="text-sm text-gray-500 flex items-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                       <span className="animate-spin mr-2">⏳</span>
                       Checking availability...
                     </p>
                   )}
                   
                   {error && (
-                    <p className="text-sm text-red-600 flex items-center">
+                    <p className="text-sm text-red-600 dark:text-red-400 flex items-center">
                       <AlertCircle className="h-4 w-4 mr-1" />
                       {error}
                     </p>
                   )}
                   
                   {isAvailable === true && !isChecking && (
-                    <p className="text-sm text-green-600 flex items-center">
+                    <p className="text-sm text-green-600 dark:text-green-400 flex items-center">
                       <CheckCircle className="h-4 w-4 mr-1" />
                       "{inputName}" is available!
                     </p>
@@ -311,11 +311,11 @@ export function VectorStoreNameDialog({
               </div>
 
               {sanitizedName && sanitizedName !== inputName && (
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                  <p className="text-sm text-blue-800">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
+                  <p className="text-sm text-blue-800 dark:text-blue-300">
                     <strong>System name:</strong> {sanitizedName}
                   </p>
-                  <p className="text-xs text-blue-600 mt-1">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                     Names are sanitized for compatibility with the vector database
                   </p>
                 </div>
@@ -325,8 +325,8 @@ export function VectorStoreNameDialog({
         </div>
 
         {/* Info section */}
-        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-          <p className="text-sm text-gray-700">
+        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             {compatibleIndexes.length > 0 
               ? "You can reuse an existing compatible knowledge base or create a new one. Reusing saves time and maintains consistency across chatbots."
               : "You can create a new knowledge base. After uploading documents, you'll be able to reuse this knowledge base for future chatbots with the same embedding model."

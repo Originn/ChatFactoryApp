@@ -4,6 +4,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
+  const state = searchParams.get('state'); // userId
 
   // Return a simple HTML page that posts message to parent window
   const html = `
@@ -58,10 +59,16 @@ export async function GET(req: NextRequest) {
                 type: 'YOUTUBE_AUTH_ERROR',
                 error: '${error}'
               }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
-            } else if ('${code}') {
+            } else if ('${code}' && '${state}') {
               window.opener.postMessage({
                 type: 'YOUTUBE_AUTH_SUCCESS',
-                code: '${code}'
+                code: '${code}',
+                userId: '${state}'
+              }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
+            } else {
+              window.opener.postMessage({
+                type: 'YOUTUBE_AUTH_ERROR',
+                error: 'Missing authorization code or user ID'
               }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
             }
           }

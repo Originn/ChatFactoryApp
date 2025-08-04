@@ -26,7 +26,6 @@ interface UploadedFile {
   duration?: number;
   language?: string;
   transcription?: string;
-  useGPU?: boolean;
 }
 
 interface InlineDocumentUploadProps {
@@ -39,7 +38,6 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [useGPU, setUseGPU] = useState(false); // GPU processing toggle
 
   const getProgressForProcessing = (status: string, elapsed: number, type: string) => {
     if (type === 'chm') {
@@ -121,8 +119,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         id: `${Date.now()}-${Math.random()}`,
         type: fileType,
         status: 'pending',
-        isPublic: false,
-        ...(fileType === 'video' && { useGPU })
+        isPublic: false
       };
     });
 
@@ -156,8 +153,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         id: `${Date.now()}-${Math.random()}`,
         type: fileType,
         status: 'pending',
-        isPublic: false,
-        ...(fileType === 'video' && { useGPU })
+        isPublic: false
       };
     });
 
@@ -330,7 +326,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
       formData.append('userId', user?.uid || '');
       formData.append('isPublic', isPublic.toString());
       formData.append('enableProcessing', 'true'); // Always enable semantic processing for better chunking
-      formData.append('useGPU', (fileItem.useGPU || false).toString()); // GPU processing selection
+      formData.append('useGPU', 'false'); // Always use CPU processing
 
       const response = await fetch('/api/video-convert', {
         method: 'POST',
@@ -416,12 +412,6 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     ));
   };
 
-  const toggleFileGPU = (fileId: string) => {
-    setUploadedFiles(prev => prev.map(f => 
-      f.id === fileId && f.type === 'video' ? { ...f, useGPU: !f.useGPU } : f
-    ));
-  };
-
   const warmContainers = async (fileTypes: Set<string>) => {
     const warmingPromises = [];
     
@@ -495,24 +485,6 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                 </svg>
               </div>
               
-              {/* GPU Processing Toggle for Videos */}
-              <div className="mb-6">
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useGPU}
-                    onChange={(e) => setUseGPU(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="text-sm">
-                    <span className="font-medium text-gray-900">Use GPU processing for videos</span>
-                    <div className="text-gray-500">
-                      {useGPU ? '⚡ Faster transcription (8x speed, higher cost)' : '💰 Standard CPU processing (cost-effective)'}
-                    </div>
-                  </div>
-                </label>
-              </div>
-              
               {/* Upload Area */}
               <div
                 onDrop={handleDrop}
@@ -569,15 +541,6 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   >
                     {file.isPublic ? '🌐 Public' : '🔒 Private'}
                   </button>
-                  {file.type === 'video' && (
-                    <button
-                      onClick={() => toggleFileGPU(file.id)}
-                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
-                      disabled={file.status !== 'pending'}
-                    >
-                      {file.useGPU ? '⚡ GPU' : '💻 CPU'}
-                    </button>
-                  )}
                 </div>
                 
                 <div className="flex items-center space-x-3">

@@ -458,12 +458,12 @@ export default function ChatbotDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 relative overflow-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 relative overflow-hidden">
         <div className="flex items-center justify-center h-screen">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-12 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading chatbot details...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 dark:border-purple-400 mx-auto mb-4"></div>
+              <p className="text-gray-600 dark:text-gray-300">Loading chatbot details...</p>
             </CardContent>
           </Card>
         </div>
@@ -473,11 +473,11 @@ export default function ChatbotDetailPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 relative overflow-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 relative overflow-hidden">
         <div className="flex items-center justify-center h-screen">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-12 text-center">
-              <p className="text-red-600">{error}</p>
+              <p className="text-red-600 dark:text-red-400">{error}</p>
             </CardContent>
           </Card>
         </div>
@@ -486,14 +486,14 @@ export default function ChatbotDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 relative overflow-hidden">
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
-      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
+      <div className="absolute inset-0 bg-gradient-mesh opacity-30 dark:opacity-20" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 dark:bg-purple-800 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
+      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 dark:bg-blue-800 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
+      <header className="relative z-50 backdrop-blur-sm bg-white/70 dark:bg-gray-900/70 border-b border-white/20 dark:border-gray-700/50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
@@ -502,7 +502,7 @@ export default function ChatbotDetailPage() {
                   <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
                     <div className="h-5 w-5 text-white">🤖</div>
                   </div>
-                  <span className="font-bold text-xl text-gradient">Chat Factory</span>
+                  <span className="font-bold text-xl text-gradient dark:text-white">Chat Factory</span>
                 </div>
               </div>
             </div>
@@ -521,19 +521,19 @@ export default function ChatbotDetailPage() {
             <>
               {/* Success/Error Messages */}
               {successMessage && (
-                <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded mb-4">
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 px-4 py-3 rounded mb-4">
                   <p>{successMessage}</p>
                 </div>
               )}
               
               {deploymentError && (
-                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded mb-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 px-4 py-3 rounded mb-4">
                   <p>{deploymentError}</p>
                 </div>
               )}
               
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded mb-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 px-4 py-3 rounded mb-4">
                   <p>{error}</p>
                 </div>
               )}
@@ -542,8 +542,8 @@ export default function ChatbotDetailPage() {
               <div className="mb-8">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{chatbot.name}</h1>
-                    <p className="text-gray-600 mt-1">{chatbot.description || 'No description available'}</p>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{chatbot.name}</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">{chatbot.description || 'No description available'}</p>
                   </div>
                   <div className="flex space-x-3">
                     <Button asChild>
@@ -570,14 +570,14 @@ export default function ChatbotDetailPage() {
               </div>
 
               {/* Tabs Navigation */}
-              <div className="border-b border-gray-200 mb-6">
+              <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
                 <nav className="-mb-px flex space-x-8">
                   <button
                     onClick={() => setActiveTab('overview')}
                     className={`${
                       activeTab === 'overview'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                   >
                     Overview
@@ -586,8 +586,8 @@ export default function ChatbotDetailPage() {
                     onClick={() => setActiveTab('documents')}
                     className={`${
                       activeTab === 'documents'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                   >
                     Documents
@@ -596,8 +596,8 @@ export default function ChatbotDetailPage() {
                     onClick={() => setActiveTab('users')}
                     className={`${
                       activeTab === 'users'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                   >
                     Users
@@ -606,8 +606,8 @@ export default function ChatbotDetailPage() {
                     onClick={() => setActiveTab('analytics')}
                     className={`${
                       activeTab === 'analytics'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                   >
                     Analytics
@@ -616,8 +616,8 @@ export default function ChatbotDetailPage() {
                     onClick={() => setActiveTab('settings')}
                     className={`${
                       activeTab === 'settings'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                   >
                     Settings
@@ -630,60 +630,60 @@ export default function ChatbotDetailPage() {
                 <div>
                   {/* Overview Stats */}
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Status</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center">
                           <span className={`h-3 w-3 rounded-full ${chatbot.deployment?.status === 'deployed' ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
-                          <div className="text-sm font-medium">{chatbot.status || 'Draft'}</div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">{chatbot.status || 'Draft'}</div>
                         </div>
                       </CardContent>
                     </Card>
                     
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Documents</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Documents</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-3xl font-bold">{chatbot.documents?.length || 0}</div>
+                        <div className="text-3xl font-bold text-gray-900 dark:text-white">{chatbot.documents?.length || 0}</div>
                       </CardContent>
                     </Card>
                     
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Success Rate</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Success Rate</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-3xl font-bold">{chatbot.stats?.successRate || 0}%</div>
+                        <div className="text-3xl font-bold text-gray-900 dark:text-white">{chatbot.stats?.successRate || 0}%</div>
                       </CardContent>
                     </Card>
                     
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Model</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Model</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-sm font-medium">{chatbot.aiConfig?.llmModel || 'Not set'}</div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">{chatbot.aiConfig?.llmModel || 'Not set'}</div>
                       </CardContent>
                     </Card>
                   </div>
                   
                   {/* Deployment Info */}
                   {chatbot.deployment?.deploymentUrl && (
-                    <Card className="mb-6">
+                    <Card className="mb-6 dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle>Live Deployment</CardTitle>
+                        <CardTitle className="text-gray-900 dark:text-white">Live Deployment</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="p-4 bg-green-50 rounded-lg">
-                          <strong>Live URL:</strong>{' '}
+                        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+                          <strong className="text-gray-900 dark:text-white">Live URL:</strong>{' '}
                           <a 
                             href={chatbot.deployment.deploymentUrl} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
+                            className="text-blue-600 dark:text-blue-400 hover:underline"
                           >
                             {chatbot.deployment.deploymentUrl}
                           </a>
@@ -693,13 +693,13 @@ export default function ChatbotDetailPage() {
                   )}
 
                   {/* Chatbot Preview */}
-                  <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-4">Chatbot Preview</h2>
-                  <Card className="max-w-md mx-auto">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mt-8 mb-4">Chatbot Preview</h2>
+                  <Card className="max-w-md mx-auto dark:bg-gray-800 dark:border-gray-700">
                     <CardContent className="p-6">
-                      <div className="border rounded-lg bg-gray-50 p-4 mb-4 h-60 overflow-y-auto">
+                      <div className="border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 p-4 mb-4 h-60 overflow-y-auto">
                         {/* Simulated chat messages */}
                         <div className="flex items-start space-x-2 mb-3">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex-shrink-0 flex items-center justify-center overflow-hidden">
                             {chatbot.logoUrl ? (
                               <img
                                 src={chatbot.logoUrl}
@@ -710,8 +710,8 @@ export default function ChatbotDetailPage() {
                               <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
                             )}
                           </div>
-                          <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
-                            <p className="text-sm">
+                          <div className="bg-white dark:bg-gray-600 rounded-lg p-2 shadow-sm max-w-xs border dark:border-gray-500">
+                            <p className="text-sm text-gray-900 dark:text-gray-100">
                               Hello! I'm an AI assistant trained on {chatbot.name} documentation. How can I help you today?
                             </p>
                           </div>
@@ -725,7 +725,7 @@ export default function ChatbotDetailPage() {
                           </div>
                         </div>
                         <div className="flex items-start space-x-2">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex-shrink-0 flex items-center justify-center overflow-hidden">
                             {chatbot.logoUrl ? (
                               <img
                                 src={chatbot.logoUrl}
@@ -736,8 +736,8 @@ export default function ChatbotDetailPage() {
                               <span style={{ color: chatbot.appearance?.primaryColor || '#3b82f6' }} className="font-bold text-sm">{chatbot.name.charAt(0)}</span>
                             )}
                           </div>
-                          <div className="bg-white rounded-lg p-2 shadow-sm max-w-xs">
-                            <p className="text-sm">
+                          <div className="bg-white dark:bg-gray-600 rounded-lg p-2 shadow-sm max-w-xs border dark:border-gray-500">
+                            <p className="text-sm text-gray-900 dark:text-gray-100">
                               Great question! Let me walk you through the key steps based on our documentation...
                             </p>
                           </div>
@@ -751,8 +751,8 @@ export default function ChatbotDetailPage() {
               {activeTab === 'documents' && (
                 <div>
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-semibold text-gray-900">Documents & Knowledge Base</h2>
-                    <div className="text-sm text-gray-600">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Documents & Knowledge Base</h2>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
                       {vectorstoreDocCount} documents uploaded
                     </div>
                   </div>
@@ -770,38 +770,38 @@ export default function ChatbotDetailPage() {
 
                   {/* Knowledge Base Stats */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Total Documents</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Documents</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-3xl font-bold text-blue-600">{vectorstoreDocCount}</div>
-                        <p className="text-xs text-gray-500 mt-1">Files processed</p>
+                        <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{vectorstoreDocCount}</div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Files processed</p>
                       </CardContent>
                     </Card>
                     
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Vector Store</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Vector Store</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-sm font-semibold text-gray-900">{vectorStoreName || 'Knowledge Base'}</div>
-                        <p className="text-xs text-gray-500 mt-1">Index: {vectorStoreIndexName}</p>
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">{vectorStoreName || 'Knowledge Base'}</div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Index: {vectorStoreIndexName}</p>
                       </CardContent>
                     </Card>
                     
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-500">Status</CardTitle>
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center">
                           <span className={`h-3 w-3 rounded-full ${hasVectorstore ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
-                          <div className="text-sm font-medium">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
                             {hasVectorstore ? 'Active' : 'Setup Required'}
                           </div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {hasVectorstore ? 'Ready for queries' : 'Upload documents to activate'}
                         </p>
                       </CardContent>
@@ -819,7 +819,7 @@ export default function ChatbotDetailPage() {
 
               {activeTab === 'users' && (
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">User Management</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">User Management</h2>
                   
                   <ChatbotUserManagement
                     chatbot={chatbot}
@@ -833,37 +833,37 @@ export default function ChatbotDetailPage() {
 
               {activeTab === 'settings' && (
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">Chatbot Settings</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Chatbot Settings</h2>
                   
                   <div className="space-y-8">
                     {/* AI Configuration */}
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-lg">AI Configuration</CardTitle>
+                        <CardTitle className="text-lg text-gray-900 dark:text-white">AI Configuration</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Embedding Model</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Embedding Model</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {chatbot.aiConfig?.embeddingModel || 'Not configured'}
                             </p>
                           </div>
                           <div>
-                            <h4 className="text-sm font-medium mb-2">LLM Model</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">LLM Model</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {chatbot.aiConfig?.llmModel || 'Not configured'}
                             </p>
                           </div>
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Temperature</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Temperature</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {chatbot.aiConfig?.temperature || 'Not configured'}
                             </p>
                           </div>
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Context Window</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Context Window</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {chatbot.aiConfig?.contextWindow || 'Not configured'}
                             </p>
                           </div>
@@ -872,21 +872,21 @@ export default function ChatbotDetailPage() {
                     </Card>
 
                     {/* Vector Store Configuration */}
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-lg">Vector Store Configuration</CardTitle>
+                        <CardTitle className="text-lg text-gray-900 dark:text-white">Vector Store Configuration</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Vector Store Name</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Vector Store Name</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {vectorStoreName || 'Not configured'}
                             </p>
                           </div>
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Index Name</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Index Name</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {vectorStoreIndexName || 'Not configured'}
                             </p>
                           </div>
@@ -895,27 +895,27 @@ export default function ChatbotDetailPage() {
                     </Card>
 
                     {/* Appearance Settings */}
-                    <Card>
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-lg">Appearance</CardTitle>
+                        <CardTitle className="text-lg text-gray-900 dark:text-white">Appearance</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Primary Color</h4>
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Primary Color</h4>
                             <div className="flex items-center space-x-2">
                               <div 
-                                className="w-6 h-6 rounded border"
+                                className="w-6 h-6 rounded border border-gray-300 dark:border-gray-600"
                                 style={{ backgroundColor: chatbot.appearance?.primaryColor || '#3b82f6' }}
                               ></div>
-                              <p className="text-sm">
+                              <p className="text-sm text-gray-900 dark:text-gray-100">
                                 {chatbot.appearance?.primaryColor || '#3b82f6'}
                               </p>
                             </div>
                           </div>
                           <div>
-                            <h4 className="text-sm font-medium mb-2">Bubble Style</h4>
-                            <p className="text-sm bg-gray-50 p-2 rounded border">
+                            <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">Bubble Style</h4>
+                            <p className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 text-gray-900 dark:text-gray-100">
                               {chatbot.appearance?.bubbleStyle || 'Not configured'}
                             </p>
                           </div>
@@ -928,17 +928,17 @@ export default function ChatbotDetailPage() {
 
               {activeTab === 'analytics' && (
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">Analytics</h2>
-                  <Card>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Analytics</h2>
+                  <Card className="dark:bg-gray-800 dark:border-gray-700">
                     <CardContent className="p-6">
-                      <p className="text-gray-500 text-center">Analytics dashboard coming soon...</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-center">Analytics dashboard coming soon...</p>
                     </CardContent>
                   </Card>
                 </div>
               )}
             </>
           ) : (
-            <div>Chatbot not found</div>
+            <div className="text-gray-900 dark:text-white">Chatbot not found</div>
           )}
         </div>
       </main>
