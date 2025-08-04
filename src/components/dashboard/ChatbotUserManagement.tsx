@@ -213,10 +213,10 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Info className="h-5 w-5 text-gray-600" />
-              <h4 className="text-sm font-medium text-gray-900">Authentication Disabled</h4>
+              <h4 className="text-sm font-medium text-gray-900 dark:text-white">Authentication Disabled</h4>
             </div>
             <p className="text-sm text-gray-600 mb-3">
               This chatbot allows anonymous access. Users can start chatting without creating an account.
@@ -246,8 +246,8 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Invite New User */}
-        <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
-          <h5 className="text-sm font-medium text-gray-900">Invite New User</h5>
+        <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border dark:border-gray-600">
+          <h5 className="text-sm font-medium text-gray-900 dark:text-white">Invite New User</h5>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Input
@@ -290,7 +290,7 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
 
         {/* Users List */}
         <div className="space-y-4">
-          <h5 className="text-sm font-medium text-gray-900">Invited Users</h5>
+          <h5 className="text-sm font-medium text-gray-900 dark:text-white">Invited Users</h5>
           
           {loadingUsers ? (
             <div className="text-center py-6">
@@ -308,11 +308,11 @@ export default function ChatbotUserManagement({ chatbot, onUpdate, isLoading = f
           ) : (
             <div className="space-y-2">
               {users.map((user) => (
-                <div key={user.id} className="flex items-center justify-between bg-white px-4 py-3 rounded border">
+                <div key={user.id} className="flex items-center justify-between bg-white dark:bg-gray-700 px-4 py-3 rounded border dark:border-gray-600">
                   <div className="flex items-center space-x-3">
                     {getStatusIcon(user.status)}
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
                         {user.displayName || user.email}
                       </div>
                       {user.displayName && (

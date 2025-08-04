@@ -603,9 +603,9 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                 Upload your documentation files and videos to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600 dark:text-blue-400">CHM files</strong>, and <strong className="text-purple-600 dark:text-purple-400">Video files</strong>.
               </p>
           
-          <div className="border-2 border-dashed border-blue-300 rounded-lg p-12 bg-gradient-to-br from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 transition-all duration-200">
+          <div className="border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg p-12 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-600 hover:from-blue-100 hover:to-purple-100 dark:hover:from-gray-600 dark:hover:to-gray-500 transition-all duration-200">
             <div className="space-y-4">
-              <div className="mx-auto h-12 w-12 text-blue-500">
+              <div className="mx-auto h-12 w-12 text-blue-500 dark:text-blue-400">
                 <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path 
                     strokeLinecap="round" 
@@ -631,12 +631,12 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                     Upload Documents
                   </Button>
                 </div>
-                <p className="text-sm text-gray-500 mt-4">
-                  <span className="font-medium text-blue-600">Click to upload</span> or drag and drop
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+                  <span className="font-medium text-blue-600 dark:text-blue-400">Click to upload</span> or drag and drop
                 </p>
               </div>
               
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 Supports: PDF, MD, HTML, DOCX, TXT, CHM files + Video files (MP4, AVI, MOV, MKV, WebM, WMV) up to 10MB each
               </p>
             </div>
@@ -655,11 +655,11 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         {/* File List */}
         {uploadedFiles.length > 0 && (
           <div className="mt-8 space-y-3">
-            <h4 className="text-sm font-medium text-gray-900 mb-4">Selected Files:</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Selected Files:</h4>
             {uploadedFiles.map((file) => (
-              <div key={file.id} className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div key={file.id} className="flex items-center justify-between p-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm">
                 <div className="flex items-center space-x-3 flex-1">
-                  <div className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                  <div className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-xs">
                     {file.file.name}
                   </div>
                   <Badge variant={file.type === 'chm' ? 'default' : file.type === 'video' ? 'secondary' : 'secondary'}>
@@ -701,7 +701,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                       variant="outline"
                       size="sm"
                       onClick={() => removeFile(file.id)}
-                      className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                      className="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
                       Clear
                     </Button>
@@ -718,7 +718,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
             <Button
               variant="outline"
               onClick={() => setUploadedFiles(prev => prev.filter(f => f.status === 'pending'))}
-              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+              className="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               Clear All Completed
             </Button>
