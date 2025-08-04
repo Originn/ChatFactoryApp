@@ -564,18 +564,18 @@ export default function NewChatbotPage() {
     if (!isDeploying) return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
+      <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50">
+        <div className="bg-card rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl border border-border">
           <div className="text-center">
             <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white" />
             </div>
             
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Deploying Your Chatbot</h3>
-            <p className="text-gray-600 mb-6">Please wait while we set up your AI assistant...</p>
+            <h3 className="text-xl font-bold text-foreground mb-2">Deploying Your Chatbot</h3>
+            <p className="text-muted-foreground mb-6">Please wait while we set up your AI assistant...</p>
             
             {/* Progress Bar */}
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+            <div className="w-full bg-muted rounded-full h-2 mb-4">
               <div 
                 className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${(deploymentStep / totalSteps) * 100}%` }}
@@ -583,12 +583,12 @@ export default function NewChatbotPage() {
             </div>
             
             {/* Progress Steps */}
-            <div className="text-sm text-gray-600 mb-4">
+            <div className="text-sm text-muted-foreground mb-4">
               Step {deploymentStep} of {totalSteps}
             </div>
             
             {/* Current Step Description */}
-            <p className="text-sm text-blue-600 font-medium">
+            <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">
               {deploymentProgress}
             </p>
             
@@ -614,10 +614,10 @@ export default function NewChatbotPage() {
                     </div>
                     <span className={
                       index + 1 < deploymentStep 
-                        ? 'text-green-600 font-medium' 
+                        ? 'text-green-600 dark:text-green-400 font-medium' 
                         : index + 1 === deploymentStep 
-                          ? 'text-blue-600 font-medium' 
-                          : 'text-gray-400'
+                          ? 'text-blue-600 dark:text-blue-400 font-medium' 
+                          : 'text-muted-foreground'
                     }>
                       {step}
                     </span>
@@ -626,8 +626,8 @@ export default function NewChatbotPage() {
               </div>
             </div>
             
-            <div className="mt-6 p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-blue-800">
+            <div className="mt-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-xs text-blue-800 dark:text-blue-200">
                 ⚡ This usually takes 2-3 minutes. Please keep this page open.
               </p>
             </div>
@@ -638,14 +638,14 @@ export default function NewChatbotPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-25 via-white to-purple-25 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background dark:from-background dark:via-muted/20 dark:to-background relative overflow-hidden">
       {/* Background Effects */}
       <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
+      <header className="relative z-50 backdrop-blur-sm bg-background/70 border-b border-border/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
@@ -660,19 +660,19 @@ export default function NewChatbotPage() {
               <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
                 <Link
                   href="/dashboard"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/dashboard/chatbots"
-                  className="border-purple-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-purple-500 text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chatbots
                 </Link>
                 <Link
                   href="/dashboard/settings"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Settings
                 </Link>
@@ -694,14 +694,14 @@ export default function NewChatbotPage() {
                 <div className="h-6 w-6 text-white">✨</div>
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Create New Chatbot</h1>
-                <p className="text-gray-600 mt-1">Build your AI assistant in just a few steps</p>
+                <h1 className="text-3xl font-bold text-foreground">Create New Chatbot</h1>
+                <p className="text-muted-foreground mt-1">Build your AI assistant in just a few steps</p>
               </div>
             </div>
             <Button
               asChild
               variant="outline"
-              className="border-purple-200 hover:bg-purple-50"
+              className="border-border hover:bg-muted/50"
             >
               <Link href="/dashboard/chatbots">
                 Cancel
@@ -724,14 +724,14 @@ export default function NewChatbotPage() {
           </CardHeader>
           
           {/* Tab Navigation */}
-          <div className="px-6 border-b border-gray-200">
+          <div className="px-6 border-b border-border">
             <nav className="-mb-px flex space-x-6">
               <button
                 onClick={() => setActiveTab('basic')}
                 className={`${
                   activeTab === 'basic'
-                    ? 'border-purple-500 text-purple-600 bg-purple-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-purple-500 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border/50 hover:bg-muted/50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
                 <Info className="w-4 h-4 mr-2" />
@@ -741,8 +741,8 @@ export default function NewChatbotPage() {
                 onClick={() => setActiveTab('ai')}
                 className={`${
                   activeTab === 'ai'
-                    ? 'border-purple-500 text-purple-600 bg-purple-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-purple-500 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border/50 hover:bg-muted/50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
                 <Brain className="w-4 h-4 mr-2" />
@@ -752,8 +752,8 @@ export default function NewChatbotPage() {
                 onClick={() => setActiveTab('behavior')}
                 className={`${
                   activeTab === 'behavior'
-                    ? 'border-purple-500 text-purple-600 bg-purple-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-purple-500 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border/50 hover:bg-muted/50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
                 <Bot className="w-4 h-4 mr-2" />
@@ -763,8 +763,8 @@ export default function NewChatbotPage() {
                 onClick={() => setActiveTab('appearance')}
                 className={`${
                   activeTab === 'appearance'
-                    ? 'border-purple-500 text-purple-600 bg-purple-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-purple-500 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border/50 hover:bg-muted/50'
                 } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
               >
                 <Palette className="w-4 h-4 mr-2" />
@@ -775,7 +775,7 @@ export default function NewChatbotPage() {
           
           <CardContent className="pt-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-3 rounded mb-4">
                 {error}
               </div>
             )}
@@ -785,7 +785,7 @@ export default function NewChatbotPage() {
               {activeTab === 'basic' && (
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <label htmlFor="name" className="text-sm font-medium">Chatbot Name *</label>
+                    <label htmlFor="name" className="text-sm font-medium text-foreground">Chatbot Name *</label>
                     <Input
                       id="name"
                       name="name"
@@ -795,13 +795,13 @@ export default function NewChatbotPage() {
                       required
                       className="w-full"
                     />
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Choose a clear, descriptive name for your chatbot.
                     </p>
                   </div>
                   
                   <div className="space-y-2">
-                    <label htmlFor="description" className="text-sm font-medium">Description</label>
+                    <label htmlFor="description" className="text-sm font-medium text-foreground">Description</label>
                     <textarea
                       id="description"
                       name="description"
@@ -809,24 +809,24 @@ export default function NewChatbotPage() {
                       onChange={handleChange}
                       placeholder="Describe what this chatbot will help users with..."
                       rows={3}
-                      className="flex h-auto w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-auto w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     />
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Provide details about what kind of questions this chatbot will answer.
                     </p>
                   </div>
                   
                   {/* Custom Domain Info */}
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
                     <div className="flex items-start space-x-2">
                       <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-blue-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9" />
                         </svg>
                       </div>
                       <div>
-                        <h4 className="text-sm font-medium text-blue-900">Custom Domain</h4>
-                        <p className="text-sm text-blue-800 mt-1">
+                        <h4 className="text-sm font-medium text-blue-900 dark:text-blue-200">Custom Domain</h4>
+                        <p className="text-sm text-blue-800 dark:text-blue-100 mt-1 font-medium">
                           After creating your chatbot, you can configure a custom domain (like chat.yourcompany.com) 
                           in the chatbot settings. We'll provide DNS instructions and handle the technical setup automatically.
                         </p>
@@ -838,7 +838,7 @@ export default function NewChatbotPage() {
                   <div className="space-y-4">
                     <div className="flex items-center space-x-3">
                       <div className="flex items-center space-x-2">
-                        <label htmlFor="requireAuth" className="text-sm font-medium">
+                        <label htmlFor="requireAuth" className="text-sm font-medium text-foreground">
                           Require User Authentication
                         </label>
                         <div className="relative group">
@@ -878,7 +878,7 @@ export default function NewChatbotPage() {
                     {/* Access Control Options - Only shown when authentication is enabled */}
                     {formData.requireAuth && (
                       <div className="space-y-4 pl-4 border-l-2 border-blue-200">
-                        <h4 className="text-sm font-medium text-gray-900">Access Control</h4>
+                        <h4 className="text-sm font-medium text-foreground">Access Control</h4>
                         
                         <div className="space-y-3">
                           <label className="flex items-center space-x-3 cursor-pointer">
@@ -891,8 +891,8 @@ export default function NewChatbotPage() {
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                             />
                             <div>
-                              <div className="text-sm font-medium text-gray-900">Open Signup</div>
-                              <div className="text-sm text-gray-500">Allow anyone to create an account and use the chatbot</div>
+                              <div className="text-sm font-medium text-foreground">Open Signup</div>
+                              <div className="text-sm text-muted-foreground">Allow anyone to create an account and use the chatbot</div>
                             </div>
                           </label>
                           
@@ -906,8 +906,8 @@ export default function NewChatbotPage() {
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                             />
                             <div>
-                              <div className="text-sm font-medium text-gray-900">Admin-Managed Users</div>
-                              <div className="text-sm text-gray-500">Only users you invite can access the chatbot</div>
+                              <div className="text-sm font-medium text-foreground">Admin-Managed Users</div>
+                              <div className="text-sm text-muted-foreground">Only users you invite can access the chatbot</div>
                             </div>
                           </label>
                         </div>
@@ -1037,7 +1037,7 @@ export default function NewChatbotPage() {
                       name="embeddingModel"
                       value={formData.embeddingModel}
                       onChange={handleChange}
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <optgroup label="OpenAI Models">
                         <option value="text-embedding-3-small">text-embedding-3-small (1536 dimensions)</option>
@@ -1114,7 +1114,7 @@ export default function NewChatbotPage() {
                       name="llmModel"
                       value={formData.llmModel}
                       onChange={handleChange}
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <optgroup label="OpenAI Models">
                         <option value="gpt-4.1">GPT-4.1 (Latest API model)</option>
@@ -1164,7 +1164,7 @@ export default function NewChatbotPage() {
                         name="temperature"
                         value={formData.temperature}
                         onChange={handleChange}
-                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="0.2">Low (More Precise)</option>
                         <option value="0.7">Medium (Balanced)</option>
@@ -1182,7 +1182,7 @@ export default function NewChatbotPage() {
                         name="contextWindow"
                         value={formData.contextWindow}
                         onChange={handleChange}
-                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="2048">2K tokens (Smaller)</option>
                         <option value="4096">4K tokens (Standard)</option>
@@ -1207,7 +1207,7 @@ export default function NewChatbotPage() {
                       name="persona"
                       value={formData.persona}
                       onChange={handleChange}
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <option value="helpful">Helpful (General purpose)</option>
                       <option value="technical">Technical (Detailed and precise)</option>
@@ -1227,7 +1227,7 @@ export default function NewChatbotPage() {
                       name="responseLength"
                       value={formData.responseLength}
                       onChange={handleChange}
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <option value="concise">Concise (Short answers)</option>
                       <option value="balanced">Balanced (Moderate length)</option>
@@ -1247,7 +1247,7 @@ export default function NewChatbotPage() {
                         value={formData.systemPrompt}
                         onChange={handleChange}
                         rows={6}
-                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         placeholder="Enter custom instructions for your chatbot..."
                       />
                     </div>
@@ -1408,7 +1408,7 @@ export default function NewChatbotPage() {
                       name="bubbleStyle"
                       value={formData.bubbleStyle}
                       onChange={handleChange}
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <option value="rounded">Rounded (Modern)</option>
                       <option value="square">Square (Minimal)</option>
@@ -1468,11 +1468,11 @@ export default function NewChatbotPage() {
             </form>
           </CardContent>
           
-          <CardFooter className="flex justify-between bg-gradient-to-r from-gray-50 to-blue-25/30 border-t border-gray-100">
+          <CardFooter className="flex justify-between bg-gradient-to-r from-muted/20 to-muted/30 border-t border-border">
             <Button
               asChild
               variant="outline"
-              className="border-gray-300 hover:bg-gray-50"
+              className="border-border hover:bg-muted/50"
             >
               <Link href="/dashboard/chatbots">
                 Cancel
@@ -1535,11 +1535,11 @@ export default function NewChatbotPage() {
                     </div>
                   </div>
                   <div className="ml-4 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center">
                       <div className="w-5 h-5 mr-2">📁</div>
                       Upload Documents
                     </h3>
-                    <p className="mt-2 text-gray-600">
+                    <p className="mt-2 text-muted-foreground">
                       After creating your chatbot, you'll be prompted to upload documentation files that will train your AI. Supports PDFs, Word docs, text files, and more.
                     </p>
                   </div>
@@ -1552,11 +1552,11 @@ export default function NewChatbotPage() {
                     </div>
                   </div>
                   <div className="ml-4 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center">
                       <div className="w-5 h-5 mr-2">⚡</div>
                       Process and Optimize
                     </h3>
-                    <p className="mt-2 text-gray-600">
+                    <p className="mt-2 text-muted-foreground">
                       Your documents will be processed, chunked, and converted into AI-ready embeddings using advanced vector databases for lightning-fast responses.
                     </p>
                   </div>
@@ -1569,23 +1569,23 @@ export default function NewChatbotPage() {
                     </div>
                   </div>
                   <div className="ml-4 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center">
                       <div className="w-5 h-5 mr-2">🎨</div>
                       Customize and Deploy
                     </h3>
-                    <p className="mt-2 text-gray-600">
+                    <p className="mt-2 text-muted-foreground">
                       Fine-tune your chatbot's appearance and behavior, then deploy it to your website with a simple embed code or use our hosted solution.
                     </p>
                   </div>
                 </div>
               </div>
               
-              <div className="mt-8 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-purple-100">
+              <div className="mt-8 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-700">
                 <div className="flex items-center">
                   <div className="w-6 h-6 mr-3">💡</div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">Pro Tip</p>
-                    <p className="text-sm text-gray-600">Start with a few high-quality documents for better results, then expand your knowledge base over time.</p>
+                    <p className="text-sm font-bold text-blue-900 dark:text-blue-200">Pro Tip</p>
+                    <p className="text-sm text-blue-800 dark:text-blue-100 font-medium">Start with a few high-quality documents for better results, then expand your knowledge base over time.</p>
                   </div>
                 </div>
               </div>
