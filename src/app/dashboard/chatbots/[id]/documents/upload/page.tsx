@@ -2,12 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useParams } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/custom-tooltip';
+import { FileText, Play } from 'lucide-react';
+import YouTubeUploadSection from '@/components/youtube/YouTubeUploadSection';
 
 interface UploadedFile {
   file: File;
@@ -539,9 +542,9 @@ export default function ChatbotDocumentUploadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Dashboard Header */}
-      <header className="bg-white border-b">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
@@ -580,7 +583,7 @@ export default function ChatbotDocumentUploadPage() {
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-semibold text-gray-900">Upload Documents for Chatbot</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Upload Content for Chatbot</h1>
             <Button
               asChild
               variant="outline"
@@ -591,7 +594,22 @@ export default function ChatbotDocumentUploadPage() {
             </Button>
           </div>
 
-          <div className="mb-8">
+          <Tabs defaultValue="files" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="files" className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">Document Files</span>
+                <span className="sm:hidden">Files</span>
+              </TabsTrigger>
+              <TabsTrigger value="youtube" className="flex items-center gap-2">
+                <Play className="w-4 h-4" />
+                <span className="hidden sm:inline">YouTube Videos</span>
+                <span className="sm:hidden">YouTube</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="files" className="space-y-6">
+              <div className="mb-8">
             <Card>
               <CardContent className="p-6">
                 <div className="space-y-4">
@@ -755,22 +773,28 @@ export default function ChatbotDocumentUploadPage() {
             </Card>
           </div>
 
-          <div className="flex justify-end space-x-4">
-            <Button 
-              variant="outline" 
-              disabled={uploadedFiles.length === 0}
-              onClick={() => setUploadedFiles([])}
-            >
-              Clear All
-            </Button>
-            <Button 
-              className="bg-blue-600 hover:bg-blue-700" 
-              disabled={uploadedFiles.length === 0 || isProcessing}
-              onClick={handleUploadAll}
-            >
-              {isProcessing ? 'Processing...' : 'Upload All Files'}
-            </Button>
-          </div>
+              <div className="flex justify-end space-x-4">
+                <Button 
+                  variant="outline" 
+                  disabled={uploadedFiles.length === 0}
+                  onClick={() => setUploadedFiles([])}
+                >
+                  Clear All
+                </Button>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700" 
+                  disabled={uploadedFiles.length === 0 || isProcessing}
+                  onClick={handleUploadAll}
+                >
+                  {isProcessing ? 'Processing...' : 'Upload All Files'}
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="youtube" className="space-y-6">
+              <YouTubeUploadSection chatbotId={chatbotId as string} />
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>
