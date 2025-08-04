@@ -128,7 +128,7 @@ function parseCaptionContent(content: string): TranscriptItem[] {
     };
     
     // Try parsing TTML format with begin and dur attributes
-    const ttmlRegex = /<p[^>]*begin="([^"]*)"[^>]*dur="([^"]*)"[^>]*>(.*?)<\/p>/gs;
+    const ttmlRegex = /<p[^>]*begin="([^"]*)"[^>]*dur="([^"]*)"[^>]*>([\s\S]*?)<\/p>/g;
     let match;
     
     while ((match = ttmlRegex.exec(content)) !== null) {
@@ -147,7 +147,7 @@ function parseCaptionContent(content: string): TranscriptItem[] {
 
     // If TTML parsing didn't work, try TTML with begin and end attributes
     if (transcriptItems.length === 0) {
-      const ttmlBeginEndRegex = /<p[^>]*begin="([^"]*)"[^>]*end="([^"]*)"[^>]*>(.*?)<\/p>/gs;
+      const ttmlBeginEndRegex = /<p[^>]*begin="([^"]*)"[^>]*end="([^"]*)"[^>]*>([\s\S]*?)<\/p>/g;
       
       while ((match = ttmlBeginEndRegex.exec(content)) !== null) {
         const startTime = parseTimeToSeconds(match[1]);
