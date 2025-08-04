@@ -16,14 +16,18 @@ function ThemeSync() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const { setTheme, theme } = useTheme();
 
-  // Sync theme from user profile on mount, but only when auth is ready
+  // Only sync theme from user profile on initial load, not on every theme change
   useEffect(() => {
-    if (authLoading || !user) return; // Wait for auth to be ready
+    if (authLoading || !user || !userProfile) return; // Wait for auth and profile to be ready
     
-    if (userProfile?.preferences?.theme && userProfile.preferences.theme !== theme) {
+    // Only set theme from profile if current theme is default/system or if theme hasn't been set yet
+    if (userProfile.preferences?.theme && 
+        (theme === 'system' || !theme) && 
+        userProfile.preferences.theme !== theme) {
+      console.log('🔄 Initial theme sync from profile:', userProfile.preferences.theme);
       setTheme(userProfile.preferences.theme);
     }
-  }, [userProfile?.preferences?.theme, setTheme, theme, authLoading, user]);
+  }, [user, userProfile, authLoading, setTheme]); // Removed 'theme' from dependencies to prevent loops
 
   return null;
 }

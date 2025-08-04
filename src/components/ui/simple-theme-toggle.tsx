@@ -4,10 +4,12 @@ import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useThemeContext } from '@/contexts/ThemeContext';
 
 export function SimpleThemeToggle() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { syncThemeWithProfile } = useThemeContext();
 
   useEffect(() => {
     setMounted(true);
@@ -20,7 +22,14 @@ export function SimpleThemeToggle() {
   const toggleTheme = () => {
     const newTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
     console.log('🌓 Simple toggle: switching from', resolvedTheme, 'to', newTheme);
+    
+    // Set theme immediately
     setTheme(newTheme);
+    
+    // Sync with profile in background
+    syncThemeWithProfile(newTheme).catch(error => {
+      console.error('🌓 Failed to sync theme with profile:', error);
+    });
   };
 
   return (

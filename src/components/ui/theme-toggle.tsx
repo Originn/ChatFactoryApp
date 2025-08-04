@@ -21,14 +21,21 @@ export function ThemeToggle({ showLabel = false, variant = 'icon' }: ThemeToggle
   }, []);
 
   const handleThemeChange = async (newTheme: string) => {
+    // Prevent setting the same theme
+    if (newTheme === theme) return;
+    
     console.log('🎨 Theme change requested:', newTheme);
     console.log('🎨 Current theme before change:', theme);
-    console.log('🎨 Current resolvedTheme before change:', resolvedTheme);
     
+    // Set theme immediately for instant UI feedback
     setTheme(newTheme);
-    await syncThemeWithProfile(newTheme);
     
-    console.log('🎨 Theme change completed');
+    // Sync with user profile in background (don't await to prevent UI blocking)
+    syncThemeWithProfile(newTheme).catch(error => {
+      console.error('🎨 Failed to sync theme with profile:', error);
+    });
+    
+    console.log('🎨 Theme change applied instantly');
   };
 
   if (!mounted) {
