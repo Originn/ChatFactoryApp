@@ -4,12 +4,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { Settings, User, LogOut } from 'lucide-react';
+import { Settings, User, LogOut, Sun, Moon, Monitor } from 'lucide-react';
+import { useTheme } from 'next-themes';
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { user, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const router = useRouter();
 
   // Get user initials for the avatar
@@ -53,6 +55,38 @@ export default function UserDropdown() {
             <p className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">{user?.email}</p>
           </div>
           
+          <div className="flex items-center justify-start gap-1 py-1 px-1.5 ml-3 mr-auto w-fit mt-2 mb-2 bg-gray-200 dark:bg-gray-900 rounded-lg">
+            <button
+              className={`rounded transition-colors ${
+                theme === 'light' 
+                  ? 'p-1.5 bg-white dark:bg-gray-700' 
+                  : 'p-1 hover:bg-gray-300 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setTheme('light')}
+            >
+              <Sun className="h-3.5 w-3.5 text-gray-600 dark:text-gray-300" />
+            </button>
+            <button
+              className={`rounded transition-colors ${
+                theme === 'dark' 
+                  ? 'p-1.5 bg-white dark:bg-gray-700' 
+                  : 'p-1 hover:bg-gray-300 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setTheme('dark')}
+            >
+              <Moon className="h-3.5 w-3.5 text-gray-600 dark:text-gray-300" />
+            </button>
+            <button
+              className={`rounded transition-colors ${
+                theme === 'system' 
+                  ? 'p-1.5 bg-white dark:bg-gray-700' 
+                  : 'p-1 hover:bg-gray-300 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setTheme('system')}
+            >
+              <Monitor className="h-3.5 w-3.5 text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
           
           <Link
             href="/dashboard/settings"
