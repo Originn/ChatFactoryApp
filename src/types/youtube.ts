@@ -1,0 +1,41 @@
+export interface YouTubeVideo {
+  id: string;
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  duration: string;
+  publishedAt: string;
+  channelTitle: string;
+  viewCount?: string;
+  privacy: 'public' | 'unlisted' | 'private';
+}
+
+export interface YouTubeChannel {
+  id: string;
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  subscriberCount?: string;
+}
+
+export interface YouTubeApiKeys {
+  clientId: string;
+  clientSecret: string;
+  apiKey: string;
+}
+
+export interface YouTubeAuthState {
+  isConnected: boolean;
+  accessToken?: string;
+  refreshToken?: string;
+  channel?: YouTubeChannel;
+  error?: string;
+}
+
+export interface ProcessingVideo {
+  videoId: string;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  progress: number;
+  error?: string;
+  isPublic: boolean;
+}
