@@ -139,7 +139,9 @@ export default function YouTubeVideoBrowser({
       onVideosSelected(selectedVideoIds.filter(id => !visibleIds.includes(id)));
     } else {
       // Select all visible
-      const newSelection = [...new Set([...selectedVideoIds, ...filteredVideos.map(v => v.id)])];
+      const visibleIds = filteredVideos.map(v => v.id);
+      const combinedIds = selectedVideoIds.concat(visibleIds);
+      const newSelection = Array.from(new Set(combinedIds));
       onVideosSelected(newSelection);
     }
   };

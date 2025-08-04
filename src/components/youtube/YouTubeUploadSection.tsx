@@ -101,7 +101,7 @@ export default function YouTubeUploadSection({ chatbotId }: YouTubeUploadSection
           }
 
           let newProgress = video.progress + Math.random() * 15 + 5;
-          let newStatus = video.status;
+          let newStatus: ProcessingVideo['status'] = video.status;
 
           if (newProgress >= 100) {
             newProgress = 100;
@@ -113,7 +113,7 @@ export default function YouTubeUploadSection({ chatbotId }: YouTubeUploadSection
           return {
             ...video,
             progress: Math.min(newProgress, 100),
-            status: newStatus as any
+            status: newStatus
           };
         });
 
