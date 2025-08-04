@@ -199,7 +199,7 @@ export default function SettingsPage() {
             </Link>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold">Account Settings</h1>
-              <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage your account and usage</p>
+              <p className="text-muted-foreground mt-1 text-sm sm:text-base">Manage your account and usage</p>
             </div>
           </div>
           {isFree && (
@@ -293,7 +293,7 @@ export default function SettingsPage() {
                 {isFree && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Upgrade to Pro</h4>
-                    <ul className="space-y-2 text-sm text-gray-600">
+                    <ul className="space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-center gap-2">
                         <TrendingUp className="h-4 w-4 text-blue-500" />
                         5x more chatbots (10 vs 2)
@@ -342,7 +342,7 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Monthly Queries</span>
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-muted-foreground">
                     {monthlyQueries} / {monthlyLimit > 0 ? monthlyLimit : '∞'}
                   </span>
                 </div>
@@ -355,7 +355,7 @@ export default function SettingsPage() {
                         usagePercentage >= 80 ? 'bg-amber-100' : 'bg-blue-100'
                       }`}
                     />
-                    <div className="flex justify-between text-xs text-gray-600">
+                    <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{Math.max(0, monthlyLimit - monthlyQueries)} remaining</span>
                       <span>Resets on {getNextResetDate()}</span>
                     </div>
@@ -367,7 +367,7 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Chatbots Created</span>
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-muted-foreground">
                     {chatbotsUsed} / {chatbotLimit > 0 ? chatbotLimit : '∞'}
                   </span>
                 </div>
@@ -377,7 +377,7 @@ export default function SettingsPage() {
                       value={(chatbotsUsed / chatbotLimit) * 100} 
                       className="h-3 bg-purple-100"
                     />
-                    <div className="flex justify-between text-xs text-gray-600">
+                    <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{Math.max(0, chatbotLimit - chatbotsUsed)} remaining</span>
                       <span>Lifetime limit</span>
                     </div>
@@ -390,7 +390,7 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Monthly Deployments</span>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-muted-foreground">
                       {userProfile?.usage.monthlyDeployments || 0} / 3
                     </span>
                   </div>
@@ -399,7 +399,7 @@ export default function SettingsPage() {
                       value={((userProfile?.usage.monthlyDeployments || 0) / 3) * 100} 
                       className="h-3 bg-orange-100"
                     />
-                    <div className="flex justify-between text-xs text-gray-600">
+                    <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{Math.max(0, 3 - (userProfile?.usage.monthlyDeployments || 0))} remaining</span>
                       <span>Resets on {getNextResetDate()}</span>
                     </div>
@@ -411,21 +411,21 @@ export default function SettingsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">{monthlyQueries}</div>
-                  <div className="text-xs text-gray-600">This Month</div>
+                  <div className="text-xs text-muted-foreground">This Month</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">{userProfile?.usage.totalQueries || 0}</div>
-                  <div className="text-xs text-gray-600">All Time</div>
+                  <div className="text-xs text-muted-foreground">All Time</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">{chatbotsUsed}</div>
-                  <div className="text-xs text-gray-600">Chatbots</div>
+                  <div className="text-xs text-muted-foreground">Chatbots</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-orange-600">
                     {isFree ? (userProfile?.usage.monthlyDeployments || 0) : (userProfile?.usage.deploymentsCreated || 0)}
                   </div>
-                  <div className="text-xs text-gray-600">
+                  <div className="text-xs text-muted-foreground">
                     {isFree ? 'This Month' : 'Total'} Deployments
                   </div>
                 </div>
@@ -522,7 +522,7 @@ export default function SettingsPage() {
                           <h4 className="font-medium">Pro Plan</h4>
                           <span className="text-lg font-bold">$19/month</span>
                         </div>
-                        <p className="text-sm text-gray-600 mb-3">
+                        <p className="text-sm text-muted-foreground mb-3">
                           Perfect for growing businesses
                         </p>
                         <ul className="space-y-1 text-xs text-gray-700 mb-4">
@@ -549,7 +549,7 @@ export default function SettingsPage() {
                           <h4 className="font-medium">Enterprise Plan</h4>
                           <span className="text-lg font-bold">$99/month</span>
                         </div>
-                        <p className="text-sm text-gray-600 mb-3">
+                        <p className="text-sm text-muted-foreground mb-3">
                           For large organizations
                         </p>
                         <ul className="space-y-1 text-xs text-gray-700 mb-4">
@@ -578,7 +578,7 @@ export default function SettingsPage() {
                             <span className="text-sm font-medium">Enterprise Plan</span>
                             <span className="text-sm font-semibold">$99/month</span>
                           </div>
-                          <p className="text-xs text-gray-600 mb-2">
+                          <p className="text-xs text-muted-foreground mb-2">
                             Unlimited everything + white-label solutions
                           </p>
                           <Link href="/dashboard/settings/billing">
@@ -611,7 +611,7 @@ export default function SettingsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <h3 className="font-medium">Need Help?</h3>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       Questions about billing or need a custom plan?
                     </p>
                   </div>

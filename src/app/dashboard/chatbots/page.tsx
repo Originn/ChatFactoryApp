@@ -442,14 +442,14 @@ export default function ChatbotsPage() {
   }, [fetchChatbots]);
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-25 via-white to-purple-25 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background dark:from-background dark:via-muted/20 dark:to-background relative overflow-hidden">
       {/* Background Effects */}
       <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
+      <header className="relative z-50 backdrop-blur-sm bg-background/70 border-b border-white/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex">
@@ -464,19 +464,19 @@ export default function ChatbotsPage() {
               <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
                 <Link
                   href="/dashboard"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                  className="border-transparent text-muted-foreground hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/dashboard/chatbots"
-                  className="border-purple-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-purple-500 text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chatbots
                 </Link>
                 <Link
                   href="/dashboard/settings"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                  className="border-transparent text-muted-foreground hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
                 >
                   Settings
                 </Link>
@@ -524,7 +524,7 @@ export default function ChatbotsPage() {
           <div className="px-2 pt-2 pb-3 space-y-1">
             <Link
               href="/dashboard"
-              className="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+              className="border-transparent text-muted-foreground hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Dashboard
@@ -538,7 +538,7 @@ export default function ChatbotsPage() {
             </Link>
             <Link
               href="/dashboard/settings"
-              className="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+              className="border-transparent text-muted-foreground hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Settings
@@ -559,7 +559,7 @@ export default function ChatbotsPage() {
                     <div className="text-base font-medium text-gray-800">
                       {user?.displayName || 'User'}
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-muted-foreground">
                       {user?.email}
                     </div>
                   </div>
@@ -577,7 +577,7 @@ export default function ChatbotsPage() {
           <div className="mb-8 animate-fade-in">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center">
+                <h1 className="text-3xl font-bold text-foreground mb-2 flex items-center">
                   <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center mr-4 shadow-lg">
                     <Bot className="h-5 w-5 text-white" />
                   </div>
@@ -629,7 +629,7 @@ export default function ChatbotsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total Chatbots</p>
-                    <p className="text-2xl font-bold text-gray-900">{chatbots.length}</p>
+                    <p className="text-2xl font-bold text-foreground">{chatbots.length}</p>
                   </div>
                   <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Bot className="h-6 w-6 text-white" />
@@ -726,7 +726,7 @@ export default function ChatbotsPage() {
                 <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-3xl flex items-center justify-center mb-8">
                   <Bot className="h-10 w-10 text-purple-600" />
                 </div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-4">No chatbots yet</h3>
+                <h3 className="text-2xl font-semibold text-foreground mb-4">No chatbots yet</h3>
                 <p className="text-gray-600 mb-8 max-w-md mx-auto text-lg">
                   Ready to create your first AI-powered chatbot? It only takes a few minutes to get started.
                 </p>
@@ -788,7 +788,7 @@ export default function ChatbotsPage() {
                               </div>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-gray-900 truncate group-hover:text-purple-700 transition-colors">
+                              <h3 className="font-semibold text-foreground truncate group-hover:text-purple-700 transition-colors">
                                 {chatbot.name}
                               </h3>
                               <Badge 
