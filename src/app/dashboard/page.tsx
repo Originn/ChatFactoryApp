@@ -147,14 +147,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-25 via-white to-purple-25 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background relative overflow-hidden dark:from-background dark:via-muted/20 dark:to-background">
       {/* Background Effects */}
       <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-white/70 border-b border-white/20 shadow-sm">
+      <header className="relative z-50 backdrop-blur-sm bg-background/70 border-b border-border/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Left section with logo */}
@@ -171,9 +171,9 @@ export default function DashboardPage() {
                     <Crown className="h-3 w-3 mr-1" />
                     Free Plan
                   </Badge>
-                  <div className="flex items-center space-x-2 bg-white/60 rounded-full px-3 py-1 backdrop-blur-sm">
-                    <span className="text-xs text-gray-600">Queries:</span>
-                    <span className="text-xs font-semibold text-gray-800">
+                  <div className="flex items-center space-x-2 bg-background/60 rounded-full px-3 py-1 backdrop-blur-sm">
+                    <span className="text-xs text-muted-foreground">Queries:</span>
+                    <span className="text-xs font-semibold text-foreground">
                       {userProfile.usage.monthlyQueries || 0}/100
                     </span>
                     {((userProfile.usage.monthlyQueries || 0) / 100) >= 0.8 && (
@@ -188,19 +188,19 @@ export default function DashboardPage() {
             <nav className="hidden lg:flex lg:space-x-8">
               <Link
                 href="/dashboard"
-                className="border-purple-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                className="border-purple-500 text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
               >
                 Dashboard
               </Link>
               <Link
                 href="/dashboard/chatbots"
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
               >
                 Chatbots
               </Link>
               <Link
                 href="/dashboard/settings"
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
+                className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
               >
                 Settings
               </Link>
@@ -254,7 +254,7 @@ export default function DashboardPage() {
 
           {/* Mobile Navigation Menu */}
           {isMobileMenuOpen && (
-            <div className="lg:hidden border-t border-white/20 bg-white/80 backdrop-blur-sm">
+            <div className="lg:hidden border-t border-border/20 bg-background/80 backdrop-blur-sm">
               <div className="px-2 pt-2 pb-3 space-y-1">
                 <Link
                   href="/dashboard"
@@ -265,14 +265,14 @@ export default function DashboardPage() {
                 </Link>
                 <Link
                   href="/dashboard/chatbots"
-                  className="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+                  className="border-transparent text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/50 hover:text-foreground block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Chatbots
                 </Link>
                 <Link
                   href="/dashboard/settings"
-                  className="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
+                  className="border-transparent text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/50 hover:text-foreground block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Settings
@@ -302,10 +302,10 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-base font-medium text-gray-800">
+                    <div className="text-base font-medium text-foreground">
                       {user?.displayName || 'User'}
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-muted-foreground">
                       {user?.email}
                     </div>
                   </div>
@@ -319,7 +319,7 @@ export default function DashboardPage() {
                         <Crown className="h-4 w-4 text-purple-600" />
                         <span className="text-sm font-medium text-purple-700">Free Plan</span>
                       </div>
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-muted-foreground">
                         {userProfile.usage.monthlyQueries || 0}/100 queries
                       </div>
                     </div>
@@ -348,23 +348,23 @@ export default function DashboardPage() {
           <div className="mb-6 sm:mb-8 animate-fade-in">
             <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
                   Welcome back, {user?.displayName?.split(' ')[0] || 'there'}! 👋
                 </h1>
-                <p className="text-gray-600 text-sm sm:text-base">
+                <p className="text-muted-foreground text-sm sm:text-base">
                   Here's what's happening with your AI chatbots today.
                 </p>
               </div>
               {userProfile?.subscription.plan === 'free' && (
                 <div className="lg:hidden">
-                  <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-white/40">
-                    <div className="text-sm text-gray-500 mb-2">Query Usage</div>
+                  <div className="bg-background/60 backdrop-blur-sm rounded-lg p-3 border border-border/40">
+                    <div className="text-sm text-muted-foreground mb-2">Query Usage</div>
                     <div className="flex items-center space-x-3">
                       <Progress 
                         value={((userProfile.usage.monthlyQueries || 0) / 100) * 100} 
                         className="flex-1 h-2"
                       />
-                      <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                      <span className="text-sm font-medium text-foreground whitespace-nowrap">
                         {userProfile.usage.monthlyQueries || 0}/100
                       </span>
                     </div>
@@ -374,13 +374,13 @@ export default function DashboardPage() {
               {userProfile?.subscription.plan === 'free' && (
                 <div className="hidden lg:block">
                   <div className="text-right">
-                    <div className="text-sm text-gray-500 mb-1">Your Progress</div>
+                    <div className="text-sm text-muted-foreground mb-1">Your Progress</div>
                     <div className="flex items-center space-x-2">
                       <Progress 
                         value={((userProfile.usage.monthlyQueries || 0) / 100) * 100} 
                         className="w-24 h-2"
                       />
-                      <span className="text-xs text-gray-600">
+                      <span className="text-xs text-muted-foreground">
                         {100 - (userProfile.usage.monthlyQueries || 0)} left
                       </span>
                     </div>
@@ -412,7 +412,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6 sm:mb-8 animate-slide-up" style={{ animationDelay: '0.4s' }}>
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
-                <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center justify-between">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Bot className="h-5 w-5 text-blue-600" />
                     <span className="text-xs sm:text-sm">Total Chatbots</span>
@@ -425,8 +425,8 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-2">
-                <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">{stats.totalChatbots}</div>
-                <p className="text-xs sm:text-sm text-gray-500 flex items-center">
+                <div className="text-2xl sm:text-3xl font-bold text-foreground mb-1">{stats.totalChatbots}</div>
+                <p className="text-xs sm:text-sm text-muted-foreground flex items-center">
                   {userProfile?.subscription.plan === 'free' 
                     ? `${2 - (userProfile.usage.chatbotsCreated || 0)} remaining` 
                     : 'Your AI assistants'}
@@ -437,19 +437,19 @@ export default function DashboardPage() {
             
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
-                <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center space-x-2">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center space-x-2">
                   <MessageCircle className="h-5 w-5 text-green-600" />
                   <span className="text-xs sm:text-sm">Monthly Queries</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-2">
-                <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">
+                <div className="text-2xl sm:text-3xl font-bold text-foreground mb-1">
                   {userProfile?.usage.monthlyQueries || 0}
                   {userProfile?.subscription.plan === 'free' && (
-                    <span className="text-base sm:text-lg text-gray-500 ml-1">/100</span>
+                    <span className="text-base sm:text-lg text-muted-foreground ml-1">/100</span>
                   )}
                 </div>
-                <p className="text-xs sm:text-sm text-gray-500 flex items-center">
+                <p className="text-xs sm:text-sm text-muted-foreground flex items-center">
                   {userProfile?.subscription.plan === 'free' 
                     ? `${100 - (userProfile.usage.monthlyQueries || 0)} remaining this month`
                     : 'Questions answered this month'}
@@ -460,14 +460,14 @@ export default function DashboardPage() {
             
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
-                <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center space-x-2">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center space-x-2">
                   <FileText className="h-5 w-5 text-purple-600" />
                   <span className="text-xs sm:text-sm">Total Documents</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-2">
-                <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">{stats.totalDocuments}</div>
-                <p className="text-xs sm:text-sm text-gray-500 flex items-center">
+                <div className="text-2xl sm:text-3xl font-bold text-foreground mb-1">{stats.totalDocuments}</div>
+                <p className="text-xs sm:text-sm text-muted-foreground flex items-center">
                   Knowledge base files
                   <Upload className="h-3 w-3 ml-1 text-purple-500" />
                 </p>
@@ -476,14 +476,14 @@ export default function DashboardPage() {
             
             <Card variant="elevated" hover="lift" className="group">
               <CardHeader className="pb-2 sm:pb-3">
-                <CardTitle className="text-xs sm:text-sm font-medium text-gray-600 flex items-center space-x-2">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center space-x-2">
                   <Target className="h-5 w-5 text-amber-600" />
                   <span className="text-xs sm:text-sm">Success Rate</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-2">
-                <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">{stats.successRate}%</div>
-                <p className="text-xs sm:text-sm text-gray-500 flex items-center">
+                <div className="text-2xl sm:text-3xl font-bold text-foreground mb-1">{stats.successRate}%</div>
+                <p className="text-xs sm:text-sm text-muted-foreground flex items-center">
                   Average performance
                   <CheckCircle className="h-3 w-3 ml-1 text-green-500" />
                 </p>
@@ -499,11 +499,11 @@ export default function DashboardPage() {
                   <div className="flex-1">
                     <div className="flex items-center mb-3">
                       <Rocket className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 mr-2" />
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-900">
+                      <h3 className="text-lg sm:text-xl font-bold text-foreground">
                         Ready to Scale Your AI Chatbots?
                       </h3>
                     </div>
-                    <p className="text-gray-600 mb-4 text-sm sm:text-base">
+                    <p className="text-muted-foreground mb-4 text-sm sm:text-base">
                       Upgrade to Pro and unlock unlimited chatbots, 2,000 queries/month, custom domains, and advanced analytics.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
@@ -546,7 +546,7 @@ export default function DashboardPage() {
           {/* Active Chatbots Section */}
           <div className="mb-6 sm:mb-8 animate-slide-up" style={{ animationDelay: '0.7s' }}>
             <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center">
                 <Bot className="h-6 w-6 text-blue-600 mr-3" />
                 Your Chatbots
               </h2>
@@ -563,15 +563,15 @@ export default function DashboardPage() {
               <Card variant="elevated">
                 <CardContent className="p-8 text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading dashboard...</p>
+                  <p className="text-muted-foreground">Loading dashboard...</p>
                 </CardContent>
               </Card>
             ) : chatbots.length === 0 ? (
               <Card variant="glow">
                 <CardContent className="p-12 text-center">
                   <Bot className="h-16 w-16 text-purple-600 mx-auto mb-6" />
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">No chatbots yet</h3>
-                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                  <h3 className="text-xl font-semibold text-foreground mb-3">No chatbots yet</h3>
+                  <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                     {userProfile?.subscription.plan === 'free' 
                       ? 'Get started with your first free chatbot. You have 2 chatbots included in your free plan!'
                       : 'Get started by creating your first AI-powered chatbot to assist your users.'}
@@ -589,7 +589,7 @@ export default function DashboardPage() {
                     </Link>
                   </Button>
                   {userProfile?.subscription.plan === 'free' && (userProfile.usage.chatbotsCreated || 0) >= 2 && (
-                    <p className="text-sm text-gray-500 mt-4">
+                    <p className="text-sm text-muted-foreground mt-4">
                       Free plan limit reached. 
                       <button onClick={handleUpgrade} className="text-purple-600 underline ml-1 hover:text-purple-700">
                         Upgrade to create more
@@ -604,22 +604,22 @@ export default function DashboardPage() {
                 <Card variant="elevated" className="hidden lg:block">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gradient-to-r from-gray-50 to-blue-25">
+                      <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-gradient-to-r from-muted/30 to-muted/50">
                           <tr>
-                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                               Chatbot
                             </th>
-                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                               Status
                             </th>
-                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                               Documents
                             </th>
-                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                               Queries
                             </th>
-                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                               Last Updated
                             </th>
                             <th scope="col" className="relative px-6 py-4">
@@ -627,7 +627,7 @@ export default function DashboardPage() {
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
+                        <tbody className="bg-background divide-y divide-border">
                           {chatbots.map((chatbot, index) => {
                             const lastUpdated = chatbot.updatedAt ? 
                               new Date(chatbot.updatedAt.seconds * 1000).toLocaleDateString('en-US', {
@@ -644,8 +644,8 @@ export default function DashboardPage() {
                                       <span className="text-white font-bold text-lg">{chatbot.name.charAt(0)}</span>
                                     </div>
                                     <div className="ml-4">
-                                      <div className="text-sm font-semibold text-gray-900">{chatbot.name}</div>
-                                      <div className="text-sm text-gray-500">{chatbot.description || 'No description'}</div>
+                                      <div className="text-sm font-semibold text-foreground">{chatbot.name}</div>
+                                      <div className="text-sm text-muted-foreground">{chatbot.description || 'No description'}</div>
                                     </div>
                                   </div>
                                 </td>
@@ -659,7 +659,7 @@ export default function DashboardPage() {
                                         ? 'bg-blue-50 text-blue-700 border-blue-200'
                                         : chatbot.status === 'draft'
                                         ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                        : 'bg-gray-50 text-gray-700 border-gray-200'
+                                        : 'bg-muted text-foreground border-border'
                                     }`}
                                   >
                                     {chatbot.status === 'active' ? 'Active' :
@@ -667,13 +667,13 @@ export default function DashboardPage() {
                                      chatbot.status === 'draft' ? 'Draft' : chatbot.status}
                                   </Badge>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground font-medium">
                                   {chatbot.documents?.length || 0}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground font-medium">
                                   {chatbot.stats?.queries || 0}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                                   {lastUpdated}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
@@ -713,15 +713,15 @@ export default function DashboardPage() {
                       <Card key={chatbot.id} variant="elevated" hover="lift" className="overflow-hidden">
                         <CardContent className="p-0">
                           {/* Card Header */}
-                          <div className="bg-gradient-to-r from-gray-50 to-blue-25 p-4 border-b border-gray-100">
+                          <div className="bg-gradient-to-r from-muted/30 to-muted/50 p-4 border-b border-border">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-3">
                                 <div className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                                   <span className="text-white font-bold text-sm sm:text-lg">{chatbot.name.charAt(0)}</span>
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <h3 className="text-sm sm:text-base font-semibold text-gray-900 truncate">{chatbot.name}</h3>
-                                  <p className="text-xs sm:text-sm text-gray-500 truncate">{chatbot.description || 'No description'}</p>
+                                  <h3 className="text-sm sm:text-base font-semibold text-foreground truncate">{chatbot.name}</h3>
+                                  <p className="text-xs sm:text-sm text-muted-foreground truncate">{chatbot.description || 'No description'}</p>
                                 </div>
                               </div>
                               <Badge 
@@ -733,7 +733,7 @@ export default function DashboardPage() {
                                     ? 'bg-blue-50 text-blue-700 border-blue-200'
                                     : chatbot.status === 'draft'
                                     ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                    : 'bg-gray-50 text-gray-700 border-gray-200'
+                                    : 'bg-muted text-foreground border-border'
                                 } text-xs px-2 py-1`}
                               >
                                 {chatbot.status === 'active' ? 'Active' :
@@ -748,16 +748,16 @@ export default function DashboardPage() {
                             {/* Stats Row */}
                             <div className="grid grid-cols-3 gap-4 mb-4">
                               <div className="text-center">
-                                <div className="text-lg sm:text-xl font-bold text-gray-900">{chatbot.documents?.length || 0}</div>
-                                <div className="text-xs text-gray-500">Documents</div>
+                                <div className="text-lg sm:text-xl font-bold text-foreground">{chatbot.documents?.length || 0}</div>
+                                <div className="text-xs text-muted-foreground">Documents</div>
                               </div>
                               <div className="text-center">
-                                <div className="text-lg sm:text-xl font-bold text-gray-900">{chatbot.stats?.queries || 0}</div>
-                                <div className="text-xs text-gray-500">Queries</div>
+                                <div className="text-lg sm:text-xl font-bold text-foreground">{chatbot.stats?.queries || 0}</div>
+                                <div className="text-xs text-muted-foreground">Queries</div>
                               </div>
                               <div className="text-center">
-                                <div className="text-xs sm:text-sm font-medium text-gray-700">Updated</div>
-                                <div className="text-xs text-gray-500">{lastUpdated}</div>
+                                <div className="text-xs sm:text-sm font-medium text-foreground">Updated</div>
+                                <div className="text-xs text-muted-foreground">{lastUpdated}</div>
                               </div>
                             </div>
                             
@@ -796,7 +796,7 @@ export default function DashboardPage() {
 
           {/* Enhanced Quick Actions */}
           <div className="animate-slide-up" style={{ animationDelay: '0.8s' }}>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center">
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-4 sm:mb-6 flex items-center">
               <Sparkles className="h-6 w-6 text-purple-600 mr-3" />
               Quick Actions
             </h2>
@@ -804,8 +804,8 @@ export default function DashboardPage() {
               <Card variant="elevated" hover="lift" className="group">
                 <CardContent className="p-4 sm:p-6 flex flex-col items-center text-center h-full">
                   <Plus className="h-12 w-12 sm:h-16 sm:w-16 text-blue-600 mb-3 sm:mb-4 group-hover:scale-110 transition-transform" />
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Create New Chatbot</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6 flex-grow">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground mb-2">Create New Chatbot</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 flex-grow">
                     {userProfile?.subscription.plan === 'free' 
                       ? `Set up a new AI assistant (${2 - (userProfile.usage.chatbotsCreated || 0)} remaining)`
                       : 'Set up a new AI assistant for your documentation.'}
@@ -826,8 +826,8 @@ export default function DashboardPage() {
               <Card variant="elevated" hover="lift" className="group">
                 <CardContent className="p-4 sm:p-6 flex flex-col items-center text-center h-full">
                   <Upload className="h-12 w-12 sm:h-16 sm:w-16 text-green-600 mb-3 sm:mb-4 group-hover:scale-110 transition-transform" />
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Upload Documents</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6 flex-grow">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground mb-2">Upload Documents</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 flex-grow">
                     Add new documentation files to your knowledge base and train your chatbots.
                   </p>
                   <Button asChild variant="outline" className="w-full border-green-200 hover:bg-green-50 group-hover:border-green-300 h-10 sm:h-11 text-sm">
@@ -847,10 +847,10 @@ export default function DashboardPage() {
                       <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                     )}
                   </div>
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground mb-2">
                     {userProfile?.subscription.plan === 'free' ? 'Upgrade Plan' : 'View Analytics'}
                   </h3>
-                  <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6 flex-grow">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 flex-grow">
                     {userProfile?.subscription.plan === 'free' 
                       ? 'Unlock unlimited chatbots and advanced features with Pro plan.'
                       : 'See detailed performance metrics for your chatbots.'}
