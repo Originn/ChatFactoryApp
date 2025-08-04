@@ -571,7 +571,7 @@ export default function ChatbotDetailPage() {
 
               {/* Tabs Navigation */}
               <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
+                <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide-mobile">
                   <button
                     onClick={() => setActiveTab('overview')}
                     className={`${
@@ -696,7 +696,7 @@ export default function ChatbotDetailPage() {
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-white mt-8 mb-4">Chatbot Preview</h2>
                   <Card className="max-w-md mx-auto dark:bg-gray-800 dark:border-gray-700">
                     <CardContent className="p-6">
-                      <div className="border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 p-4 mb-4 h-60 overflow-y-auto">
+                      <div className="border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 p-4 mb-4 h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent scrollbar-hide-mobile">
                         {/* Simulated chat messages */}
                         <div className="flex items-start space-x-2 mb-3">
                           <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex-shrink-0 flex items-center justify-center overflow-hidden">

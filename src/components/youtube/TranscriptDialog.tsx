@@ -165,7 +165,7 @@ export default function TranscriptDialog({
                 </Button>
               </div>
 
-              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 overflow-y-auto max-h-96">
+              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 overflow-y-auto max-h-96 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent scrollbar-hide-mobile">
                 <div className="space-y-3">
                   {transcript.map((item, index) => (
                     <div key={index} className="flex gap-3">
