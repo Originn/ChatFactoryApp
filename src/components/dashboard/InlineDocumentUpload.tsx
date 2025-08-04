@@ -8,9 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from "@/components/ui/progress";
 import SimplifiedYouTubeConnect from '@/components/youtube/SimplifiedYouTubeConnect';
+import TranscriptDialog from '@/components/youtube/TranscriptDialog';
 import { CentralizedYouTubeService } from '@/services/centralizedYouTubeService';
 import { YouTubeVideo } from '@/types/youtube';
-import { Play, FileText, Youtube, Search } from 'lucide-react';
+import { Play, FileText, Youtube, Search, Subtitles, Languages } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 
 interface UploadedFile {
@@ -52,6 +53,19 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isProcessingVideos, setIsProcessingVideos] = useState(false);
+  
+  // Transcript dialog state
+  const [transcriptDialog, setTranscriptDialog] = useState<{
+    isOpen: boolean;
+    videoId: string;
+    videoTitle: string;
+    language: string;
+  }>({
+    isOpen: false,
+    videoId: '',
+    videoTitle: '',
+    language: ''
+  });
   
   const youtubeService = CentralizedYouTubeService.getInstance();
 
@@ -535,6 +549,26 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     video.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleViewTranscript = (video: YouTubeVideo) => {
+    if (video.transcripts && video.transcripts.length > 0) {
+      setTranscriptDialog({
+        isOpen: true,
+        videoId: video.id,
+        videoTitle: video.title,
+        language: video.transcripts[0].languageName
+      });
+    }
+  };
+
+  const closeTranscriptDialog = () => {
+    setTranscriptDialog({
+      isOpen: false,
+      videoId: '',
+      videoTitle: '',
+      language: ''
+    });
+  };
+
   return (
     <Card className="mb-8 dark:bg-gray-800 dark:border-gray-700">
       <CardContent className="p-8">
@@ -772,11 +806,24 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                                 className="flex-1 min-w-0 cursor-pointer"
                                 onClick={() => handleVideoSelection(video.id)}
                               >
-                                <div className="flex items-center space-x-2 mb-2">
+                                <div className="flex items-center space-x-2 mb-2 flex-wrap gap-1">
                                   <Play className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
                                   <Badge variant={video.privacy === 'public' ? 'secondary' : 'outline'} className="text-xs">
                                     {video.privacy}
                                   </Badge>
+                                  {video.transcripts && video.transcripts.length > 0 && (
+                                    <Badge 
+                                      variant="outline" 
+                                      className="text-xs bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleViewTranscript(video);
+                                      }}
+                                    >
+                                      <Subtitles className="h-3 w-3 mr-1" />
+                                      Transcript
+                                    </Badge>
+                                  )}
                                 </div>
                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 mb-1">
                                   {video.title}
@@ -784,6 +831,20 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                                   {video.duration} • {video.viewCount ? `${parseInt(video.viewCount).toLocaleString()} views` : 'No views'}
                                 </p>
+                                
+                                {/* Transcript Languages */}
+                                {video.transcripts && video.transcripts.length > 0 && (
+                                  <div className="flex items-center space-x-1 mb-2">
+                                    <Languages className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                      {video.transcripts.map(t => t.languageName).join(', ')}
+                                      {video.transcripts.some(t => t.isAutoGenerated) && (
+                                        <span className="text-gray-500 dark:text-gray-400 ml-1">(Auto)</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                
                                 {video.description && (
                                   <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
                                     {video.description}
@@ -840,6 +901,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
           </TabsContent>
         </Tabs>
       </CardContent>
+      
+      {/* Transcript Dialog */}
+      <TranscriptDialog
+        isOpen={transcriptDialog.isOpen}
+        onClose={closeTranscriptDialog}
+        videoId={transcriptDialog.videoId}
+        videoTitle={transcriptDialog.videoTitle}
+        language={transcriptDialog.language}
+        userId={user?.uid || ''}
+      />
     </Card>
   );
 }
