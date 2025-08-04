@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect } from 'react';
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes';
-import { type ThemeProviderProps } from 'next-themes/dist/types';
+import { type ThemeProviderProps } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserService } from '@/services/userService';
 
