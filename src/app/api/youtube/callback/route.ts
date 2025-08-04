@@ -54,16 +54,20 @@ export async function GET(req: NextRequest) {
         </div>
         <script>
           if (window.opener) {
-            if ('${error}') {
+            const errorParam = ${error ? `'${error}'` : 'null'};
+            const codeParam = ${code ? `'${code}'` : 'null'};
+            const stateParam = ${state ? `'${state}'` : 'null'};
+            
+            if (errorParam) {
               window.opener.postMessage({
                 type: 'YOUTUBE_AUTH_ERROR',
-                error: '${error}'
+                error: errorParam
               }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
-            } else if ('${code}' && '${state}') {
+            } else if (codeParam && stateParam) {
               window.opener.postMessage({
                 type: 'YOUTUBE_AUTH_SUCCESS',
-                code: '${code}',
-                userId: '${state}'
+                code: codeParam,
+                userId: stateParam
               }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
             } else {
               window.opener.postMessage({

@@ -75,11 +75,16 @@ export class CentralizedYouTubeService {
       }
 
       const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          if (!this.authState.isConnected) {
-            reject(new Error('Authentication cancelled'));
+        try {
+          if (popup.closed) {
+            clearInterval(checkClosed);
+            if (!this.authState.isConnected) {
+              reject(new Error('Authentication cancelled'));
+            }
           }
+        } catch (error) {
+          // Handle Cross-Origin-Opener-Policy restriction
+          console.log('Cannot check popup.closed due to COOP policy');
         }
       }, 1000);
 
@@ -87,12 +92,24 @@ export class CentralizedYouTubeService {
       const messageHandler = async (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
         
+        // Check if event.data exists and has the expected structure
+        if (!event.data || typeof event.data !== 'object') {
+          return;
+        }
+        
         if (event.data.type === 'YOUTUBE_AUTH_SUCCESS') {
           clearInterval(checkClosed);
-          popup.close();
+          try {
+            popup.close();
+          } catch (error) {
+            // Ignore COOP policy error
+          }
           window.removeEventListener('message', messageHandler);
           
           try {
+            if (!event.data.code || !event.data.userId) {
+              throw new Error('Missing authorization code or user ID');
+            }
             await this.handleAuthCallback(event.data.code, event.data.userId);
             resolve();
           } catch (error) {
@@ -100,13 +117,43 @@ export class CentralizedYouTubeService {
           }
         } else if (event.data.type === 'YOUTUBE_AUTH_ERROR') {
           clearInterval(checkClosed);
-          popup.close();
+          try {
+            popup.close();
+          } catch (error) {
+            // Ignore COOP policy error
+          }
           window.removeEventListener('message', messageHandler);
           reject(new Error(event.data.error || 'Authentication failed'));
         }
       };
 
       window.addEventListener('message', messageHandler);
+      
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        clearInterval(checkClosed);
+        window.removeEventListener('message', messageHandler);
+        try {
+          popup.close();
+        } catch (error) {
+          console.log('Cannot close popup due to COOP policy');
+        }
+        reject(new Error('Authentication timed out after 5 minutes'));
+      }, 300000); // 5 minutes
+      
+      // Clean up timeout when resolved/rejected
+      const originalResolve = resolve;
+      const originalReject = reject;
+      
+      resolve = (value) => {
+        clearTimeout(timeout);
+        originalResolve(value);
+      };
+      
+      reject = (reason) => {
+        clearTimeout(timeout);
+        originalReject(reason);
+      };
     });
   }
   /**

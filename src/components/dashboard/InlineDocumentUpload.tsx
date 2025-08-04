@@ -4,8 +4,14 @@ import { useState, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from "@/components/ui/progress";
+import SimplifiedYouTubeConnect from '@/components/youtube/SimplifiedYouTubeConnect';
+import { CentralizedYouTubeService } from '@/services/centralizedYouTubeService';
+import { YouTubeVideo } from '@/types/youtube';
+import { Play, FileText, Youtube, Search } from 'lucide-react';
+import { Input } from "@/components/ui/input";
 
 interface UploadedFile {
   file: File;
@@ -38,6 +44,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // YouTube-related state
+  const [isYouTubeConnected, setIsYouTubeConnected] = useState(false);
+  const [youtubeVideos, setYoutubeVideos] = useState<YouTubeVideo[]>([]);
+  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isProcessingVideos, setIsProcessingVideos] = useState(false);
+  
+  const youtubeService = CentralizedYouTubeService.getInstance();
 
   const getProgressForProcessing = (status: string, elapsed: number, type: string) => {
     if (type === 'chm') {
@@ -453,24 +469,105 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     Promise.allSettled(warmingPromises);
   };
 
+  // YouTube functionality
+  const handleYouTubeConnection = (connected: boolean) => {
+    setIsYouTubeConnected(connected);
+    if (connected) {
+      loadYouTubeVideos();
+    } else {
+      setYoutubeVideos([]);
+      setSelectedVideos(new Set());
+    }
+  };
+
+  const loadYouTubeVideos = async () => {
+    if (!user?.uid) return;
+
+    setIsLoadingVideos(true);
+    try {
+      youtubeService.setUserId(user.uid);
+      const response = await youtubeService.fetchVideos({ maxResults: 25, searchQuery });
+      setYoutubeVideos(response.videos);
+    } catch (error) {
+      console.error('Error loading YouTube videos:', error);
+    } finally {
+      setIsLoadingVideos(false);
+    }
+  };
+
+  const handleVideoSelection = (videoId: string) => {
+    setSelectedVideos(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(videoId)) {
+        newSet.delete(videoId);
+      } else {
+        newSet.add(videoId);
+      }
+      return newSet;
+    });
+  };
+
+  const processSelectedVideos = async () => {
+    if (!user?.uid || selectedVideos.size === 0) return;
+
+    setIsProcessingVideos(true);
+    try {
+      await youtubeService.processVideos(
+        Array.from(selectedVideos), 
+        false, // isPublic
+        chatbotId
+      );
+      
+      // Clear selection and refresh
+      setSelectedVideos(new Set());
+      if (onUploadComplete) {
+        onUploadComplete();
+      }
+    } catch (error) {
+      console.error('Error processing YouTube videos:', error);
+    } finally {
+      setIsProcessingVideos(false);
+    }
+  };
+
+  const filteredVideos = youtubeVideos.filter(video =>
+    video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    video.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <Card className="mb-8">
+    <Card className="mb-8 dark:bg-gray-800 dark:border-gray-700">
       <CardContent className="p-8">
-        <div className="text-center">
-          <div className="mx-auto h-16 w-16 text-blue-500 mb-4">
-            <svg className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={1.5} 
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
-              />
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Documents & Videos</h3>
-          <p className="text-gray-600 mb-6">
-            Upload your documentation files and videos to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600">CHM files</strong>, and <strong className="text-purple-600">Video files</strong>.
-          </p>
+        <Tabs defaultValue="files" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="files" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">Document Files</span>
+              <span className="sm:hidden">Files</span>
+            </TabsTrigger>
+            <TabsTrigger value="youtube" className="flex items-center gap-2">
+              <Youtube className="w-4 h-4" />
+              <span className="hidden sm:inline">YouTube Videos</span>
+              <span className="sm:hidden">YouTube</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="files" className="space-y-6">
+            <div className="text-center">
+              <div className="mx-auto h-16 w-16 text-blue-500 dark:text-blue-400 mb-4">
+                <svg className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={1.5} 
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Upload Documents & Videos</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Upload your documentation files and videos to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600 dark:text-blue-400">CHM files</strong>, and <strong className="text-purple-600 dark:text-purple-400">Video files</strong>.
+              </p>
           
           <div className="border-2 border-dashed border-blue-300 rounded-lg p-12 bg-gradient-to-br from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 transition-all duration-200">
             <div className="space-y-4">
@@ -606,6 +703,142 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
             </Button>
           </div>
         )}
+          </TabsContent>
+
+          <TabsContent value="youtube" className="space-y-6">
+            <div className="space-y-6">
+              {/* YouTube Connection */}
+              <div className="flex justify-center">
+                <SimplifiedYouTubeConnect 
+                  userId={user?.uid || ''}
+                  onConnectionChange={handleYouTubeConnection}
+                />
+              </div>
+
+              {/* YouTube Videos Section */}
+              {isYouTubeConnected && (
+                <div className="space-y-4">
+                  {/* Search Bar */}
+                  <div className="flex items-center space-x-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Search your YouTube videos..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                      />
+                    </div>
+                    <Button
+                      onClick={loadYouTubeVideos}
+                      disabled={isLoadingVideos}
+                      variant="outline"
+                      size="sm"
+                    >
+                      {isLoadingVideos ? 'Loading...' : 'Refresh'}
+                    </Button>
+                  </div>
+
+                  {/* Loading State */}
+                  {isLoadingVideos && (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                      <p className="text-gray-600 dark:text-gray-400">Loading your YouTube videos...</p>
+                    </div>
+                  )}
+
+                  {/* Videos Grid */}
+                  {!isLoadingVideos && filteredVideos.length > 0 && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredVideos.map((video) => (
+                          <div
+                            key={video.id}
+                            className={`border-2 rounded-lg p-4 transition-all duration-200 ${
+                              selectedVideos.has(video.id)
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                            }`}
+                          >
+                            <div className="flex items-start space-x-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedVideos.has(video.id)}
+                                onChange={() => handleVideoSelection(video.id)}
+                                className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <div 
+                                className="flex-1 min-w-0 cursor-pointer"
+                                onClick={() => handleVideoSelection(video.id)}
+                              >
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <Play className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                  <Badge variant={video.privacy === 'public' ? 'secondary' : 'outline'} className="text-xs">
+                                    {video.privacy}
+                                  </Badge>
+                                </div>
+                                <h4 className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 mb-1">
+                                  {video.title}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                  {video.duration} • {video.viewCount ? `${parseInt(video.viewCount).toLocaleString()} views` : 'No views'}
+                                </p>
+                                {video.description && (
+                                  <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+                                    {video.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            {video.thumbnailUrl && (
+                              <img
+                                src={video.thumbnailUrl}
+                                alt={video.title}
+                                className="w-full h-20 object-cover rounded mt-3"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Process Selected Videos Button */}
+                      {selectedVideos.size > 0 && (
+                        <div className="flex justify-center pt-4">
+                          <Button
+                            onClick={processSelectedVideos}
+                            disabled={isProcessingVideos}
+                            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium px-8 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                          >
+                            {isProcessingVideos 
+                              ? 'Processing Videos...' 
+                              : `Process ${selectedVideos.size} Selected Video${selectedVideos.size === 1 ? '' : 's'}`
+                            }
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* No Videos Found */}
+                  {!isLoadingVideos && filteredVideos.length === 0 && youtubeVideos.length > 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-gray-600 dark:text-gray-400">No videos found matching your search.</p>
+                    </div>
+                  )}
+
+                  {/* No Videos Available */}
+                  {!isLoadingVideos && youtubeVideos.length === 0 && (
+                    <div className="text-center py-8">
+                      <Youtube className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 dark:text-gray-400">No YouTube videos found in your channel.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

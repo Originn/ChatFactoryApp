@@ -32,6 +32,11 @@ export default function SimplifiedYouTubeConnect({
   const checkConnection = async () => {
     try {
       setIsChecking(true);
+      
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+      
       const isConnected = await youtubeService.checkConnection();
       const currentState = youtubeService.getAuthState();
       setAuthState(currentState);
@@ -40,7 +45,7 @@ export default function SimplifiedYouTubeConnect({
       console.error('Error checking YouTube connection:', error);
       setAuthState({ 
         isConnected: false, 
-        error: 'Failed to check connection status' 
+        error: error instanceof Error ? error.message : 'Failed to check connection status'
       });
     } finally {
       setIsChecking(false);
@@ -51,6 +56,10 @@ export default function SimplifiedYouTubeConnect({
     try {
       setIsConnecting(true);
       setAuthState({ isConnected: false, error: undefined });
+      
+      if (!userId) {
+        throw new Error('User ID is required for YouTube connection');
+      }
       
       await youtubeService.connectWithPopup();
       
