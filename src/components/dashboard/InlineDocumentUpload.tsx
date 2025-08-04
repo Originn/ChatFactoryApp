@@ -603,7 +603,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                 Upload your documentation files and videos to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600 dark:text-blue-400">CHM files</strong>, and <strong className="text-purple-600 dark:text-purple-400">Video files</strong>.
               </p>
           
-          <div className="border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg p-12 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-600 hover:from-blue-100 hover:to-purple-100 dark:hover:from-gray-600 dark:hover:to-gray-500 transition-all duration-200">
+          <div className="border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg p-6 sm:p-12 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-600 hover:from-blue-100 hover:to-purple-100 dark:hover:from-gray-600 dark:hover:to-gray-500 transition-all duration-200">
             <div className="space-y-4">
               <div className="mx-auto h-12 w-12 text-blue-500 dark:text-blue-400">
                 <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">

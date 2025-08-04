@@ -540,12 +540,12 @@ export default function ChatbotDetailPage() {
 
               {/* Chatbot Header */}
               <div className="mb-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{chatbot.name}</h1>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{chatbot.name}</h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-1">{chatbot.description || 'No description available'}</p>
                   </div>
-                  <div className="flex space-x-3">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3 sm:gap-0 flex-shrink-0">
                     <Button asChild>
                       <Link href={`/dashboard/chatbots/${chatbot.id}/edit`}>
                         Edit Chatbot
@@ -571,14 +571,14 @@ export default function ChatbotDetailPage() {
 
               {/* Tabs Navigation */}
               <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                <nav className="-mb-px flex space-x-8">
+                <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
                   <button
                     onClick={() => setActiveTab('overview')}
                     className={`${
                       activeTab === 'overview'
                         ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
                   >
                     Overview
                   </button>
@@ -588,7 +588,7 @@ export default function ChatbotDetailPage() {
                       activeTab === 'documents'
                         ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
                   >
                     Documents
                   </button>
@@ -598,7 +598,7 @@ export default function ChatbotDetailPage() {
                       activeTab === 'users'
                         ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
                   >
                     Users
                   </button>
@@ -608,7 +608,7 @@ export default function ChatbotDetailPage() {
                       activeTab === 'analytics'
                         ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
                   >
                     Analytics
                   </button>
@@ -618,7 +618,7 @@ export default function ChatbotDetailPage() {
                       activeTab === 'settings'
                         ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
                   >
                     Settings
                   </button>
