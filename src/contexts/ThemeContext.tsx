@@ -20,14 +20,13 @@ function ThemeSync() {
   useEffect(() => {
     if (authLoading || !user || !userProfile) return; // Wait for auth and profile to be ready
     
-    // Only set theme from profile if current theme is default/system or if theme hasn't been set yet
+    // Only set theme from profile if it's different and we haven't set a theme yet
     if (userProfile.preferences?.theme && 
-        (theme === 'system' || !theme) && 
-        userProfile.preferences.theme !== theme) {
-      console.log('🔄 Initial theme sync from profile:', userProfile.preferences.theme);
+        userProfile.preferences.theme !== theme && 
+        theme === 'system') { // Only change from default system theme
       setTheme(userProfile.preferences.theme);
     }
-  }, [user, userProfile, authLoading, setTheme]); // Removed 'theme' from dependencies to prevent loops
+  }, [user, userProfile, authLoading, setTheme, theme]);
 
   return null;
 }
@@ -67,6 +66,7 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
         defaultTheme="system"
         enableSystem
         storageKey="chatfactory-theme"
+        disableTransitionOnChange
         {...props}
       >
         <ThemeSync />

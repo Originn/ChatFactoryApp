@@ -150,8 +150,8 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background relative overflow-hidden dark:from-background dark:via-muted/20 dark:to-background">
       {/* Background Effects */}
       <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" />
-      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
+      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
       
       {/* Dashboard Header */}
       <header className="relative z-50 backdrop-blur-sm bg-background/70 border-b border-border/20 shadow-sm">

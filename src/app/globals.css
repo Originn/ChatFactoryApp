@@ -1,6 +1,25 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* FLICKER FIX: Disable problematic animations */
+*, *::before, *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* Re-enable ONLY safe animations */
+.safe-animation {
+  animation-duration: revert !important;
+  transition-duration: revert !important;
+}
+
+/* Allow button hover effects */
+button:hover {
+  transition: background-color 0.15s ease !important;
+}
  
 @layer base {
   :root {
