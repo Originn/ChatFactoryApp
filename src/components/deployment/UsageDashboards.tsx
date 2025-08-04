@@ -52,8 +52,8 @@ export const UsageOverviewCard: React.FC = () => {
           <div className="flex items-center gap-3">
             <Activity className="h-8 w-8 text-purple-600" />
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Usage Overview</h3>
-              <p className="text-sm text-gray-500">Track your free plan limits</p>
+              <h3 className="text-lg font-semibold text-foreground">Usage Overview</h3>
+              <p className="text-sm text-muted-foreground">Track your free plan limits</p>
             </div>
           </div>
           <Badge className="bg-gradient-to-r from-purple-500 to-blue-500 text-white border border-purple-600 shadow-lg">
@@ -69,10 +69,10 @@ export const UsageOverviewCard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Activity className="h-5 w-5 text-green-600" />
-              <span className="text-sm font-semibold text-gray-800">Monthly Queries</span>
+              <span className="text-sm font-semibold text-foreground">Monthly Queries</span>
             </div>
             <span className={`text-sm font-bold ${
-              isAtLimit ? 'text-red-600' : isNearLimit ? 'text-amber-600' : 'text-gray-800'
+              isAtLimit ? 'text-red-600' : isNearLimit ? 'text-amber-600' : 'text-foreground'
             }`}>
               {monthlyQueries} / {monthlyLimit}
             </span>
@@ -92,11 +92,11 @@ export const UsageOverviewCard: React.FC = () => {
             </div>
             <div className="flex justify-between text-xs">
               <span className={`font-medium ${
-                queriesRemaining <= 0 ? 'text-red-600' : queriesRemaining <= 20 ? 'text-amber-600' : 'text-gray-600'
+                queriesRemaining <= 0 ? 'text-red-600' : queriesRemaining <= 20 ? 'text-amber-600' : 'text-muted-foreground'
               }`}>
                 {queriesRemaining > 0 ? `${queriesRemaining} remaining` : 'Limit reached'}
               </span>
-              <span className="text-gray-500">Resets {getNextResetDate()}</span>
+              <span className="text-muted-foreground">Resets {getNextResetDate()}</span>
             </div>
           </div>
         </div>
@@ -108,7 +108,7 @@ export const UsageOverviewCard: React.FC = () => {
               {userProfile.usage.chatbotsCreated || 0}/2
             </div>
             <div className="text-xs font-medium text-blue-700">Chatbots Created</div>
-            <div className="text-xs text-gray-600 mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               {2 - (userProfile.usage.chatbotsCreated || 0)} remaining
             </div>
           </div>
@@ -118,7 +118,7 @@ export const UsageOverviewCard: React.FC = () => {
               {userProfile.usage.totalQueries || 0}
             </div>
             <div className="text-xs font-medium text-green-700">Total Queries</div>
-            <div className="text-xs text-gray-600 mt-1">All time</div>
+            <div className="text-xs text-muted-foreground mt-1">All time</div>
           </div>
         </div>
 
@@ -126,7 +126,7 @@ export const UsageOverviewCard: React.FC = () => {
         <div className="bg-gradient-to-br from-purple-100 to-blue-100 p-5 rounded-xl border border-purple-300">
           <div className="flex items-center mb-3">
             <Crown className="h-6 w-6 text-purple-600 mr-2" />
-            <h3 className="font-semibold text-sm text-gray-900">Free Plan Includes</h3>
+            <h3 className="font-semibold text-sm text-foreground">Free Plan Includes</h3>
           </div>
           <div className="grid grid-cols-1 gap-2 text-xs">
             <div className="flex items-center text-green-700 bg-green-50 rounded-lg px-2 py-1">
@@ -219,8 +219,8 @@ export const UsageAnalyticsChart: React.FC = () => {
           <div className="flex items-center gap-3">
             <BarChart3 className="h-8 w-8 text-blue-600" />
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Weekly Analytics</h3>
-              <p className="text-sm text-gray-500">Your query patterns this week</p>
+              <h3 className="text-lg font-semibold text-foreground">Weekly Analytics</h3>
+              <p className="text-sm text-muted-foreground">Your query patterns this week</p>
             </div>
           </div>
           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
@@ -232,7 +232,7 @@ export const UsageAnalyticsChart: React.FC = () => {
       <CardContent className="space-y-6">
         {/* Enhanced Bar Chart */}
         <div className="space-y-4">
-          <div className="grid grid-cols-7 gap-3 h-32 items-end bg-gradient-to-t from-gray-50 to-transparent rounded-xl p-4">
+          <div className="grid grid-cols-7 gap-3 h-32 items-end bg-gradient-to-t from-muted/30 to-transparent rounded-xl p-4">
             {dailyUsage.map((day, index) => {
               const height = maxQueries > 0 ? (day.queries / maxQueries) * 100 : 0;
               const isToday = index === 6; // Assume Sunday is today for demo
@@ -256,12 +256,12 @@ export const UsageAnalyticsChart: React.FC = () => {
                   </div>
                   <div className="text-center">
                     <div className={`text-xs font-medium ${
-                      isToday ? 'text-purple-600' : 'text-gray-600'
+                      isToday ? 'text-purple-600' : 'text-muted-foreground'
                     }`}>
                       {day.day}
                     </div>
                     <div className={`text-xs font-bold ${
-                      isToday ? 'text-purple-700' : day.queries >= 8 ? 'text-blue-600' : 'text-gray-500'
+                      isToday ? 'text-purple-700' : day.queries >= 8 ? 'text-blue-600' : 'text-muted-foreground'
                     }`}>
                       {day.queries}
                     </div>
@@ -277,17 +277,17 @@ export const UsageAnalyticsChart: React.FC = () => {
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200/50 text-center">
             <div className="text-2xl font-bold text-blue-600 mb-1">{totalWeekQueries}</div>
             <div className="text-xs font-medium text-blue-700">This Week</div>
-            <div className="text-xs text-gray-600 mt-1">Total queries</div>
+            <div className="text-xs text-muted-foreground mt-1">Total queries</div>
           </div>
           <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200/50 text-center">
             <div className="text-2xl font-bold text-green-600 mb-1">{avgDaily}</div>
             <div className="text-xs font-medium text-green-700">Daily Average</div>
-            <div className="text-xs text-gray-600 mt-1">Per day</div>
+            <div className="text-xs text-muted-foreground mt-1">Per day</div>
           </div>
           <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200/50 text-center">
             <div className="text-2xl font-bold text-purple-600 mb-1">{peakDay}</div>
             <div className="text-xs font-medium text-purple-700">Peak Day</div>
-            <div className="text-xs text-gray-600 mt-1">Highest usage</div>
+            <div className="text-xs text-muted-foreground mt-1">Highest usage</div>
           </div>
         </div>
 
