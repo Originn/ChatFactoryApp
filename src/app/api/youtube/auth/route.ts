@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // youtube.force-ssl scope is required for caption/transcript download
+    // youtube.readonly is insufficient for captions.download API endpoint
     const scope = 'https://www.googleapis.com/auth/youtube.force-ssl';
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/youtube/callback`;
     
