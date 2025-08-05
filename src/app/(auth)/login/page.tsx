@@ -5,30 +5,113 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
-import { Mail, Lock, LogIn } from 'lucide-react';
+import { Mail, Lock, LogIn, UserPlus } from 'lucide-react';
 import MarketingHeader from '@/components/shared/MarketingHeader';
 
+// Password strength checker for signup mode
+const checkPasswordStrength = (password: string) => {
+  let score = 0;
+  const feedback = [];
+
+  if (password.length >= 8) score++;
+  else feedback.push('At least 8 characters');
+
+  if (/[a-z]/.test(password)) score++;
+  else feedback.push('Lowercase letter');
+
+  if (/[A-Z]/.test(password)) score++;
+  else feedback.push('Uppercase letter');
+
+  if (/[0-9]/.test(password)) score++;
+  else feedback.push('Number');
+
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  else feedback.push('Special character');
+
+  const strength = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'][score];
+  const color = ['text-red-600', 'text-orange-600', 'text-yellow-600', 'text-blue-600', 'text-green-600'][score];
+
+  return { strength, color, score, feedback };
+};
+
 export default function LoginPage() {
+  const [isSignupMode, setIsSignupMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signUpWithEmail } = useAuth();
   const router = useRouter();
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const passwordStrength = checkPasswordStrength(password);
+
+  const validateSignupForm = () => {
+    if (!displayName.trim()) {
+      setError('Full name is required');
+      return false;
+    }
+    if (!email.trim()) {
+      setError('Email is required');
+      return false;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+    if (passwordStrength.score < 3) {
+      setError('Password is too weak. Please include: ' + passwordStrength.feedback.join(', '));
+      return false;
+    }
+    if (!agreeToTerms) {
+      setError('You must agree to the Terms of Service');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      await signInWithEmail({ email, password });
-      router.push('/dashboard');
+      if (isSignupMode) {
+        if (!validateSignupForm()) return;
+        
+        await signUpWithEmail({
+          email,
+          password,
+          displayName,
+          agreeToTerms
+        });
+        
+        router.push('/email-verification?email=' + encodeURIComponent(email));
+      } else {
+        await signInWithEmail({ email, password });
+        router.push('/dashboard');
+      }
     } catch (error: any) {
-      setError(error.message || 'Failed to sign in');
-      console.error('Login error:', error);
+      console.error(isSignupMode ? 'Signup error:' : 'Login error:', error);
+      
+      if (isSignupMode) {
+        if (error.code === 'auth/email-already-in-use') {
+          setError('An account with this email already exists');
+        } else if (error.code === 'auth/weak-password') {
+          setError('Password is too weak');
+        } else if (error.code === 'auth/invalid-email') {
+          setError('Invalid email address');
+        } else {
+          setError(error.message || 'Failed to create account');
+        }
+      } else {
+        setError(error.message || 'Failed to sign in');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -52,16 +135,56 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <MarketingHeader showHomeButton={true} showAuthButtons={true} variant="light" currentPage="login" />
+      <MarketingHeader showHomeButton={true} showAuthButtons={true} currentPage="login" />
 
-      {/* Login Form */}
+      {/* Auth Form */}
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-foreground">Log in to WizeChat</CardTitle>
-            <CardDescription>
-              Enter your email and password to access your account
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl font-bold text-foreground">
+                  {isSignupMode ? 'Create your account' : 'Log in to WizeChat'}
+                </CardTitle>
+                <CardDescription>
+                  {isSignupMode 
+                    ? 'Enter your details to get started with WizeChat'
+                    : 'Enter your email and password to access your account'
+                  }
+                </CardDescription>
+              </div>
+            </div>
+            
+            {/* Toggle between Login/Signup */}
+            <div className="flex items-center justify-center space-x-1 mt-4">
+              <Button
+                variant={!isSignupMode ? "default" : "ghost"}
+                size="sm"
+                onClick={() => {
+                  setIsSignupMode(false);
+                  setError('');
+                  setConfirmPassword('');
+                  setDisplayName('');
+                  setAgreeToTerms(false);
+                }}
+                className="flex-1"
+              >
+                <LogIn className="h-4 w-4 mr-2" />
+                Login
+              </Button>
+              <Button
+                variant={isSignupMode ? "default" : "ghost"}
+                size="sm"
+                onClick={() => {
+                  setIsSignupMode(true);
+                  setError('');
+                }}
+                className="flex-1"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Sign Up
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {error && (
@@ -69,11 +192,26 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Full Name - only show in signup mode */}
+              {isSignupMode && (
+                <div className="space-y-2">
+                  <label htmlFor="displayName" className="text-sm font-medium text-foreground">Full Name *</label>
+                  <Input 
+                    id="displayName" 
+                    type="text" 
+                    placeholder="Enter your full name" 
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium text-foreground flex items-center">
                   <Mail className="h-4 w-4 mr-2" />
-                  Email
+                  Email {isSignupMode && '*'}
                 </label>
                 <Input 
                   id="email" 
@@ -84,31 +222,99 @@ export default function LoginPage() {
                   required
                 />
               </div>
+              
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label htmlFor="password" className="text-sm font-medium text-foreground flex items-center">
                     <Lock className="h-4 w-4 mr-2" />
-                    Password
+                    Password {isSignupMode && '*'}
                   </label>
-                  <Link href="/forgot-password" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
-                    Forgot password?
-                  </Link>
+                  {!isSignupMode && (
+                    <Link href="/forgot-password" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                      Forgot password?
+                    </Link>
+                  )}
                 </div>
                 <Input 
                   id="password" 
                   type="password"
+                  placeholder={isSignupMode ? "Create a strong password" : "Enter your password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                {/* Password strength indicator - only show in signup mode */}
+                {isSignupMode && password && (
+                  <div className="text-xs space-y-1">
+                    <div className={`font-medium ${passwordStrength.color}`}>
+                      Strength: {passwordStrength.strength}
+                    </div>
+                    {passwordStrength.feedback.length > 0 && (
+                      <div className="text-muted-foreground">
+                        Missing: {passwordStrength.feedback.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Confirm Password - only show in signup mode */}
+              {isSignupMode && (
+                <div className="space-y-2">
+                  <label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">Confirm Password *</label>
+                  <Input 
+                    id="confirmPassword" 
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                  {confirmPassword && password !== confirmPassword && (
+                    <div className="text-xs text-red-600 dark:text-red-300">
+                      Passwords do not match
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Terms agreement - only show in signup mode */}
+              {isSignupMode && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="terms"
+                    checked={agreeToTerms}
+                    onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)}
+                  />
+                  <label htmlFor="terms" className="text-sm text-muted-foreground">
+                    I agree to the{" "}
+                    <Link href="/terms" className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                      Privacy Policy
+                    </Link>
+                  </label>
+                </div>
+              )}
+              
               <Button 
                 type="submit" 
                 className="w-full bg-blue-600 hover:bg-blue-700"
-                disabled={isLoading}
+                disabled={isLoading || (isSignupMode && !agreeToTerms)}
               >
-                <LogIn className="h-4 w-4 mr-2" />
-                {isLoading ? 'Signing in...' : 'Sign In'}
+                {isSignupMode ? (
+                  <>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    {isLoading ? 'Creating account...' : 'Create Account'}
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-4 w-4 mr-2" />
+                    {isLoading ? 'Signing in...' : 'Sign In'}
+                  </>
+                )}
               </Button>
             </form>
             
@@ -138,14 +344,19 @@ export default function LoginPage() {
               </Button>
             </div>
           </CardContent>
-          <CardFooter className="flex justify-center">
-            <div className="text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <Link href="/signup" className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium">
-                Sign up
-              </Link>
-            </div>
-          </CardFooter>
+          {!isSignupMode && (
+            <CardFooter className="flex justify-center">
+              <div className="text-sm text-muted-foreground">
+                Don't have an account?{" "}
+                <button 
+                  onClick={() => setIsSignupMode(true)}
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
+                >
+                  Sign up
+                </button>
+              </div>
+            </CardFooter>
+          )}
         </Card>
       </div>
     </div>

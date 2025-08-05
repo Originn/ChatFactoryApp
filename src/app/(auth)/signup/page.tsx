@@ -116,7 +116,7 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <MarketingHeader showHomeButton={true} showAuthButtons={true} variant="light" currentPage="signup" />
+      <MarketingHeader showHomeButton={true} showAuthButtons={true} currentPage="signup" />
 
       {/* Signup Form */}
       <div className="flex items-center justify-center py-12 px-4">

@@ -6,12 +6,12 @@ import MarketingHeader from '@/components/shared/MarketingHeader';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header/Navigation */}
-      <MarketingHeader variant="dark" showAuthButtons={true} currentPage="home" />
+      <MarketingHeader showAuthButtons={true} currentPage="home" />
       
       {/* Hero Section */}
-      <section className="w-full h-screen flex items-center justify-center text-center px-4 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+      <section className="w-full h-screen flex items-center justify-center text-center px-4 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 text-white">
         <div>
           <h1
             className="text-5xl font-bold mb-4"
@@ -43,24 +43,24 @@ export default function LandingPage() {
       </section>
       
       {/* How It Works */}
-      <section id="features" className="py-16 bg-gray-50 px-6">
+      <section id="features" className="py-16 bg-muted/30 px-6">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-semibold mb-12 text-center">How It Works</h2>
+          <h2 className="text-3xl font-semibold mb-12 text-center text-foreground">How It Works</h2>
           <div className="grid md:grid-cols-3 gap-12">
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-2xl font-bold mb-4">1</div>
-              <h3 className="text-xl font-medium mb-2">Upload Your Docs</h3>
-              <p className="text-gray-600">Upload your existing documentation in PDF, Markdown, Word, or HTML formats.</p>
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 text-2xl font-bold mb-4">1</div>
+              <h3 className="text-xl font-medium mb-2 text-foreground">Upload Your Docs</h3>
+              <p className="text-muted-foreground">Upload your existing documentation in PDF, Markdown, Word, or HTML formats.</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-2xl font-bold mb-4">2</div>
-              <h3 className="text-xl font-medium mb-2">AI Processing</h3>
-              <p className="text-gray-600">Our AI analyzes your content, creates embeddings, and builds a knowledge base.</p>
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 text-2xl font-bold mb-4">2</div>
+              <h3 className="text-xl font-medium mb-2 text-foreground">AI Processing</h3>
+              <p className="text-muted-foreground">Our AI analyzes your content, creates embeddings, and builds a knowledge base.</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-2xl font-bold mb-4">3</div>
-              <h3 className="text-xl font-medium mb-2">Deploy Chatbot</h3>
-              <p className="text-gray-600">Integrate your new AI assistant into your website, app, or internal tools.</p>
+              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400 text-2xl font-bold mb-4">3</div>
+              <h3 className="text-xl font-medium mb-2 text-foreground">Deploy Chatbot</h3>
+              <p className="text-muted-foreground">Integrate your new AI assistant into your website, app, or internal tools.</p>
             </div>
           </div>
         </div>
@@ -116,10 +116,10 @@ export default function LandingPage() {
       </section>
       
       {/* Pricing */}
-      <section id="pricing" className="py-20 px-6 bg-gray-50">
+      <section id="pricing" className="py-20 px-6 bg-muted/30">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-semibold mb-4 text-center">Simple, Transparent Pricing</h2>
-          <p className="text-gray-600 text-center mb-12 max-w-2xl mx-auto">
+          <h2 className="text-3xl font-semibold mb-4 text-center text-foreground">Simple, Transparent Pricing</h2>
+          <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
             Choose the plan that fits your needs. All plans include our core features with different usage limits.
           </p>
           
@@ -239,10 +239,10 @@ export default function LandingPage() {
       </section>
 
       {/* Contact Section */}
-      <section id="contact" className="bg-gray-100 py-20 px-6">
+      <section id="contact" className="bg-muted/50 py-20 px-6">
         <div className="max-w-xl mx-auto text-center">
-          <h4 className="text-2xl font-semibold mb-4">Ready to Get Started?</h4>
-          <p className="text-gray-700 mb-8">Let's transform your documentation into an intelligent AI assistant that helps your users and reduces support costs.</p>
+          <h4 className="text-2xl font-semibold mb-4 text-foreground">Ready to Get Started?</h4>
+          <p className="text-muted-foreground mb-8">Let's transform your documentation into an intelligent AI assistant that helps your users and reduces support costs.</p>
           <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
             <Input type="email" placeholder="Your email" className="max-w-sm" />
             <Button className="bg-blue-600 hover:bg-blue-700">Start Free Trial</Button>

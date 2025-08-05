@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <MarketingHeader showHomeButton={true} showAuthButtons={true} variant="light" />
+      <MarketingHeader showHomeButton={true} showAuthButtons={true} />
 
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md shadow-lg border-blue-100">
