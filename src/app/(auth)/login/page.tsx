@@ -54,7 +54,7 @@ export default function LoginPage() {
       <header className="bg-card border-b border-border py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <Link href="/" className="flex items-center space-x-2 text-xl font-bold text-foreground">
-            <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+            <img src="/logo.png" alt="WizeChat" className="h-10 w-10" />
             <span>WizeChat</span>
           </Link>
           <nav>

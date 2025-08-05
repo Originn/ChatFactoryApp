@@ -160,7 +160,7 @@ export default function DashboardPage() {
             {/* Left section with logo */}
             <div className="flex items-center">
               <div className="flex items-center space-x-3">
-                <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+                <img src="/logo.png" alt="WizeChat" className="h-10 w-10" />
                 <span className="font-bold text-lg sm:text-xl text-gradient">WizeChat</span>
               </div>
               
