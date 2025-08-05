@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase/admin/index';
+import { FieldValue } from 'firebase-admin/firestore';
 import { fetchYouTubeTranscriptOfficial, getYouTubeVideoMetadata } from '@/lib/youtube/transcriptUtils';
 import crypto from 'crypto';
 
@@ -172,7 +173,7 @@ async function processYouTubeVideos(processingJob: any, accessToken: string, cha
     // Update document count if vectors were created
     if (totalVectorCount > 0) {
       await adminDb.collection('chatbots').doc(processingJob.chatbotId).update({
-        'vectorstore.documentCount': adminDb.FieldValue.increment(processedCount - errors.length)
+        'vectorstore.documentCount': FieldValue.increment(processedCount - errors.length)
       });
     }
 
