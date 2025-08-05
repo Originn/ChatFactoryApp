@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import Header from '@/components/shared/Header';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { 
   Crown, 
@@ -187,7 +188,16 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="container mx-auto py-4 sm:py-8 px-4 max-w-4xl">
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
+      <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
+      
+      {/* Dashboard Header */}
+      <Header variant="dashboard" showDashboardNav={true} currentPage="settings" />
+      
+      <div className="relative container mx-auto py-4 sm:py-8 px-4 max-w-4xl">
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0">
@@ -783,6 +793,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

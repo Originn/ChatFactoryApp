@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
+import Header from "@/components/shared/Header";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/config";
@@ -645,43 +646,7 @@ export default function NewChatbotPage() {
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-background/70 border-b border-border/20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <div className="flex items-center space-x-3">
-                  <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-                  <span className="font-bold text-xl text-gradient">WizeChat</span>
-                </div>
-              </div>
-              <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
-                <Link
-                  href="/dashboard"
-                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/dashboard/chatbots"
-                  className="border-purple-500 text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Chatbots
-                </Link>
-                <Link
-                  href="/dashboard/settings"
-                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                >
-                  Settings
-                </Link>
-              </nav>
-            </div>
-            <div className="flex items-center">
-              <UserDropdown />
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header variant="dashboard" showDashboardNav={true} currentPage="chatbots" />
 
       {/* New Chatbot Form */}
       <main className="relative max-w-4xl mx-auto py-10 px-4 sm:px-6 lg:px-8">

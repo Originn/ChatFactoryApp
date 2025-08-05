@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
+import Header from "@/components/shared/Header";
 import { useParams, useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -493,24 +494,7 @@ export default function ChatbotDetailPage() {
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 dark:bg-blue-800 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-white/70 dark:bg-gray-900/70 border-b border-white/20 dark:border-gray-700/50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <div className="flex items-center space-x-3">
-                  <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-                  <span className="font-bold text-xl text-gradient dark:text-white">WizeChat</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <UserDropdown />
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header variant="dashboard" showDashboardNav={true} currentPage="chatbots" />
 
       {/* Main Content */}
       <main className="relative max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">

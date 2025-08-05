@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
+import MarketingHeader from '@/components/shared/MarketingHeader';
 
 // Password strength checker
 const checkPasswordStrength = (password: string) => {
@@ -113,21 +114,9 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-gray-900 text-white py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="flex items-center space-x-2 text-xl font-bold">
-            <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-            <span>WizeChat</span>
-          </Link>
-          <nav>
-            <Link href="/login">
-              <Button variant="ghost" className="text-white hover:bg-gray-800">Login</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <MarketingHeader showHomeButton={true} showAuthButtons={true} variant="light" currentPage="signup" />
 
       {/* Signup Form */}
       <div className="flex items-center justify-center py-12 px-4">

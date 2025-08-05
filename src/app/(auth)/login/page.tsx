@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
-import { Mail, Lock, LogIn, Home } from 'lucide-react';
+import { Mail, Lock, LogIn } from 'lucide-react';
+import MarketingHeader from '@/components/shared/MarketingHeader';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -51,22 +52,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="flex items-center space-x-2 text-xl font-bold text-foreground">
-            <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-            <span>WizeChat</span>
-          </Link>
-          <nav>
-            <Link href="/">
-              <Button variant="ghost" className="text-foreground hover:bg-muted">
-                <Home className="h-4 w-4 mr-2" />
-                Home
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <MarketingHeader showHomeButton={true} showAuthButtons={true} variant="light" currentPage="login" />
 
       {/* Login Form */}
       <div className="flex items-center justify-center py-12 px-4">

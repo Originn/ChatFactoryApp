@@ -2,27 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import MarketingHeader from '@/components/shared/MarketingHeader';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans">
+    <div className="min-h-screen bg-white text-gray-900">
       {/* Header/Navigation */}
-      <header className="fixed w-full top-0 z-10 bg-gray-900/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-            <div className="text-white font-bold text-xl">WizeChat</div>
-          </div>
-          <div>
-            <Link href="/login">
-              <Button variant="ghost" className="text-white mr-2 hover:bg-white/10">Login</Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-blue-600 hover:bg-blue-700">Sign Up</Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <MarketingHeader variant="dark" showAuthButtons={true} currentPage="home" />
       
       {/* Hero Section */}
       <section className="w-full h-screen flex items-center justify-center text-center px-4 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
@@ -57,7 +43,7 @@ export default function LandingPage() {
       </section>
       
       {/* How It Works */}
-      <section className="py-16 bg-gray-50 px-6">
+      <section id="features" className="py-16 bg-gray-50 px-6">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-semibold mb-12 text-center">How It Works</h2>
           <div className="grid md:grid-cols-3 gap-12">
@@ -130,7 +116,7 @@ export default function LandingPage() {
       </section>
       
       {/* Pricing */}
-      <section className="py-20 px-6 bg-gray-50">
+      <section id="pricing" className="py-20 px-6 bg-gray-50">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-3xl font-semibold mb-4 text-center">Simple, Transparent Pricing</h2>
           <p className="text-gray-600 text-center mb-12 max-w-2xl mx-auto">
@@ -253,7 +239,7 @@ export default function LandingPage() {
       </section>
 
       {/* Contact Section */}
-      <section className="bg-gray-100 py-20 px-6">
+      <section id="contact" className="bg-gray-100 py-20 px-6">
         <div className="max-w-xl mx-auto text-center">
           <h4 className="text-2xl font-semibold mb-4">Ready to Get Started?</h4>
           <p className="text-gray-700 mb-8">Let's transform your documentation into an intelligent AI assistant that helps your users and reduces support costs.</p>

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import { useAuth } from "@/contexts/AuthContext";
+import Header from "@/components/shared/Header";
 import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy, doc, deleteDoc } from "firebase/firestore";
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
@@ -31,8 +32,6 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Menu,
-  X
 } from "lucide-react";
 
 // Define the Chatbot type for TypeScript
@@ -62,7 +61,6 @@ export default function ChatbotsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // State for deletion dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -449,124 +447,7 @@ export default function ChatbotsPage() {
       <div className="absolute top-1/3 left-1/4 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style={{ animationDelay: '2s' }} />
       
       {/* Dashboard Header */}
-      <header className="relative z-50 backdrop-blur-sm bg-background/70 border-b border-white/20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <div className="flex items-center space-x-3">
-                  <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-                  <span className="font-bold text-xl text-gradient">WizeChat</span>
-                </div>
-              </div>
-              <nav className="hidden sm:ml-8 sm:flex sm:space-x-8">
-                <Link
-                  href="/dashboard"
-                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/dashboard/chatbots"
-                  className="border-purple-500 text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Chatbots
-                </Link>
-                <Link
-                  href="/dashboard/settings"
-                  className="border-transparent text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                >
-                  Settings
-                </Link>
-              </nav>
-            </div>
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <Button
-                asChild
-                variant="gradient"
-                className="shadow-lg shadow-purple-500/25 h-9 px-3 sm:h-10 sm:px-4 text-sm"
-              >
-                <Link href="/dashboard/chatbots/new">
-                  <Plus className="h-4 w-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Create New Chatbot</span>
-                  <span className="sm:hidden">Create</span>
-                </Link>
-              </Button>
-              
-              {/* Mobile menu button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden h-10 w-10"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              >
-                {isMobileMenuOpen ? (
-                  <X className="h-5 w-5" />
-                ) : (
-                  <Menu className="h-5 w-5" />
-                )}
-              </Button>
-              
-              {/* User dropdown - hidden on small mobile, shown on larger screens */}
-              <div className="hidden sm:block">
-                <UserDropdown />
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Mobile Navigation Menu */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden border-t border-white/20 bg-white/80 backdrop-blur-sm">
-          <div className="px-2 pt-2 pb-3 space-y-1">
-            <Link
-              href="/dashboard"
-              className="border-transparent text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/50 hover:text-foreground block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/dashboard/chatbots"
-              className="bg-purple-50 dark:bg-purple-900/30 border-purple-500 text-purple-800 dark:text-purple-200 block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Chatbots
-            </Link>
-            <Link
-              href="/dashboard/settings"
-              className="border-transparent text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/50 hover:text-foreground block pl-3 pr-4 py-3 border-l-4 text-base font-medium rounded-r-lg transition-colors"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Settings
-            </Link>
-            
-            {/* Mobile User Profile Section */}
-            <div className="pt-3 border-t border-border mt-3">
-              <div className="px-3 py-2">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
-                      <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                        {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="ml-3">
-                    <div className="text-base font-medium text-foreground">
-                      {user?.displayName || 'User'}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {user?.email}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Header variant="dashboard" showDashboardNav={true} showCreateButton={true} currentPage="chatbots" />
 
       {/* Chatbots Content */}
       <main className="relative max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">

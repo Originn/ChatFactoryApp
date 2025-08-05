@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
+import MarketingHeader from '@/components/shared/MarketingHeader';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -36,20 +37,8 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-gray-900 text-white py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="flex items-center space-x-2 text-xl font-bold">
-            <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
-            <span>WizeChat</span>
-          </Link>
-          <nav>
-            <Link href="/login">
-              <Button variant="ghost" className="text-white hover:bg-gray-800">Login</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background">
+      <MarketingHeader showHomeButton={true} showAuthButtons={true} variant="light" />
 
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md shadow-lg border-blue-100">
