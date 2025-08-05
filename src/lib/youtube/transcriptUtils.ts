@@ -28,7 +28,6 @@ function decrypt(text: string): string {
 
 export async function fetchYouTubeTranscriptOfficial(videoId: string, userId: string): Promise<TranscriptItem[]> {
   try {
-    console.log(`Official API: Attempting to fetch transcript for video: ${videoId}`);
     
     // Get user tokens from Firestore
     const doc = await adminDb.collection('user_youtube_tokens').doc(userId).get();
@@ -50,7 +49,6 @@ export async function fetchYouTubeTranscriptOfficial(videoId: string, userId: st
     }
 
     // Step 1: List available captions for this video
-    console.log('Step 1: Listing available captions...');
     const captionsListResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/captions?part=id,snippet&videoId=${videoId}&key=${apiKey}`,
       {
@@ -67,7 +65,6 @@ export async function fetchYouTubeTranscriptOfficial(videoId: string, userId: st
     }
 
     const captionsData = await captionsListResponse.json();
-    console.log(`Found ${captionsData.items?.length || 0} caption tracks`);
 
     if (!captionsData.items || captionsData.items.length === 0) {
       throw new Error('No caption tracks found for this video');
@@ -76,8 +73,6 @@ export async function fetchYouTubeTranscriptOfficial(videoId: string, userId: st
     // Get the first caption track (prefer non-auto-generated)
     const captionTrack = captionsData.items.find((item: any) => item.snippet.trackKind !== 'ASR') || captionsData.items[0];
     const captionId = captionTrack.id;
-    
-    console.log(`Step 2: Downloading caption track: ${captionId} (${captionTrack.snippet.language})`);
 
     // Step 2: Download the caption track
     const captionDownloadResponse = await fetch(
@@ -96,11 +91,9 @@ export async function fetchYouTubeTranscriptOfficial(videoId: string, userId: st
     }
 
     const captionContent = await captionDownloadResponse.text();
-    console.log(`Downloaded caption content, length: ${captionContent.length}`);
 
     // Step 3: Parse the TTML/XML content
     const transcriptItems = parseCaptionContent(captionContent);
-    console.log(`Parsed ${transcriptItems.length} transcript items from official API`);
 
     return transcriptItems;
   } catch (error) {

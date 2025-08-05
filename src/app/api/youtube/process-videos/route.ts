@@ -120,7 +120,6 @@ export async function POST(req: NextRequest) {
 // Async function to process YouTube videos
 async function processYouTubeVideos(processingJob: any, accessToken: string, chatbotData: any) {
   try {
-    console.log(`🎬 Starting YouTube video processing for job: ${processingJob.id}`);
     
     const { VideoService } = await import('@/services/videoService');
     let processedCount = 0;
@@ -129,8 +128,6 @@ async function processYouTubeVideos(processingJob: any, accessToken: string, cha
 
     for (const videoId of processingJob.videoIds) {
       try {
-        console.log(`📹 Processing YouTube video: ${videoId}`);
-        
         // Update progress
         await adminDb.collection('video_processing_jobs').doc(processingJob.id).update({
           progress: Math.round((processedCount / processingJob.totalVideos) * 100),
@@ -139,11 +136,9 @@ async function processYouTubeVideos(processingJob: any, accessToken: string, cha
 
         // Get video metadata
         const videoMetadata = await getYouTubeVideoMetadata(videoId, accessToken);
-        console.log(`📝 Video metadata: ${videoMetadata.title}`);
 
         // Get transcript
         const transcript = await fetchYouTubeTranscriptOfficial(videoId, processingJob.userId);
-        console.log(`📄 Transcript fetched: ${transcript.length} segments`);
 
         // Process with VideoService
         const result = await VideoService.processYouTubeTranscript({
@@ -162,17 +157,14 @@ async function processYouTubeVideos(processingJob: any, accessToken: string, cha
 
         if (result.success) {
           totalVectorCount += result.vectorCount || 0;
-          console.log(`✅ YouTube video processed: ${videoId} (${result.vectorCount} vectors)`);
         } else {
           errors.push({ videoId, error: result.error });
-          console.error(`❌ Failed to process YouTube video ${videoId}: ${result.error}`);
         }
 
         processedCount++;
 
       } catch (error) {
         errors.push({ videoId, error: error instanceof Error ? error.message : 'Unknown error' });
-        console.error(`❌ Error processing YouTube video ${videoId}:`, error);
         processedCount++;
       }
     }
@@ -194,7 +186,6 @@ async function processYouTubeVideos(processingJob: any, accessToken: string, cha
       completedAt: new Date().toISOString(),
     });
 
-    console.log(`🎉 YouTube processing job completed: ${processingJob.id} (${totalVectorCount} total vectors)`);
 
   } catch (error) {
     console.error('Error in YouTube video processing:', error);

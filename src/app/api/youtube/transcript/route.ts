@@ -22,12 +22,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    console.log(`📄 Transcript request for video: ${videoId}, user: ${userId}`);
-
     // Use the official YouTube Data API
     const transcript = await fetchYouTubeTranscriptOfficial(videoId, userId);
-    
-    console.log(`✅ Successfully fetched transcript with ${transcript.length} items`);
     
     return NextResponse.json({
       success: true,
@@ -36,7 +32,7 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Error in transcript endpoint:', error);
+    console.error('Error in transcript endpoint:', error);
     return NextResponse.json(
       { error: 'Failed to fetch transcript', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

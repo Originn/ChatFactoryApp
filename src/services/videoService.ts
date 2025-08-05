@@ -95,7 +95,6 @@ export class VideoService {
         credentials: credentials
       });
       
-      console.log(`📹 Storing video in project: ${firebaseProjectId}`);
       
       // Use existing chatbot-specific buckets
       const chatbotBucketName = `${firebaseProjectId}-chatbot-documents`;
@@ -104,10 +103,8 @@ export class VideoService {
       try {
         bucket = projectSpecificStorage.bucket(chatbotBucketName);
         await bucket.getMetadata();
-        console.log(`✅ Using existing chatbot documents bucket: ${chatbotBucketName}`);
         
       } catch (bucketError) {
-        console.log(`⚠️ Chatbot documents bucket not found, trying fallback bucket names...`);
         
         const fallbackBuckets = [
           `${firebaseProjectId}.appspot.com`,
@@ -122,11 +119,9 @@ export class VideoService {
           try {
             bucket = projectSpecificStorage.bucket(bucketName);
             await bucket.getMetadata();
-            console.log(`✅ Found working fallback bucket: ${bucketName}`);
             bucketFound = true;
             break;
           } catch (err) {
-            console.log(`❌ Fallback bucket ${bucketName} not accessible`);
           }
         }
         
@@ -168,14 +163,12 @@ export class VideoService {
         const bucketName = bucket.name;
         const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
         
-        console.log(`✅ Public video stored with direct public URL: ${filePath}`);
         return {
           success: true,
           storagePath: filePath,
           publicUrl: publicUrl
         };
       } else {
-        console.log(`✅ Private video stored: ${filePath}`);
         return {
           success: true,
           storagePath: filePath
@@ -274,10 +267,6 @@ export class VideoService {
     request: VideoProcessingRequest
   ): Promise<VideoTranscriptionResult> {
     try {
-      console.log(`🔄 Processing video with transcription: ${request.file.name}`);
-      console.log(`📝 Embedding model: jina/${request.embeddingModel}`);
-      console.log(`🎯 Pinecone index: ${request.pineconeIndex}`);
-      console.log(`🔒 Privacy setting: ${request.isPublic ? 'Public' : 'Private'}`);
 
       // Get video URL first (we need to upload to Firebase first)
       const videoBuffer = Buffer.from(await request.file.arrayBuffer());
@@ -332,14 +321,10 @@ export class VideoService {
         embedding_model: request.embeddingModel
       };
 
-      console.log(`📞 Calling video transcription service...`);
-      
       // Select service URL based on GPU preference
       const serviceUrl = request.useGPU 
         ? (process.env.VIDEO_TRANSCRIBER_GPU_URL || VIDEO_TRANSCRIBER_URL)
         : (process.env.VIDEO_TRANSCRIBER_CPU_URL || VIDEO_TRANSCRIBER_URL);
-      
-      console.log(`🎯 Using ${request.useGPU ? 'GPU' : 'CPU'} service: ${serviceUrl}`);
       
       const response = await fetch(`${serviceUrl}/transcribe`, {
         method: 'POST',
@@ -357,7 +342,6 @@ export class VideoService {
       }
 
       const result = await response.json();
-      console.log(`📄 Video transcription result:`, result);
 
       // Add storage info to result
       result.video_url = storageResult.publicUrl || storageResult.storagePath;
@@ -399,10 +383,6 @@ export class VideoService {
     request: YouTubeTranscriptRequest
   ): Promise<VideoProcessingResult> {
     try {
-      console.log(`🎬 Processing YouTube transcript for video: ${request.videoId}`);
-      console.log(`📝 Video title: ${request.videoMetadata.title}`);
-      console.log(`📄 Transcript segments: ${request.transcript.length}`);
-
       // Parse embedding model - for YouTube we use Jina v4 only  
       let embeddingModel = request.embeddingModel;
       if (request.embeddingModel.includes('/')) {
@@ -417,10 +397,6 @@ export class VideoService {
       } else {
         embeddingModel = 'jina-embeddings-v4';
       }
-
-      console.log(`🤖 Using embedding model: jina/${embeddingModel}`);
-      console.log(`🎯 Pinecone index: ${request.pineconeIndex}`);
-      console.log(`🏷️ Namespace: ${request.pineconeNamespace || 'default'}`);
 
       // Format transcript for processing
       const formattedTranscript = this.formatYouTubeTranscript(request.transcript);
@@ -448,7 +424,6 @@ export class VideoService {
         }
       };
 
-      console.log(`📞 Calling transcription container with transcript processing...`);
       
       const response = await fetch(`${VIDEO_TRANSCRIBER_URL}/process-transcript`, {
         method: 'POST',
@@ -466,7 +441,6 @@ export class VideoService {
       }
 
       const result = await response.json();
-      console.log(`📄 YouTube transcript processing result:`, result);
 
       // Create video metadata in database
       const videoMetadataResult = await DatabaseService.createVideoMetadata({
@@ -492,7 +466,6 @@ export class VideoService {
         console.warn('⚠️ Failed to create YouTube video metadata:', videoMetadataResult.error);
       }
 
-      console.log(`✅ YouTube transcript processing completed: ${result.vector_count || 0} vectors created`);
 
       return {
         success: true,
@@ -535,7 +508,6 @@ export class VideoService {
     request: VideoProcessingRequest
   ): Promise<VideoProcessingResult> {
     try {
-      console.log(`🔄 Starting video processing for: ${request.file.name}`);
 
       // Process video with transcription service
       const transcriptionResult = await this.processVideoWithTranscription(request);
@@ -574,7 +546,6 @@ export class VideoService {
         await DatabaseService.updateVectorstoreDocumentCount(request.chatbotId, 1);
       }
 
-      console.log(`✅ Video processing completed: ${transcriptionResult.vector_count || 0} vectors created`);
 
       return {
         success: true,
