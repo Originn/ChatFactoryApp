@@ -1,0 +1,21 @@
+{
+  "name": "WizeChat",
+  "short_name": "WizeChat",
+  "description": "Transform your documentation into AI-powered chatbots",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#00e0fc",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "start_url": "/"
+}

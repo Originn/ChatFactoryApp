@@ -455,7 +455,7 @@ export default function ChatbotsPage() {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <div className="flex items-center space-x-3">
-                  <img src="/logo.png" alt="WizeChat" className="h-10 w-10" />
+                  <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
                   <span className="font-bold text-xl text-gradient">WizeChat</span>
                 </div>
               </div>
