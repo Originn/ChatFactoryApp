@@ -19,6 +19,8 @@ export interface UserVideoMetadata {
   status: 'processing' | 'completed' | 'failed';
   error?: string;
   vectorCount?: number; // Number of vectors created from this video
+  platform?: 'youtube' | 'upload'; // Video source platform
+  videoId?: string; // Platform-specific video ID (e.g., YouTube video ID)
 }
 
 export interface VideoStorageResult {

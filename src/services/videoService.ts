@@ -21,6 +21,20 @@ interface VideoProcessingRequest {
   useGPU?: boolean;
 }
 
+interface YouTubeTranscriptRequest {
+  transcript: any[];
+  videoId: string;
+  videoMetadata: any;
+  chatbotId: string;
+  userId: string;
+  firebaseProjectId: string;
+  isPublic?: boolean;
+  embeddingModel: string;
+  pineconeIndex: string;
+  pineconeNamespace?: string;
+  enableProcessing?: boolean;
+}
+
 interface VideoTranscriptionResult {
   success: boolean;
   transcription?: string;
@@ -357,6 +371,161 @@ export class VideoService {
         error: error instanceof Error ? error.message : 'Unknown processing error'
       };
     }
+  }
+
+  /**
+   * Format YouTube transcript items into timestamped text format
+   */
+  static formatYouTubeTranscript(transcriptItems: any[]): string {
+    if (!transcriptItems || transcriptItems.length === 0) {
+      return '';
+    }
+
+    // Convert YouTube transcript to timestamped format
+    return transcriptItems.map(item => {
+      const startTime = Math.floor(item.start);
+      const minutes = Math.floor(startTime / 60);
+      const seconds = startTime % 60;
+      const timestamp = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      
+      return `[${timestamp} --> ${timestamp}] ${item.text}`;
+    }).join('\n');
+  }
+
+  /**
+   * Process YouTube transcript with transcription container
+   */
+  static async processYouTubeTranscript(
+    request: YouTubeTranscriptRequest
+  ): Promise<VideoProcessingResult> {
+    try {
+      console.log(`🎬 Processing YouTube transcript for video: ${request.videoId}`);
+      console.log(`📝 Video title: ${request.videoMetadata.title}`);
+      console.log(`📄 Transcript segments: ${request.transcript.length}`);
+
+      // Parse embedding model - for YouTube we use Jina v4 only  
+      let embeddingModel = request.embeddingModel;
+      if (request.embeddingModel.includes('/')) {
+        const [provider, model] = request.embeddingModel.split('/', 2);
+        if (provider === 'jina') {
+          embeddingModel = model;
+        } else {
+          embeddingModel = 'jina-embeddings-v4';
+        }
+      } else if (request.embeddingModel.startsWith('jina-')) {
+        embeddingModel = request.embeddingModel;
+      } else {
+        embeddingModel = 'jina-embeddings-v4';
+      }
+
+      console.log(`🤖 Using embedding model: jina/${embeddingModel}`);
+      console.log(`🎯 Pinecone index: ${request.pineconeIndex}`);
+      console.log(`🏷️ Namespace: ${request.pineconeNamespace || 'default'}`);
+
+      // Format transcript for processing
+      const formattedTranscript = this.formatYouTubeTranscript(request.transcript);
+      
+      // Call transcription container with transcript-only processing
+      const requestData = {
+        transcript_text: formattedTranscript,
+        video_name: request.videoMetadata.title,
+        video_id: request.videoId,
+        video_url: `https://youtube.com/watch?v=${request.videoId}`,
+        chatbot_id: request.chatbotId,
+        user_id: request.userId,
+        enable_processing: request.enableProcessing || true,
+        // Pinecone parameters
+        pinecone_index: request.pineconeIndex,
+        pinecone_namespace: request.pineconeNamespace,
+        embedding_model: embeddingModel,
+        // YouTube-specific metadata
+        video_metadata: {
+          platform: 'youtube',
+          duration: request.videoMetadata.duration,
+          publishedAt: request.videoMetadata.publishedAt,
+          viewCount: request.videoMetadata.viewCount,
+          thumbnailUrl: request.videoMetadata.thumbnailUrl
+        }
+      };
+
+      console.log(`📞 Calling transcription container with transcript processing...`);
+      
+      const response = await fetch(`${VIDEO_TRANSCRIBER_URL}/process-transcript`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+        // Reasonable timeout for transcript processing (no video download/transcription needed)
+        signal: AbortSignal.timeout(300000) // 5 minutes
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`YouTube transcript processing failed: ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log(`📄 YouTube transcript processing result:`, result);
+
+      // Create video metadata in database
+      const videoMetadataResult = await DatabaseService.createVideoMetadata({
+        userId: request.userId,
+        chatbotId: request.chatbotId,
+        originalFileName: `${request.videoMetadata.title}.youtube`,
+        videoFileName: `${request.videoId}.youtube`,
+        isPublic: request.isPublic || false,
+        firebaseStoragePath: `https://youtube.com/watch?v=${request.videoId}`,
+        firebaseProjectId: request.firebaseProjectId,
+        publicUrl: `https://youtube.com/watch?v=${request.videoId}`,
+        fileSize: 0, // YouTube videos don't have file size
+        duration: this.parseYouTubeDuration(request.videoMetadata.duration),
+        language: 'auto', // YouTube API doesn't provide language info consistently
+        transcription: result.transcription,
+        status: 'completed',
+        vectorCount: result.vector_count || 0,
+        platform: 'youtube',
+        videoId: request.videoId
+      });
+
+      if (!videoMetadataResult.success) {
+        console.warn('⚠️ Failed to create YouTube video metadata:', videoMetadataResult.error);
+      }
+
+      console.log(`✅ YouTube transcript processing completed: ${result.vector_count || 0} vectors created`);
+
+      return {
+        success: true,
+        message: `YouTube video transcript processed successfully`,
+        vectorCount: result.vector_count || 0,
+        videoUrl: `https://youtube.com/watch?v=${request.videoId}`,
+        transcription: result.transcription,
+        language: 'auto'
+      };
+
+    } catch (error) {
+      console.error('YouTube transcript processing error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown processing error'
+      };
+    }
+  }
+
+  /**
+   * Parse YouTube duration format (PT4M13S) to seconds
+   */
+  static parseYouTubeDuration(duration: string): number {
+    if (!duration) return 0;
+    
+    const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+
+    const hours = parseInt(match[1]) || 0;
+    const minutes = parseInt(match[2]) || 0;
+    const seconds = parseInt(match[3]) || 0;
+
+    return hours * 3600 + minutes * 60 + seconds;
   }
 
   /**
