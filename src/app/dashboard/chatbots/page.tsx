@@ -795,12 +795,12 @@ export default function ChatbotsPage() {
                                 variant="outline"
                                 className={`mt-1 ${
                                   chatbot.status === 'active'
-                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50'
                                     : chatbot.status === 'preview'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50'
                                     : chatbot.status === 'draft'
-                                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                    : 'bg-gray-50 text-foreground border-border'
+                                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700/50'
+                                    : 'bg-gray-50 text-foreground border-border dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600'
                                 }`}
                               >
                                 <div className={`h-2 w-2 rounded-full mr-1.5 ${
@@ -829,19 +829,19 @@ export default function ChatbotsPage() {
                       <CardContent className="pt-0">
                         {/* Stats */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
-                          <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                          <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-lg">
                             <div className="flex items-center justify-center mb-1">
-                              <MessageCircle className="h-4 w-4 text-blue-600 mr-1" />
-                              <span className="text-lg font-bold text-blue-900">{chatbot.stats?.queries || 0}</span>
+                              <MessageCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mr-1" />
+                              <span className="text-lg font-bold text-blue-900 dark:text-blue-100">{chatbot.stats?.queries || 0}</span>
                             </div>
-                            <p className="text-xs text-blue-700">Queries</p>
+                            <p className="text-xs text-blue-700 dark:text-blue-300">Queries</p>
                           </div>
-                          <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+                          <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/20 rounded-lg">
                             <div className="flex items-center justify-center mb-1">
                               <Activity className="h-4 w-4 text-green-700 dark:text-green-400 mr-1" />
-                              <span className="text-lg font-bold text-green-900">{chatbot.stats?.successRate || 0}%</span>
+                              <span className="text-lg font-bold text-green-900 dark:text-green-100">{chatbot.stats?.successRate || 0}%</span>
                             </div>
-                            <p className="text-xs text-green-700">Success Rate</p>
+                            <p className="text-xs text-green-700 dark:text-green-300">Success Rate</p>
                           </div>
                         </div>
                         
@@ -851,7 +851,7 @@ export default function ChatbotsPage() {
                             asChild
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 group-hover:border-blue-300 group-hover:bg-blue-50 transition-colors"
+                            className="flex-1 group-hover:border-blue-300 group-hover:bg-blue-50 dark:group-hover:border-blue-600 dark:group-hover:bg-blue-900/30 transition-colors"
                           >
                             <Link href={`/dashboard/chatbots/${chatbot.id}`}>
                               <Eye className="h-4 w-4 mr-1" />
@@ -862,7 +862,7 @@ export default function ChatbotsPage() {
                             asChild
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 group-hover:border-purple-300 group-hover:bg-purple-50 transition-colors"
+                            className="flex-1 group-hover:border-purple-300 group-hover:bg-purple-50 dark:group-hover:border-purple-600 dark:group-hover:bg-purple-900/30 transition-colors"
                           >
                             <Link href={`/dashboard/chatbots/${chatbot.id}/edit`}>
                               <Edit className="h-4 w-4 mr-1" />
@@ -872,7 +872,7 @@ export default function ChatbotsPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="group-hover:border-red-300 group-hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors"
+                            className="group-hover:border-red-300 group-hover:bg-red-50 dark:group-hover:border-red-600 dark:group-hover:bg-red-900/30 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                             onClick={() => showDeleteChatbotDialog(chatbot)}
                             disabled={deletingId === chatbot.id}
                           >
