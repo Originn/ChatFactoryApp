@@ -499,10 +499,8 @@ export default function ChatbotDetailPage() {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-                    <div className="h-5 w-5 text-white">🤖</div>
-                  </div>
-                  <span className="font-bold text-xl text-gradient dark:text-white">Chat Factory</span>
+                  <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+                  <span className="font-bold text-xl text-gradient dark:text-white">WizeChat</span>
                 </div>
               </div>
             </div>

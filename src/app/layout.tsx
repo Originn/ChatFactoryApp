@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Chat Factory - Turn Documentation Into AI Support',
+  title: 'WizeChat - Turn Documentation Into AI Support',
   description: 'Transform your product documentation into an intelligent AI chatbot that answers user questions instantly.',
 }
 

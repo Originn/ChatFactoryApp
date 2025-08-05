@@ -53,7 +53,10 @@ export default function LoginPage() {
       {/* Header */}
       <header className="bg-card border-b border-border py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold text-foreground">Chat Factory</Link>
+          <Link href="/" className="flex items-center space-x-2 text-xl font-bold text-foreground">
+            <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+            <span>WizeChat</span>
+          </Link>
           <nav>
             <Link href="/">
               <Button variant="ghost" className="text-foreground hover:bg-muted">
@@ -69,7 +72,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-foreground">Log in to Chat Factory</CardTitle>
+            <CardTitle className="text-2xl font-bold text-foreground">Log in to WizeChat</CardTitle>
             <CardDescription>
               Enter your email and password to access your account
             </CardDescription>

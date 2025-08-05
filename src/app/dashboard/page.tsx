@@ -160,8 +160,8 @@ export default function DashboardPage() {
             {/* Left section with logo */}
             <div className="flex items-center">
               <div className="flex items-center space-x-3">
-                <Bot className="h-8 w-8 text-purple-600" />
-                <span className="font-bold text-lg sm:text-xl text-gradient">Chat Factory</span>
+                <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+                <span className="font-bold text-lg sm:text-xl text-gradient">WizeChat</span>
               </div>
               
               {/* Free plan badge - hidden on mobile, shown on tablet+ */}

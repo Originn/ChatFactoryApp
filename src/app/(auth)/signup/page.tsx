@@ -117,7 +117,10 @@ export default function SignupPage() {
       {/* Header */}
       <header className="bg-gray-900 text-white py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">Chat Factory</Link>
+          <Link href="/" className="flex items-center space-x-2 text-xl font-bold">
+            <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+            <span>WizeChat</span>
+          </Link>
           <nav>
             <Link href="/login">
               <Button variant="ghost" className="text-white hover:bg-gray-800">Login</Button>
@@ -132,7 +135,7 @@ export default function SignupPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-gray-900">Create your account</CardTitle>
             <CardDescription>
-              Enter your details to get started with Chat Factory
+              Enter your details to get started with WizeChat
             </CardDescription>
           </CardHeader>
           <CardContent>

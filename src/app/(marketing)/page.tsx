@@ -9,7 +9,10 @@ export default function LandingPage() {
       {/* Header/Navigation */}
       <header className="fixed w-full top-0 z-10 bg-gray-900/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="text-white font-bold text-xl">Chat Factory</div>
+          <div className="flex items-center space-x-3">
+            <img src="/logo.png" alt="WizeChat" className="h-8 w-8" />
+            <div className="text-white font-bold text-xl">WizeChat</div>
+          </div>
           <div>
             <Link href="/login">
               <Button variant="ghost" className="text-white mr-2 hover:bg-white/10">Login</Button>
@@ -265,7 +268,7 @@ export default function LandingPage() {
       <footer className="bg-gray-900 text-white py-12 px-6">
         <div className="max-w-6xl mx-auto grid md:grid-cols-4 gap-8">
           <div>
-            <h5 className="font-bold text-lg mb-4">Chat Factory</h5>
+            <h5 className="font-bold text-lg mb-4">WizeChat</h5>
             <p className="text-gray-400">Transforming documentation into intelligent AI support.</p>
           </div>
           <div>
@@ -293,7 +296,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="max-w-6xl mx-auto mt-8 pt-8 border-t border-gray-800 text-center text-gray-500 text-sm">
-          © {new Date().getFullYear()} Chat Factory. All rights reserved.
+          © {new Date().getFullYear()} WizeChat. All rights reserved.
         </div>
       </footer>
     </div>
