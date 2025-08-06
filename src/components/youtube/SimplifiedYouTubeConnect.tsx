@@ -30,16 +30,53 @@ export default function SimplifiedYouTubeConnect({
   }, [userId]);
 
   const handleInitialLoad = async () => {
-    // First check if we're returning from a redirect auth flow
-    const handleRedirectResult = await youtubeService.handleRedirectCallback();
-    
-    if (handleRedirectResult) {
-      // Successfully handled redirect, update state
-      const currentState = youtubeService.getAuthState();
-      setAuthState(currentState);
-      onConnectionChange?.(currentState.isConnected);
+    // Check for YouTube callback parameters in URL
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('youtube_code');
+      const state = urlParams.get('youtube_state');
+      const error = urlParams.get('youtube_error');
+      
+      if (code && state) {
+        // Handle successful YouTube auth callback
+        try {
+          setIsConnecting(true);
+          await youtubeService.handleAuthCallback(code, state);
+          const currentState = youtubeService.getAuthState();
+          setAuthState(currentState);
+          onConnectionChange?.(currentState.isConnected);
+          
+          // Clean up URL parameters
+          const url = new URL(window.location.href);
+          url.searchParams.delete('youtube_code');
+          url.searchParams.delete('youtube_state');
+          window.history.replaceState({}, '', url.toString());
+          
+        } catch (error) {
+          console.error('Error handling YouTube callback:', error);
+          setAuthState({
+            isConnected: false,
+            error: error instanceof Error ? error.message : 'Authentication failed'
+          });
+        } finally {
+          setIsConnecting(false);
+        }
+      } else if (error) {
+        // Handle error callback
+        setAuthState({
+          isConnected: false,
+          error: `Authentication failed: ${error}`
+        });
+        
+        // Clean up URL parameters
+        const url = new URL(window.location.href);
+        url.searchParams.delete('youtube_error');
+        window.history.replaceState({}, '', url.toString());
+      } else {
+        // No callback parameters, just check existing connection
+        checkConnection();
+      }
     } else {
-      // No redirect callback, just check existing connection
       checkConnection();
     }
   };
@@ -161,9 +198,9 @@ export default function SimplifiedYouTubeConnect({
             <h3 className="font-medium text-sm">How it works:</h3>
             <ul className="text-sm text-muted-foreground space-y-1 ml-4 list-disc">
               <li>Click "Connect YouTube" below</li>
-              <li>Sign in with your Google account</li>
+              <li>You'll be redirected to Google to sign in</li>
               <li>Grant permission to access your YouTube videos</li>
-              <li>Select videos to add to your chatbot</li>
+              <li>You'll return here to select videos for your chatbot</li>
             </ul>
           </div>
         )}

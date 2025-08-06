@@ -37,21 +37,13 @@ export class CentralizedYouTubeService {
   /**
    * Generate YouTube OAuth URL using platform credentials
    */
-  async generateAuthUrl(isRedirectFlow: boolean = false): Promise<string> {
+  async generateAuthUrl(): Promise<string> {
     if (!this.userId) {
       throw new Error('User ID not set');
     }
 
     try {
-      const params = new URLSearchParams({
-        userId: this.userId
-      });
-      
-      if (isRedirectFlow) {
-        params.append('redirect', 'true');
-      }
-      
-      const response = await fetch(`/api/youtube/auth?${params.toString()}`);
+      const response = await fetch(`/api/youtube/auth?userId=${this.userId}`);
       
       if (!response.ok) {
         throw new Error('Failed to generate auth URL');
@@ -66,32 +58,19 @@ export class CentralizedYouTubeService {
   }
 
   /**
-   * Connect to YouTube - uses redirect flow on mobile, popup on desktop
+   * Connect to YouTube - uses redirect flow for better compatibility
    */
   async connectWithPopup(): Promise<void> {
-    // Use redirect flow on mobile devices to avoid popup blockers
-    if (isPopupLikelyBlocked()) {
-      return this.connectWithRedirect();
-    }
-    
-    // Try popup flow first, fall back to redirect if blocked
-    try {
-      await this.connectWithPopupWindow();
-    } catch (error) {
-      // If popup was blocked, try redirect flow as fallback
-      if (error instanceof Error && error.message.includes('Popup blocked')) {
-        console.log('Popup blocked, falling back to redirect flow');
-        return this.connectWithRedirect();
-      }
-      throw error;
-    }
+    // Always use redirect flow due to COOP policy issues with popups
+    console.log('🔄 Using redirect flow for YouTube authentication');
+    return this.connectWithRedirect();
   }
 
   /**
    * Connect using redirect flow (mobile-friendly)
    */
   private async connectWithRedirect(): Promise<void> {
-    const authUrl = await this.generateAuthUrl(true);
+    const authUrl = await this.generateAuthUrl();
     
     // Store current location to return to after auth
     if (typeof window !== 'undefined') {
@@ -107,117 +86,6 @@ export class CentralizedYouTubeService {
     return new Promise(() => {});
   }
 
-  /**
-   * Connect using popup window (desktop)
-   */
-  private async connectWithPopupWindow(): Promise<void> {
-    const authUrl = await this.generateAuthUrl();
-    
-    return new Promise((resolve, reject) => {
-      const popup = window.open(
-        authUrl,
-        'youtube-auth',
-        'width=500,height=600,scrollbars=yes,resizable=yes'
-      );
-
-      if (!popup) {
-        reject(new Error('Popup blocked. Please allow popups for this site.'));
-        return;
-      }
-
-      const checkClosed = setInterval(() => {
-        try {
-          if (popup.closed) {
-            clearInterval(checkClosed);
-            if (!this.authState.isConnected) {
-              reject(new Error('Authentication cancelled'));
-            }
-          }
-        } catch (error) {
-          // Handle Cross-Origin-Opener-Policy restriction
-          console.log('Cannot check popup.closed due to COOP policy');
-        }
-      }, 1000);
-
-      // Listen for message from popup
-      const messageHandler = async (event: MessageEvent) => {
-        // Allow messages from current origin or configured app URL
-        const allowedOrigins = [
-          window.location.origin,
-          process.env.NEXT_PUBLIC_APP_URL,
-          'http://localhost:3000',
-          'https://wizechat.ai'
-        ].filter(Boolean);
-        
-        if (!allowedOrigins.includes(event.origin)) {
-          console.log('Ignoring message from unauthorized origin:', event.origin);
-          return;
-        }
-        
-        // Check if event.data exists and has the expected structure
-        if (!event.data || typeof event.data !== 'object') {
-          return;
-        }
-        
-        if (event.data.type === 'YOUTUBE_AUTH_SUCCESS') {
-          clearInterval(checkClosed);
-          try {
-            popup.close();
-          } catch (error) {
-            // Ignore COOP policy error
-          }
-          window.removeEventListener('message', messageHandler);
-          
-          try {
-            if (!event.data.code || !event.data.userId) {
-              throw new Error('Missing authorization code or user ID');
-            }
-            await this.handleAuthCallback(event.data.code, event.data.userId);
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        } else if (event.data.type === 'YOUTUBE_AUTH_ERROR') {
-          clearInterval(checkClosed);
-          try {
-            popup.close();
-          } catch (error) {
-            // Ignore COOP policy error
-          }
-          window.removeEventListener('message', messageHandler);
-          reject(new Error(event.data.error || 'Authentication failed'));
-        }
-      };
-
-      window.addEventListener('message', messageHandler);
-      
-      // Add timeout to prevent hanging
-      const timeout = setTimeout(() => {
-        clearInterval(checkClosed);
-        window.removeEventListener('message', messageHandler);
-        try {
-          popup.close();
-        } catch (error) {
-          console.log('Cannot close popup due to COOP policy');
-        }
-        reject(new Error('Authentication timed out after 5 minutes'));
-      }, 300000); // 5 minutes
-      
-      // Clean up timeout when resolved/rejected
-      const originalResolve = resolve;
-      const originalReject = reject;
-      
-      resolve = (value) => {
-        clearTimeout(timeout);
-        originalResolve(value);
-      };
-      
-      reject = (reason) => {
-        clearTimeout(timeout);
-        originalReject(reason);
-      };
-    });
-  }
   /**
    * Handle OAuth callback and exchange code for tokens
    */
