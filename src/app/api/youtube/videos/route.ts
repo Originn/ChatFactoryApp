@@ -37,114 +37,119 @@ export async function GET(req: NextRequest) {
 
     // Get valid access token (auto-refreshes if needed)
     const accessToken = await getValidAccessToken(userId);
+    const apiKey = process.env.YOUTUBE_API_KEY;
 
-    // Base parameters for YouTube API
+    if (!apiKey) {
+      throw new Error('YouTube API key not configured');
+    }
+
+    // First get the channel's upload playlist (like the working version)
+    const channelResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true&key=${apiKey}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    );
+
+    if (!channelResponse.ok) {
+      throw new Error('Failed to fetch channel details');
+    }
+
+    const channelData = await channelResponse.json();
+    const uploadsPlaylistId = channelData.items[0]?.contentDetails?.relatedPlaylists?.uploads;
+
+    if (!uploadsPlaylistId) {
+      return NextResponse.json({ 
+        videos: [], 
+        totalResults: 0,
+        nextPageToken: null
+      });
+    }
+
+    // Fetch videos from uploads playlist
     const params = new URLSearchParams({
-      part: 'snippet,contentDetails,statistics',
+      part: 'snippet,contentDetails',
+      playlistId: uploadsPlaylistId,
       maxResults: maxResults.toString(),
-      order: 'date',
-      type: 'video'
+      key: apiKey
     });
 
     if (pageToken) {
       params.append('pageToken', pageToken);
     }
 
-    let videosData;
-
-    if (searchQuery && searchQuery.trim()) {
-      // Search for videos matching the query
-      params.append('q', searchQuery);
-      params.append('forMine', 'true'); // Only search within user's own videos
-      
-      const searchResponse = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?${params.toString()}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
-      );
-
-      if (!searchResponse.ok) {
-        throw new Error('Failed to search YouTube videos');
-      }
-
-      videosData = await searchResponse.json();
-      
-      // Get detailed video information for search results
-      if (videosData.items && videosData.items.length > 0) {
-        const videoIds = videosData.items.map((item: any) => item.id.videoId).join(',');
-        
-        const detailsResponse = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoIds}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`
-            }
-          }
-        );
-
-        if (detailsResponse.ok) {
-          const detailsData = await detailsResponse.json();
-          videosData.items = detailsData.items;
+    const videosResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
         }
       }
-    } else {
-      // Get all videos from the user's channel
-      params.append('forMine', 'true');
-      
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?${params.toString()}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
-      );
+    );
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch YouTube videos');
-      }
-
-      videosData = await response.json();
-
-      // Get detailed video information
-      if (videosData.items && videosData.items.length > 0) {
-        const videoIds = videosData.items.map((item: any) => item.id.videoId).join(',');
-        
-        const detailsResponse = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoIds}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`
-            }
-          }
-        );
-
-        if (detailsResponse.ok) {
-          const detailsData = await detailsResponse.json();
-          videosData.items = detailsData.items;
-        }
-      }
+    if (!videosResponse.ok) {
+      throw new Error('Failed to fetch videos');
     }
 
-    // Transform the data
-    const videos: YouTubeVideo[] = (videosData.items || []).map((item: any) => ({
-      id: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description,
-      thumbnailUrl: item.snippet.thumbnails.medium?.url,
-      publishedAt: item.snippet.publishedAt,
-      duration: formatDuration(item.contentDetails?.duration || 'PT0S'),
-      viewCount: parseInt(item.statistics?.viewCount || '0'),
-      channelTitle: item.snippet.channelTitle
+    const videosData = await videosResponse.json();
+
+    // Get detailed video information (including privacy status)
+    const videoIds = videosData.items.map((item: any) => item.snippet.resourceId.videoId).join(',');
+    
+    if (!videoIds) {
+      return NextResponse.json({ 
+        videos: [], 
+        totalResults: 0,
+        nextPageToken: null
+      });
+    }
+
+    const videoDetailsResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics,status&id=${videoIds}&key=${apiKey}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    );
+
+    if (!videoDetailsResponse.ok) {
+      throw new Error('Failed to fetch video details');
+    }
+
+    const videoDetailsData = await videoDetailsResponse.json();
+
+    // Transform the data to match the previous working format
+    const videos: YouTubeVideo[] = videoDetailsData.items.map((video: any) => ({
+      id: video.id,
+      title: video.snippet.title,
+      description: video.snippet.description,
+      thumbnailUrl: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
+      duration: formatDuration(video.contentDetails.duration),
+      publishedAt: video.snippet.publishedAt,
+      channelTitle: video.snippet.channelTitle,
+      viewCount: video.statistics?.viewCount,
+      privacy: video.status.privacyStatus === 'public' ? 'public' : 
+               video.status.privacyStatus === 'unlisted' ? 'unlisted' : 'private'
     }));
 
+    // Filter by search query if provided (like the working version)
+    const filteredVideos = searchQuery 
+      ? videos.filter(video => 
+          video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          video.description.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : videos;
+
+    // Update last used timestamp (like the working version)
+    await getValidAccessToken(userId); // This handles the timestamp update
+
     return NextResponse.json({
-      videos,
+      videos: filteredVideos,
       nextPageToken: videosData.nextPageToken,
-      totalResults: videosData.pageInfo?.totalResults || videos.length
+      totalResults: videosData.pageInfo?.totalResults || 0
     });
 
   } catch (error) {

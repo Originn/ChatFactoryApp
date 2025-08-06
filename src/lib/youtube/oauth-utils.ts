@@ -6,7 +6,7 @@ import { adminDb } from '@/lib/firebase/admin/index';
  */
 
 /**
- * Decrypt stored tokens
+ * Decrypt stored tokens (using same method as working version)
  */
 export function decrypt(text: string): string {
   try {
@@ -14,8 +14,7 @@ export function decrypt(text: string): string {
     const textParts = text.split(':');
     const iv = Buffer.from(textParts.shift()!, 'hex');
     const encryptedText = textParts.join(':');
-    const keyBuffer = crypto.scryptSync(key, 'salt', 32);
-    const decipher = crypto.createDecipheriv('aes-256-cbc', keyBuffer, iv);
+    const decipher = crypto.createDecipher('aes-256-cbc', key); // Use createDecipher like working version
     
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
@@ -28,14 +27,13 @@ export function decrypt(text: string): string {
 }
 
 /**
- * Encrypt tokens for storage
+ * Encrypt tokens for storage (using same method as working version)
  */
 export function encrypt(text: string): string {
   try {
     const key = process.env.YOUTUBE_KEYS_ENCRYPTION_KEY || 'your-32-character-secret-key-here!!';
     const iv = crypto.randomBytes(16);
-    const keyBuffer = crypto.scryptSync(key, 'salt', 32);
-    const cipher = crypto.createCipheriv('aes-256-cbc', keyBuffer, iv);
+    const cipher = crypto.createCipher('aes-256-cbc', key); // Use createCipher like working version
     
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -93,6 +91,14 @@ export async function getValidAccessToken(userId: string): Promise<string> {
       throw new Error('Token expired and refresh failed - please reconnect');
     }
   }
+
+  // Update lastUsed timestamp when accessing the token
+  await adminDb
+    .collection('user_youtube_tokens')
+    .doc(userId)
+    .update({
+      lastUsed: new Date().toISOString()
+    });
 
   return decrypt(tokenData.accessToken);
 }

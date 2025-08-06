@@ -8,13 +8,12 @@ import {
 } from '@/lib/youtube/security-utils';
 
 /**
- * Encrypt sensitive data for storage
+ * Encrypt sensitive data for storage (using same method as working version)
  */
 function encrypt(text: string): string {
   const key = process.env.YOUTUBE_KEYS_ENCRYPTION_KEY || 'your-32-character-secret-key-here!!';
   const iv = crypto.randomBytes(16);
-  const keyBuffer = crypto.scryptSync(key, 'salt', 32);
-  const cipher = crypto.createCipheriv('aes-256-cbc', keyBuffer, iv);
+  const cipher = crypto.createCipher('aes-256-cbc', key); // Use createCipher like working version
   
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -68,7 +67,7 @@ async function exchangeCodeForTokens(
  */
 async function getChannelInfo(accessToken: string) {
   const response = await fetch(
-    'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
+    `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true&key=${process.env.YOUTUBE_API_KEY}`,
     {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -91,7 +90,7 @@ async function getChannelInfo(accessToken: string) {
     id: channel.id,
     title: channel.snippet.title,
     description: channel.snippet.description,
-    thumbnailUrl: channel.snippet.thumbnails?.default?.url,
+    thumbnailUrl: channel.snippet.thumbnails.default?.url, // Keep default for consistency
     subscriberCount: channel.statistics?.subscriberCount,
   };
 }
