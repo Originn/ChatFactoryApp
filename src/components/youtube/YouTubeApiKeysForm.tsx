@@ -125,6 +125,13 @@ export default function YouTubeApiKeysForm({
               {typeof window !== 'undefined' ? window.location.origin : 'your-domain.com'}/api/youtube/callback
             </code> to authorized redirect URIs</li>
           </ol>
+          
+          <Alert className="mt-3">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Troubleshooting redirect_uri_mismatch:</strong> This error occurs when the redirect URI above doesn't exactly match what's configured in your Google OAuth client. Make sure to add both development (localhost) and production URLs to your authorized redirect URIs.
+            </AlertDescription>
+          </Alert>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
