@@ -176,7 +176,18 @@ export class YouTubeService {
 
       // Listen for message from popup
       const messageHandler = async (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        // Allow messages from current origin or configured app URL
+        const allowedOrigins = [
+          window.location.origin,
+          process.env.NEXT_PUBLIC_APP_URL,
+          'http://localhost:3000',
+          'https://wizechat.ai'
+        ].filter(Boolean);
+        
+        if (!allowedOrigins.includes(event.origin)) {
+          console.log('Ignoring message from unauthorized origin:', event.origin);
+          return;
+        }
         
         if (event.data.type === 'YOUTUBE_AUTH_SUCCESS') {
           clearInterval(checkClosed);

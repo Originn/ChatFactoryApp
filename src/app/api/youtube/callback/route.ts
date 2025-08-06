@@ -77,22 +77,25 @@ export async function GET(req: NextRequest) {
             const codeParam = ${code ? `'${code}'` : 'null'};
             const stateParam = ${state ? `'${state}'` : 'null'};
             
+            // Determine the correct origin - prioritize window.location.origin for current environment
+            const targetOrigin = window.location.origin;
+            
             if (errorParam) {
               window.opener.postMessage({
                 type: 'YOUTUBE_AUTH_ERROR',
                 error: errorParam
-              }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
+              }, targetOrigin);
             } else if (codeParam && stateParam) {
               window.opener.postMessage({
                 type: 'YOUTUBE_AUTH_SUCCESS',
                 code: codeParam,
                 userId: stateParam
-              }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
+              }, targetOrigin);
             } else {
               window.opener.postMessage({
                 type: 'YOUTUBE_AUTH_ERROR',
                 error: 'Missing authorization code or user ID'
-              }, '${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}');
+              }, targetOrigin);
             }
           }
           setTimeout(() => {
