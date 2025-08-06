@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Home, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MarketingHeaderProps {
   showHomeButton?: boolean;
@@ -20,6 +21,7 @@ export default function MarketingHeader({
   className = ""
 }: MarketingHeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
   
   return (
     <header className={`bg-background/80 backdrop-blur-sm border-b border-border/20 shadow-sm sticky top-0 z-50 ${className}`}>
@@ -27,7 +29,7 @@ export default function MarketingHeader({
         <div className="flex justify-between h-16 items-center">
           {/* Logo section - responsive */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-3">
+            <Link href={user ? "/dashboard" : "/"} className="flex items-center space-x-3">
               <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
               {/* Hide text on mobile, show on desktop */}
               <div className="font-bold text-xl text-gradient hidden sm:block">WizeChat</div>

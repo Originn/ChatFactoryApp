@@ -49,10 +49,10 @@ export default function Header({
           <div className="flex justify-between h-16 items-center">
             {/* Left section with logo */}
             <div className="flex items-center">
-              <div className="flex items-center space-x-3">
+              <Link href={user ? "/dashboard" : "/"} className="flex items-center space-x-3">
                 <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
                 <div className="font-bold text-xl text-gradient">WizeChat</div>
-              </div>
+              </Link>
               
               {/* Free plan badge - hidden on mobile, shown on tablet+ */}
               {userProfile?.subscription.plan === 'free' && (
@@ -284,7 +284,7 @@ export default function Header({
   return (
     <header className={`${isDark ? 'fixed w-full top-0 z-10 bg-gray-900/80 backdrop-blur-sm' : 'bg-card border-b border-border'} py-4 ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-        <Link href="/" className="flex items-center space-x-3">
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center space-x-3">
           <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
           <div className={`font-bold text-xl ${isDark ? 'text-white' : 'text-foreground'}`}>WizeChat</div>
         </Link>
