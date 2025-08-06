@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { userId } = await req.json();
+    const { userId, redirectUrl } = await req.json();
 
     // Validate and sanitize userId
     const userIdValidation = RequestValidator.validateUserId(userId);
@@ -92,11 +92,26 @@ export async function POST(req: NextRequest) {
     // Generate state parameter for CSRF protection
     const state = generateState();
     
+    // Validate and sanitize redirect URL if provided
+    let sanitizedRedirectUrl = '/dashboard'; // Default fallback
+    if (redirectUrl) {
+      try {
+        const parsedUrl = new URL(redirectUrl, process.env.NEXT_PUBLIC_APP_URL);
+        // Only allow same-origin redirects for security
+        if (parsedUrl.origin === process.env.NEXT_PUBLIC_APP_URL) {
+          sanitizedRedirectUrl = parsedUrl.pathname + parsedUrl.search + parsedUrl.hash;
+        }
+      } catch (error) {
+        console.warn('Invalid redirect URL provided:', redirectUrl);
+      }
+    }
+
     // Store PKCE verifier and state temporarily (expires in 10 minutes)
     const oauthSession = {
       userId: userIdValidation.sanitized!,
       codeVerifier,
       state,
+      redirectUrl: sanitizedRedirectUrl, // Store the original URL to return to
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
       clientIP: RequestValidator.getClientIP(req),

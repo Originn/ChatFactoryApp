@@ -65,15 +65,20 @@ export class CentralizedYouTubeService {
   /**
    * Initiate YouTube OAuth connection
    */
-  async initiateConnection(): Promise<string> {
+  async initiateConnection(redirectUrl?: string): Promise<string> {
     if (!this.userId) {
       throw new Error('User ID not set');
     }
 
+    const currentUrl = redirectUrl || (typeof window !== 'undefined' ? window.location.href : '/dashboard');
+
     const response = await fetch('/api/youtube/oauth/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: this.userId })
+      body: JSON.stringify({ 
+        userId: this.userId,
+        redirectUrl: currentUrl
+      })
     });
 
     if (!response.ok) {

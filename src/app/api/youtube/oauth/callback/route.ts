@@ -168,8 +168,11 @@ export async function GET(req: NextRequest) {
     if (new Date() > sessionData.expiresAt.toDate()) {
       console.error('OAuth session expired for state:', state);
       await adminDb.collection('youtube_oauth_sessions').doc(state).delete();
+      
+      const originalUrl = sessionData.redirectUrl || '/dashboard';
+      const separator = originalUrl.includes('?') ? '&' : '?';
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Authentication session expired')}`
+        `${process.env.NEXT_PUBLIC_APP_URL}${originalUrl}${separator}youtube_error=${encodeURIComponent('Authentication session expired')}`
       );
     }
 
@@ -200,9 +203,12 @@ export async function GET(req: NextRequest) {
     // Clean up OAuth session
     await adminDb.collection('youtube_oauth_sessions').doc(state).delete();
 
-    // Redirect to success page
+    // Redirect back to the original page where the OAuth flow was initiated
+    const originalUrl = sessionData.redirectUrl || '/dashboard';
+    const separator = originalUrl.includes('?') ? '&' : '?';
+    
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_success=true`
+      `${process.env.NEXT_PUBLIC_APP_URL}${originalUrl}${separator}youtube_success=true`
     );
 
   } catch (error) {

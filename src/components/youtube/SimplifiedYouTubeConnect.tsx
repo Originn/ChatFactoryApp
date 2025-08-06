@@ -117,11 +117,16 @@ export default function SimplifiedYouTubeConnect({
       setIsConnecting(true);
       setError(null);
       
-      // Initiate OAuth flow
+      // Initiate OAuth flow with current URL for redirect back
+      const currentUrl = typeof window !== 'undefined' ? window.location.href : '/dashboard';
+      
       const response = await fetch('/api/youtube/oauth/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ 
+          userId,
+          redirectUrl: currentUrl // Pass current page URL to return to after OAuth
+        })
       });
 
       if (!response.ok) {
