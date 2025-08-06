@@ -1,7 +1,7 @@
 import { adminStorage } from '@/lib/firebase/admin';
 import { DatabaseService } from '@/services/databaseService';
 
-const VIDEO_TRANSCRIBER_URL = process.env.VIDEO_TRANSCRIBER_URL || 'https://video-transcriber-931513743743.us-central1.run.app';
+const VIDEO_TRANSCRIBER_URL = process.env.VIDEO_TRANSCRIBER_URL || 'https://video-transcriber-cpu-931513743743.us-central1.run.app';
 
 interface VideoProcessingRequest {
   file: File;

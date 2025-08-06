@@ -369,7 +369,7 @@ export class YouTubeService {
   /**
    * Process selected videos for chatbot training
    */
-  async processVideos(videoIds: string[], isPublic: boolean, chatbotId: string): Promise<void> {
+  async processVideos(videoIds: string[], isPublic: boolean, chatbotId: string, userId: string): Promise<void> {
     if (!this.authState.accessToken) {
       throw new Error('Not authenticated');
     }
@@ -382,12 +382,13 @@ export class YouTubeService {
           videoIds,
           isPublic,
           chatbotId,
-          accessToken: this.authState.accessToken
+          userId
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start video processing');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to start video processing');
       }
 
       return await response.json();

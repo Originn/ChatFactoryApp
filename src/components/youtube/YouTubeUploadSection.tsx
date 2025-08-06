@@ -77,7 +77,7 @@ export default function YouTubeUploadSection({ chatbotId }: YouTubeUploadSection
       setProcessingVideos(initialProcessingVideos);
 
       // Start processing
-      await youtubeService.processVideos(selectedVideoIds, isPublic, chatbotId);
+      await youtubeService.processVideos(selectedVideoIds, isPublic, chatbotId, user.uid);
 
       // Simulate processing progress (in real implementation, you'd poll the API)
       simulateProcessingProgress(selectedVideoIds);
