@@ -5,8 +5,27 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get('code');
   const error = searchParams.get('error');
   const state = searchParams.get('state'); // userId
+  const redirect = searchParams.get('redirect'); // Flag for redirect flow
 
-  // Return a simple HTML page that posts message to parent window
+  // For redirect flow, redirect back to the app with parameters
+  if (redirect === 'true') {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const redirectUrl = new URL(baseUrl);
+    
+    if (error) {
+      redirectUrl.searchParams.set('error', error);
+    }
+    if (code) {
+      redirectUrl.searchParams.set('code', code);
+    }
+    if (state) {
+      redirectUrl.searchParams.set('state', state);
+    }
+    
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Return a simple HTML page that posts message to parent window (popup flow)
   const html = `
     <!DOCTYPE html>
     <html>

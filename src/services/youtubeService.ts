@@ -1,6 +1,7 @@
 'use client';
 
 import { YouTubeVideo, YouTubeChannel, YouTubeApiKeys, YouTubeAuthState } from '@/types/youtube';
+import { isMobileDevice, isPopupLikelyBlocked } from '@/lib/utils';
 
 /**
  * YouTube Service with user-provided API keys
@@ -106,9 +107,50 @@ export class YouTubeService {
   }
 
   /**
-   * Connect to YouTube with popup window
+   * Connect to YouTube - uses redirect flow on mobile, popup on desktop
    */
   async connectWithPopup(): Promise<void> {
+    // Use redirect flow on mobile devices to avoid popup blockers
+    if (isPopupLikelyBlocked()) {
+      return this.connectWithRedirect();
+    }
+    
+    // Try popup flow first, fall back to redirect if blocked
+    try {
+      await this.connectWithPopupWindow();
+    } catch (error) {
+      // If popup was blocked, try redirect flow as fallback
+      if (error instanceof Error && error.message.includes('Popup blocked')) {
+        console.log('Popup blocked, falling back to redirect flow');
+        return this.connectWithRedirect();
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Connect using redirect flow (mobile-friendly)
+   */
+  private async connectWithRedirect(): Promise<void> {
+    const authUrl = await this.generateAuthUrl();
+    
+    // Store current location to return to after auth
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('youtube_legacy_auth_redirect_url', window.location.href);
+      sessionStorage.setItem('youtube_legacy_auth_keys', JSON.stringify(this.apiKeys));
+      
+      // Redirect to auth URL
+      window.location.href = authUrl;
+    }
+    
+    // This promise will never resolve because we're redirecting
+    return new Promise(() => {});
+  }
+
+  /**
+   * Connect using popup window (desktop)
+   */
+  private async connectWithPopupWindow(): Promise<void> {
     const authUrl = await this.generateAuthUrl();
     
     return new Promise((resolve, reject) => {

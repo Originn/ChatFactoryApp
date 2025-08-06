@@ -4,6 +4,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
+    const isRedirect = searchParams.get('redirect') === 'true';
 
     if (!userId) {
       return NextResponse.json(
@@ -24,11 +25,16 @@ export async function GET(req: NextRequest) {
     // youtube.force-ssl scope is required for caption/transcript download
     // youtube.readonly is insufficient for captions.download API endpoint
     const scope = 'https://www.googleapis.com/auth/youtube.force-ssl';
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/youtube/callback`;
+    
+    // Add redirect parameter to callback URL for redirect flow
+    const callbackUrl = new URL(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/youtube/callback`);
+    if (isRedirect) {
+      callbackUrl.searchParams.set('redirect', 'true');
+    }
     
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirectUri,
+      redirect_uri: callbackUrl.toString(),
       response_type: 'code',
       scope: scope,
       access_type: 'offline',
