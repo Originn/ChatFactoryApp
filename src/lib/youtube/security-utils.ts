@@ -33,11 +33,15 @@ class RateLimiter {
 
   private cleanup() {
     const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
+    const entriesToDelete: string[] = [];
+    
+    this.cache.forEach((entry, key) => {
       if (now > entry.resetTime) {
-        this.cache.delete(key);
+        entriesToDelete.push(key);
       }
-    }
+    });
+    
+    entriesToDelete.forEach(key => this.cache.delete(key));
   }
 
   async checkLimit(req: NextRequest): Promise<{

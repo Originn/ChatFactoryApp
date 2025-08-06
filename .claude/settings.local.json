@@ -4,7 +4,8 @@
       "Bash(git add:*)",
       "Bash(npm run build:*)",
       "Bash(git push:*)",
-      "WebFetch(domain:developers.google.com)"
+      "WebFetch(domain:developers.google.com)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

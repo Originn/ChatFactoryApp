@@ -176,7 +176,7 @@ async function refreshUserToken(userId: string): Promise<void> {
   const newTokens = await response.json();
 
   // Update stored tokens
-  const updatedData = {
+  const updatedData: any = {
     ...tokenData,
     accessToken: encrypt(newTokens.access_token),
     expiresIn: newTokens.expires_in,

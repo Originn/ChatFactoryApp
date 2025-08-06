@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     const newTokens = await refreshAccessToken(refreshToken);
 
     // Update stored tokens
-    const updatedData = {
+    const updatedData: any = {
       ...tokenData,
       accessToken: encrypt(newTokens.access_token),
       expiresIn: newTokens.expires_in,
