@@ -92,26 +92,32 @@ export async function POST(req: NextRequest) {
     // Generate state parameter for CSRF protection
     const state = generateState();
     
-    // Validate and sanitize redirect URL if provided
-    let sanitizedRedirectUrl = '/dashboard'; // Default fallback
+    // Validate and sanitize redirect URL if provided (only for mobile redirect flow)
+    let sanitizedRedirectUrl: string | undefined = undefined;
     if (redirectUrl) {
       try {
-        const parsedUrl = new URL(redirectUrl, process.env.NEXT_PUBLIC_APP_URL);
-        // Only allow same-origin redirects for security
+        const parsedUrl = new URL(redirectUrl);
+        
+        // Security check: Only allow same-origin redirects
         if (parsedUrl.origin === process.env.NEXT_PUBLIC_APP_URL) {
           sanitizedRedirectUrl = parsedUrl.pathname + parsedUrl.search + parsedUrl.hash;
+          console.log('OAuth: Storing redirect URL:', sanitizedRedirectUrl); // Debug log
+        } else {
+          console.warn('OAuth: Rejected cross-origin redirect URL:', redirectUrl);
         }
       } catch (error) {
-        console.warn('Invalid redirect URL provided:', redirectUrl);
+        console.warn('OAuth: Invalid redirect URL provided:', redirectUrl, error);
       }
     }
+    
+    console.log('OAuth: Final redirect URL (undefined means popup flow):', sanitizedRedirectUrl); // Debug log
 
     // Store PKCE verifier and state temporarily (expires in 10 minutes)
     const oauthSession = {
       userId: userIdValidation.sanitized!,
       codeVerifier,
       state,
-      redirectUrl: sanitizedRedirectUrl, // Store the original URL to return to
+      ...(sanitizedRedirectUrl && { redirectUrl: sanitizedRedirectUrl }), // Only store if provided (popup vs redirect)
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
       clientIP: RequestValidator.getClientIP(req),

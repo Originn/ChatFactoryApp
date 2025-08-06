@@ -96,7 +96,9 @@ async function getChannelInfo(accessToken: string) {
     id: channel.id,
     title: channel.snippet.title,
     description: channel.snippet.description,
-    thumbnailUrl: channel.snippet.thumbnails.default?.url, // Keep default for consistency
+    thumbnailUrl: channel.snippet.thumbnails.high?.url || 
+                  channel.snippet.thumbnails.medium?.url || 
+                  channel.snippet.thumbnails.default?.url,
     subscriberCount: channel.statistics?.subscriberCount,
   };
 }
@@ -132,9 +134,73 @@ export async function GET(req: NextRequest) {
       });
 
       console.error('OAuth error:', error);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent(error)}`
-      );
+      
+      // For popup flow, return error HTML instead of redirect
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Connection Failed</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100vh;
+              margin: 0;
+              background: #f8f9fa;
+              color: #333;
+            }
+            .container {
+              text-align: center;
+              padding: 2rem;
+              background: white;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .error-icon {
+              font-size: 3rem;
+              color: #ef4444;
+              margin-bottom: 1rem;
+            }
+            h1 {
+              margin: 0 0 0.5rem 0;
+              color: #1f2937;
+            }
+            p {
+              margin: 0;
+              color: #6b7280;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="error-icon">❌</div>
+            <h1>Connection Failed</h1>
+            <p>You can close this window and try again.</p>
+          </div>
+          <script>
+            // Notify parent window of error
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'youtube_oauth_error',
+                error: '${error.replace(/'/g, "\\'")}'
+              }, window.location.origin);
+            }
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+              window.close();
+            }, 3000);
+          </script>
+        </body>
+        </html>
+      `, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        },
+      });
     }
 
     // Validate required parameters
@@ -149,9 +215,51 @@ export async function GET(req: NextRequest) {
         error: `Invalid parameters: ${codeValidation.error || stateValidation.error}`,
       });
 
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Invalid authorization parameters')}`
-      );
+      // Try to determine flow type from session data
+      let isPopupFlow = true; // Default to popup for safety
+      
+      if (state) {
+        try {
+          const tempSessionDoc = await adminDb
+            .collection('youtube_oauth_sessions')
+            .doc(state)
+            .get();
+          
+          if (tempSessionDoc.exists) {
+            const tempSessionData = tempSessionDoc.data()!;
+            isPopupFlow = !tempSessionData.redirectUrl;
+          }
+        } catch (error) {
+          // If we can't determine, default to popup
+        }
+      }
+      
+      if (isPopupFlow) {
+        return new Response(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Invalid Parameters</title></head>
+          <body>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'youtube_oauth_error',
+                  error: 'Invalid authorization parameters'
+                }, window.location.origin);
+              }
+              window.close();
+            </script>
+          </body>
+          </html>
+        `, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      } else {
+        return NextResponse.redirect(
+          `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Invalid authorization parameters')}`
+        );
+      }
     }
 
     // Retrieve and validate OAuth session
@@ -162,9 +270,28 @@ export async function GET(req: NextRequest) {
 
     if (!sessionDoc.exists) {
       console.error('Invalid or expired OAuth state:', state);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Invalid or expired authentication session')}`
-      );
+      
+      // Return popup error for desktop users
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Session Expired</title></head>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'youtube_oauth_error',
+                error: 'Invalid or expired authentication session'
+              }, window.location.origin);
+            }
+            window.close();
+          </script>
+        </body>
+        </html>
+      `, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
     }
 
     const sessionData = sessionDoc.data()!;
@@ -174,11 +301,36 @@ export async function GET(req: NextRequest) {
       console.error('OAuth session expired for state:', state);
       await adminDb.collection('youtube_oauth_sessions').doc(state).delete();
       
-      const originalUrl = sessionData.redirectUrl || '/dashboard';
-      const separator = originalUrl.includes('?') ? '&' : '?';
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}${originalUrl}${separator}youtube_error=${encodeURIComponent('Authentication session expired')}`
-      );
+      if (!sessionData.redirectUrl) {
+        // Popup flow
+        return new Response(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Session Expired</title></head>
+          <body>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'youtube_oauth_error',
+                  error: 'Authentication session expired'
+                }, window.location.origin);
+              }
+              window.close();
+            </script>
+          </body>
+          </html>
+        `, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      } else {
+        // Redirect flow
+        const originalUrl = sessionData.redirectUrl;
+        const separator = originalUrl.includes('?') ? '&' : '?';
+        return NextResponse.redirect(
+          `${process.env.NEXT_PUBLIC_APP_URL}${originalUrl}${separator}youtube_error=${encodeURIComponent('Authentication session expired')}`
+        );
+      }
     }
 
     // Exchange code for tokens using PKCE
@@ -208,13 +360,83 @@ export async function GET(req: NextRequest) {
     // Clean up OAuth session
     await adminDb.collection('youtube_oauth_sessions').doc(state).delete();
 
-    // Redirect back to the original page where the OAuth flow was initiated
-    const originalUrl = sessionData.redirectUrl || '/dashboard';
-    const separator = originalUrl.includes('?') ? '&' : '?';
-    
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}${originalUrl}${separator}youtube_success=true`
-    );
+    // Check if this is a popup flow (no redirectUrl means desktop popup)
+    if (!sessionData.redirectUrl) {
+      // Desktop popup flow - return HTML that communicates with parent window
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>YouTube Connected</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100vh;
+              margin: 0;
+              background: #f8f9fa;
+              color: #333;
+            }
+            .container {
+              text-align: center;
+              padding: 2rem;
+              background: white;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .success-icon {
+              font-size: 3rem;
+              color: #22c55e;
+              margin-bottom: 1rem;
+            }
+            h1 {
+              margin: 0 0 0.5rem 0;
+              color: #1f2937;
+            }
+            p {
+              margin: 0;
+              color: #6b7280;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="success-icon">✅</div>
+            <h1>YouTube Connected!</h1>
+            <p>You can close this window now.</p>
+          </div>
+          <script>
+            // Notify parent window of success
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'youtube_oauth_success',
+                data: { success: true }
+              }, window.location.origin);
+            }
+            // Auto-close after 2 seconds
+            setTimeout(() => {
+              window.close();
+            }, 2000);
+          </script>
+        </body>
+        </html>
+      `, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        },
+      });
+    } else {
+      // Mobile redirect flow - redirect back to the original page
+      const originalUrl = sessionData.redirectUrl;
+      const separator = originalUrl.includes('?') ? '&' : '?';
+      
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}${originalUrl}${separator}youtube_success=true`
+      );
+    }
 
   } catch (error) {
     console.error('OAuth callback error:', error);
@@ -222,16 +444,48 @@ export async function GET(req: NextRequest) {
     // Clean up session if state is available
     const { searchParams } = new URL(req.url);
     const state = searchParams.get('state');
+    let isPopupFlow = true; // Default to popup for safety
+    
     if (state) {
       try {
+        const sessionDoc = await adminDb.collection('youtube_oauth_sessions').doc(state).get();
+        if (sessionDoc.exists) {
+          const sessionData = sessionDoc.data()!;
+          isPopupFlow = !sessionData.redirectUrl;
+        }
         await adminDb.collection('youtube_oauth_sessions').doc(state).delete();
       } catch (cleanupError) {
         console.error('Failed to clean up OAuth session:', cleanupError);
       }
     }
 
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Authentication failed')}`
-    );
+    if (isPopupFlow) {
+      // Popup flow error
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Authentication Failed</title></head>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'youtube_oauth_error',
+                error: 'Authentication failed'
+              }, window.location.origin);
+            }
+            window.close();
+          </script>
+        </body>
+        </html>
+      `, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
+    } else {
+      // Redirect flow error
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Authentication failed')}`
+      );
+    }
   }
 }

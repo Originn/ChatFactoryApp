@@ -117,15 +117,12 @@ export default function SimplifiedYouTubeConnect({
       setIsConnecting(true);
       setError(null);
       
-      // Initiate OAuth flow with current URL for redirect back
-      const currentUrl = typeof window !== 'undefined' ? window.location.href : '/dashboard';
-      
       const response = await fetch('/api/youtube/oauth/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           userId,
-          redirectUrl: currentUrl // Pass current page URL to return to after OAuth
+          redirectUrl: deviceInfo.isMobile ? window.location.href : undefined // Only pass redirect for mobile
         })
       });
 
@@ -135,14 +132,78 @@ export default function SimplifiedYouTubeConnect({
 
       const { authUrl } = await response.json();
       
-      // Use mobile-optimized redirect
-      handleMobileRedirect(authUrl, deviceInfo);
+      if (deviceInfo.isMobile) {
+        // Mobile: use redirect flow
+        handleMobileRedirect(authUrl, deviceInfo);
+      } else {
+        // Desktop: use popup window
+        const popup = window.open(
+          authUrl,
+          'youtube_oauth',
+          'width=500,height=600,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+        );
+
+        if (!popup) {
+          throw new Error('Popup was blocked. Please allow popups for this site.');
+        }
+
+        // Listen for popup completion
+        const checkPopup = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkPopup);
+            setIsConnecting(false);
+            // Check connection status after popup closes
+            setTimeout(() => checkConnectionStatus(), 1000);
+          }
+        }, 1000);
+
+        // Handle popup communication
+        const handleMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          
+          if (event.data.type === 'youtube_oauth_success') {
+            clearInterval(checkPopup);
+            popup.close();
+            setIsConnecting(false);
+            window.removeEventListener('message', handleMessage);
+            
+            setError(null);
+            setTimeout(() => checkConnectionStatus(), 1000);
+          } else if (event.data.type === 'youtube_oauth_error') {
+            clearInterval(checkPopup);
+            popup.close();
+            setIsConnecting(false);
+            window.removeEventListener('message', handleMessage);
+            
+            setError(event.data.error || 'Failed to connect to YouTube');
+          }
+        };
+
+        window.addEventListener('message', handleMessage);
+
+        // Cleanup after 5 minutes
+        setTimeout(() => {
+          if (!popup.closed) {
+            clearInterval(checkPopup);
+            popup.close();
+            setIsConnecting(false);
+            window.removeEventListener('message', handleMessage);
+            setError('Connection attempt timed out. Please try again.');
+          }
+        }, 5 * 60 * 1000);
+      }
       
     } catch (error) {
       console.error('YouTube connection failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Connection failed';
-      const guidance = getMobileErrorGuidance(errorMessage, deviceInfo);
-      setError(guidance.message);
+      
+      if (deviceInfo.isMobile) {
+        const guidance = getMobileErrorGuidance(errorMessage, deviceInfo);
+        setError(guidance.message);
+      } else {
+        setError(errorMessage);
+      }
+      
       setIsConnecting(false);
     }
   };
@@ -276,9 +337,9 @@ export default function SimplifiedYouTubeConnect({
                 </>
               ) : (
                 <>
-                  <li>You'll be securely redirected to Google</li>
-                  <li>Grant permission to access your YouTube videos</li>
-                  <li>Return here to select videos for your chatbot</li>
+                  <li>A secure popup window will open to Google</li>
+                  <li>Sign in and grant permission to access your videos</li>
+                  <li>The popup will close and you'll stay on this page</li>
                 </>
               )}
             </ul>
