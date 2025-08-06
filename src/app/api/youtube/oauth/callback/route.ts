@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { adminDb } from '@/lib/firebase/admin/index';
+import { 
+  oauthCallbackRateLimit, 
+  SecurityMonitor, 
+  RequestValidator 
+} from '@/lib/youtube/security-utils';
 
 /**
  * Encrypt sensitive data for storage
@@ -93,6 +98,20 @@ async function getChannelInfo(accessToken: string) {
 
 export async function GET(req: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitResult = await oauthCallbackRateLimit.checkLimit(req);
+    if (!rateLimitResult.allowed) {
+      await SecurityMonitor.logSuspiciousActivity('rate_limit_exceeded', {
+        ip: RequestValidator.getClientIP(req),
+        userAgent: RequestValidator.getUserAgent(req),
+        endpoint: '/api/youtube/oauth/callback',
+      });
+
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Too many requests. Please try again later.')}`
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
     const state = searchParams.get('state');
@@ -100,15 +119,33 @@ export async function GET(req: NextRequest) {
 
     // Handle OAuth errors
     if (error) {
+      await SecurityMonitor.logSuspiciousActivity('invalid_state', {
+        ip: RequestValidator.getClientIP(req),
+        userAgent: RequestValidator.getUserAgent(req),
+        endpoint: '/api/youtube/oauth/callback',
+        error: `OAuth error: ${error}`,
+      });
+
       console.error('OAuth error:', error);
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent(error)}`
       );
     }
 
-    if (!code || !state) {
+    // Validate required parameters
+    const codeValidation = RequestValidator.validateAuthCode(code);
+    const stateValidation = RequestValidator.validateState(state);
+
+    if (!codeValidation.valid || !stateValidation.valid) {
+      await SecurityMonitor.logSuspiciousActivity('invalid_state', {
+        ip: RequestValidator.getClientIP(req),
+        userAgent: RequestValidator.getUserAgent(req),
+        endpoint: '/api/youtube/oauth/callback',
+        error: `Invalid parameters: ${codeValidation.error || stateValidation.error}`,
+      });
+
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Missing authorization code or state')}`
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?youtube_error=${encodeURIComponent('Invalid authorization parameters')}`
       );
     }
 

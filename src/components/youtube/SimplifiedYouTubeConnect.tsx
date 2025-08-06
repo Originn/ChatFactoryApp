@@ -1,11 +1,12 @@
-// Secure YouTube OAuth Connect Component
+// Secure YouTube OAuth Connect Component - Mobile Optimized
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Youtube, CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Youtube, CheckCircle, AlertCircle, Loader2, ExternalLink, Smartphone, Monitor } from 'lucide-react';
+import { detectDevice, getMobileErrorGuidance, checkBrowserSupport, getMobileUIConfig, handleMobileRedirect } from '@/lib/youtube/mobile-utils';
 
 interface YouTubeConnectionStatus {
   isConnected: boolean;
@@ -32,6 +33,15 @@ export default function SimplifiedYouTubeConnect({
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState(detectDevice());
+  const [browserSupport, setBrowserSupport] = useState(checkBrowserSupport(detectDevice()));
+
+  // Update device info on mount
+  useEffect(() => {
+    const device = detectDevice();
+    setDeviceInfo(device);
+    setBrowserSupport(checkBrowserSupport(device));
+  }, []);
 
   // Check for OAuth callback results in URL parameters
   useEffect(() => {
@@ -120,12 +130,14 @@ export default function SimplifiedYouTubeConnect({
 
       const { authUrl } = await response.json();
       
-      // Redirect to Google OAuth
-      window.location.href = authUrl;
+      // Use mobile-optimized redirect
+      handleMobileRedirect(authUrl, deviceInfo);
       
     } catch (error) {
       console.error('YouTube connection failed:', error);
-      setError(error instanceof Error ? error.message : 'Connection failed');
+      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+      const guidance = getMobileErrorGuidance(errorMessage, deviceInfo);
+      setError(guidance.message);
       setIsConnecting(false);
     }
   };
@@ -158,13 +170,18 @@ export default function SimplifiedYouTubeConnect({
     }
   };
 
+  // Get mobile UI configuration
+  const uiConfig = getMobileUIConfig(deviceInfo);
+
   if (isLoading) {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardContent className="p-6">
+      <Card className={uiConfig.cardClass}>
+        <CardContent className={uiConfig.spacing}>
           <div className="flex items-center justify-center space-x-2">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm text-muted-foreground">Checking YouTube connection...</span>
+            <span className={`${uiConfig.bodySize} text-muted-foreground`}>
+              Checking YouTube connection...
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -172,28 +189,58 @@ export default function SimplifiedYouTubeConnect({
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className={uiConfig.cardClass}>
       <CardHeader className="text-center">
         <div className="mx-auto w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
           <Youtube className="w-6 h-6 text-red-600 dark:text-red-400" />
+          {/* Device indicator */}
+          <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-1">
+            {deviceInfo.isMobile ? (
+              <Smartphone className="w-3 h-3 text-muted-foreground" />
+            ) : (
+              <Monitor className="w-3 h-3 text-muted-foreground" />
+            )}
+          </div>
         </div>
-        <CardTitle className="text-xl font-semibold">
+        <CardTitle className={`${uiConfig.titleSize} font-semibold`}>
           {connectionStatus.isConnected ? 'YouTube Connected' : 'Connect YouTube'}
         </CardTitle>
         {connectionStatus.isConnected && connectionStatus.channelInfo && (
-          <p className="text-sm text-muted-foreground mt-2">
+          <p className={`${uiConfig.bodySize} text-muted-foreground mt-2`}>
             Connected to: <span className="font-medium">{connectionStatus.channelInfo.title}</span>
           </p>
         )}
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className={uiConfig.spacing}>
+        {/* Browser Support Warnings */}
+        {browserSupport.warnings.length > 0 && (
+          <Alert className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/50 dark:border-yellow-800">
+            <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+            <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+              <div className="space-y-1">
+                {browserSupport.warnings.map((warning, index) => (
+                  <p key={index} className={uiConfig.bodySize}>{warning}</p>
+                ))}
+                {browserSupport.recommendations.map((rec, index) => (
+                  <p key={index} className={`${uiConfig.bodySize} font-medium`}>{rec}</p>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Connection Status */}
         {connectionStatus.isConnected && (
           <Alert className="border-green-200 bg-green-50 dark:bg-green-950/50 dark:border-green-800">
             <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-            <AlertDescription className="text-green-800 dark:text-green-200">
+            <AlertDescription className={`text-green-800 dark:text-green-200 ${uiConfig.bodySize}`}>
               Your YouTube account is connected and ready to use.
+              {deviceInfo.isMobile && (
+                <span className="block mt-1 text-xs">
+                  Optimized for {deviceInfo.platform} {deviceInfo.browser}
+                </span>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -202,7 +249,7 @@ export default function SimplifiedYouTubeConnect({
         {error && (
           <Alert className="border-red-200 bg-red-50 dark:bg-red-950/50 dark:border-red-800">
             <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-            <AlertDescription className="text-red-800 dark:text-red-200">
+            <AlertDescription className={`text-red-800 dark:text-red-200 ${uiConfig.bodySize}`}>
               {error}
             </AlertDescription>
           </Alert>
@@ -211,13 +258,30 @@ export default function SimplifiedYouTubeConnect({
         {/* Connection Instructions */}
         {!connectionStatus.isConnected && !error && (
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 space-y-2">
-            <h3 className="font-medium text-sm">Secure OAuth 2.0 Authentication:</h3>
-            <ul className="text-sm text-muted-foreground space-y-1 ml-4 list-disc">
+            <h3 className={`font-medium ${uiConfig.bodySize}`}>
+              Secure OAuth 2.0 Authentication:
+            </h3>
+            <ul className={`${uiConfig.bodySize} text-muted-foreground space-y-1 ml-4 list-disc`}>
               <li>Click "Connect YouTube" below</li>
-              <li>You'll be securely redirected to Google</li>
-              <li>Grant permission to access your YouTube videos</li>
-              <li>Return here to select videos for your chatbot</li>
+              {deviceInfo.isMobile ? (
+                <>
+                  <li>You'll be redirected to Google in your browser</li>
+                  <li>Sign in and grant permission to access your videos</li>
+                  <li>You'll be automatically returned here</li>
+                </>
+              ) : (
+                <>
+                  <li>You'll be securely redirected to Google</li>
+                  <li>Grant permission to access your YouTube videos</li>
+                  <li>Return here to select videos for your chatbot</li>
+                </>
+              )}
             </ul>
+            {deviceInfo.isMobile && (
+              <p className={`${uiConfig.bodySize} text-xs text-muted-foreground mt-2`}>
+                Mobile-optimized flow for {deviceInfo.platform}
+              </p>
+            )}
           </div>
         )}
 
@@ -228,7 +292,8 @@ export default function SimplifiedYouTubeConnect({
               variant="outline"
               onClick={handleDisconnect}
               disabled={isConnecting}
-              className="flex-1"
+              className={`flex-1 ${uiConfig.buttonClass} ${uiConfig.touchTarget}`}
+              size={uiConfig.buttonSize as "sm" | "lg" | "default" | "icon" | null | undefined}
             >
               {isConnecting ? (
                 <>
@@ -243,18 +308,19 @@ export default function SimplifiedYouTubeConnect({
             <Button
               onClick={handleConnect}
               disabled={isConnecting}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              className={`flex-1 bg-red-600 hover:bg-red-700 text-white ${uiConfig.buttonClass} ${uiConfig.touchTarget}`}
+              size={uiConfig.buttonSize as "sm" | "lg" | "default" | "icon" | null | undefined}
             >
               {isConnecting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Connecting...
+                  {deviceInfo.isMobile ? 'Connecting...' : 'Redirecting...'}
                 </>
               ) : (
                 <>
                   <Youtube className="w-4 h-4 mr-2" />
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  Connect YouTube
+                  {!deviceInfo.isMobile && <ExternalLink className="w-3 h-3 mr-1" />}
+                  {deviceInfo.isMobile ? 'Connect YouTube' : 'Connect YouTube'}
                 </>
               )}
             </Button>

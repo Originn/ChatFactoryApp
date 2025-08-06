@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { adminDb } from '@/lib/firebase/admin/index';
+import { 
+  oauthInitiateRateLimit, 
+  SecurityMonitor, 
+  RequestValidator 
+} from '@/lib/youtube/security-utils';
 
 /**
  * Generate PKCE code verifier and challenge
@@ -32,11 +37,43 @@ function generateState(): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitResult = await oauthInitiateRateLimit.checkLimit(req);
+    if (!rateLimitResult.allowed) {
+      await SecurityMonitor.logSuspiciousActivity('rate_limit_exceeded', {
+        ip: RequestValidator.getClientIP(req),
+        userAgent: RequestValidator.getUserAgent(req),
+        endpoint: '/api/youtube/oauth/initiate',
+      });
+
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': new Date(rateLimitResult.resetTime).toISOString(),
+          }
+        }
+      );
+    }
+
     const { userId } = await req.json();
 
-    if (!userId) {
+    // Validate and sanitize userId
+    const userIdValidation = RequestValidator.validateUserId(userId);
+    if (!userIdValidation.valid) {
+      await SecurityMonitor.logSuspiciousActivity('invalid_state', {
+        ip: RequestValidator.getClientIP(req),
+        userId: userId,
+        userAgent: RequestValidator.getUserAgent(req),
+        endpoint: '/api/youtube/oauth/initiate',
+        error: userIdValidation.error,
+      });
+
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
+        { error: userIdValidation.error },
         { status: 400 }
       );
     }
@@ -57,11 +94,13 @@ export async function POST(req: NextRequest) {
     
     // Store PKCE verifier and state temporarily (expires in 10 minutes)
     const oauthSession = {
-      userId,
+      userId: userIdValidation.sanitized!,
       codeVerifier,
       state,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      clientIP: RequestValidator.getClientIP(req),
+      userAgent: RequestValidator.getUserAgent(req),
     };
 
     await adminDb
