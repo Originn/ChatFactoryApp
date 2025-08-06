@@ -8,17 +8,23 @@ import {
 } from '@/lib/youtube/security-utils';
 
 /**
- * Encrypt sensitive data for storage (using same method as working version)
+ * Encrypt sensitive data for storage (fixed for modern Node.js)
  */
 function encrypt(text: string): string {
-  const key = process.env.YOUTUBE_KEYS_ENCRYPTION_KEY || 'your-32-character-secret-key-here!!';
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipher('aes-256-cbc', key); // Use createCipher like working version
-  
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  
-  return iv.toString('hex') + ':' + encrypted;
+  try {
+    const key = process.env.YOUTUBE_KEYS_ENCRYPTION_KEY || 'your-32-character-secret-key-here!!';
+    const iv = crypto.randomBytes(16);
+    const keyBuffer = crypto.scryptSync(key, 'salt', 32);
+    const cipher = crypto.createCipheriv('aes-256-cbc', keyBuffer, iv);
+    
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    return iv.toString('hex') + ':' + encrypted;
+  } catch (error) {
+    console.error('Encryption error:', error);
+    throw new Error('Failed to encrypt token');
+  }
 }
 
 /**
