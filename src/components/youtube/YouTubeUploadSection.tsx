@@ -303,6 +303,7 @@ export default function YouTubeUploadSection({ chatbotId }: YouTubeUploadSection
             onVideosSelected={setSelectedVideoIds}
             selectedVideoIds={selectedVideoIds}
             isProcessing={isProcessing}
+            userId={user?.uid || ''}
           />
         </CardContent>
       </Card>

@@ -90,7 +90,7 @@ export default function TranscriptDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black bg-opacity-50" 
@@ -100,10 +100,10 @@ export default function TranscriptDialog({
       {/* Modal */}
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex-shrink-0 p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white line-clamp-2">
+        <div className="flex-shrink-0 p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white line-clamp-2 pr-8">
                 {videoTitle}
               </h2>
               <div className="flex items-center space-x-2 mt-2">
@@ -121,7 +121,7 @@ export default function TranscriptDialog({
               onClick={onClose}
               variant="outline"
               size="sm"
-              className="flex-shrink-0 w-8 h-8 p-0"
+              className="flex-shrink-0"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -129,7 +129,7 @@ export default function TranscriptDialog({
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-h-0 p-4 sm:p-6">
+        <div className="flex-1 min-h-0 p-6">
           {isLoading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -154,18 +154,18 @@ export default function TranscriptDialog({
 
           {!isLoading && !error && transcript.length > 0 && (
             <>
-              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:space-x-2 sm:gap-0 mb-4">
-                <Button onClick={copyTranscript} variant="outline" size="sm" className="w-full sm:w-auto">
+              <div className="flex justify-end space-x-2 mb-4">
+                <Button onClick={copyTranscript} variant="outline" size="sm">
                   <Copy className="h-4 w-4 mr-1" />
                   Copy
                 </Button>
-                <Button onClick={downloadTranscript} variant="outline" size="sm" className="w-full sm:w-auto">
+                <Button onClick={downloadTranscript} variant="outline" size="sm">
                   <Download className="h-4 w-4 mr-1" />
                   Download
                 </Button>
               </div>
 
-              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 overflow-y-auto max-h-96 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent scrollbar-hide-mobile">
+              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 overflow-y-auto max-h-96">
                 <div className="space-y-3">
                   {transcript.map((item, index) => (
                     <div key={index} className="flex gap-3">
