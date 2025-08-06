@@ -2,6 +2,7 @@
 'use client';
 
 import { YouTubeVideo, YouTubeChannel, YouTubeAuthState } from '@/types/youtube';
+import { isMobileDevice, isPopupLikelyBlocked } from '@/lib/utils';
 
 /**
  * Centralized YouTube Service - Uses platform's API keys
@@ -36,13 +37,21 @@ export class CentralizedYouTubeService {
   /**
    * Generate YouTube OAuth URL using platform credentials
    */
-  async generateAuthUrl(): Promise<string> {
+  async generateAuthUrl(isRedirectFlow: boolean = false): Promise<string> {
     if (!this.userId) {
       throw new Error('User ID not set');
     }
 
     try {
-      const response = await fetch(`/api/youtube/auth?userId=${this.userId}`);
+      const params = new URLSearchParams({
+        userId: this.userId
+      });
+      
+      if (isRedirectFlow) {
+        params.append('redirect', 'true');
+      }
+      
+      const response = await fetch(`/api/youtube/auth?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error('Failed to generate auth URL');
@@ -57,9 +66,51 @@ export class CentralizedYouTubeService {
   }
 
   /**
-   * Connect to YouTube with popup window
+   * Connect to YouTube - uses redirect flow on mobile, popup on desktop
    */
   async connectWithPopup(): Promise<void> {
+    // Use redirect flow on mobile devices to avoid popup blockers
+    if (isPopupLikelyBlocked()) {
+      return this.connectWithRedirect();
+    }
+    
+    // Try popup flow first, fall back to redirect if blocked
+    try {
+      await this.connectWithPopupWindow();
+    } catch (error) {
+      // If popup was blocked, try redirect flow as fallback
+      if (error instanceof Error && error.message.includes('Popup blocked')) {
+        console.log('Popup blocked, falling back to redirect flow');
+        return this.connectWithRedirect();
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Connect using redirect flow (mobile-friendly)
+   */
+  private async connectWithRedirect(): Promise<void> {
+    const authUrl = await this.generateAuthUrl(true);
+    
+    // Store current location to return to after auth
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('youtube_auth_redirect_url', window.location.href);
+      sessionStorage.setItem('youtube_auth_user_id', this.userId || '');
+      
+      // Redirect to auth URL
+      window.location.href = authUrl;
+    }
+    
+    // This promise will never resolve because we're redirecting
+    // The auth will be handled when the user returns from the callback
+    return new Promise(() => {});
+  }
+
+  /**
+   * Connect using popup window (desktop)
+   */
+  private async connectWithPopupWindow(): Promise<void> {
     const authUrl = await this.generateAuthUrl();
     
     return new Promise((resolve, reject) => {
@@ -212,6 +263,68 @@ export class CentralizedYouTubeService {
       console.error('Error checking YouTube connection:', error);
       return false;
     }
+  }
+
+  /**
+   * Check if we're returning from a redirect auth flow and handle it
+   */
+  async handleRedirectCallback(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const error = urlParams.get('error');
+
+    // Check if this is a YouTube auth callback
+    if (!code && !error) {
+      return false;
+    }
+
+    // Clear URL parameters
+    const url = new URL(window.location.href);
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    url.searchParams.delete('error');
+    window.history.replaceState({}, '', url.toString());
+
+    if (error) {
+      console.error('YouTube auth error:', error);
+      this.authState = {
+        isConnected: false,
+        error: `Authentication failed: ${error}`
+      };
+      return false;
+    }
+
+    if (code) {
+      try {
+        // Get stored user ID
+        const storedUserId = sessionStorage.getItem('youtube_auth_user_id');
+        if (!storedUserId) {
+          throw new Error('Missing user ID from redirect flow');
+        }
+
+        // Handle the auth callback
+        await this.handleAuthCallback(code, storedUserId);
+
+        // Clean up session storage
+        sessionStorage.removeItem('youtube_auth_redirect_url');
+        sessionStorage.removeItem('youtube_auth_user_id');
+
+        return true;
+      } catch (error) {
+        console.error('Error handling redirect callback:', error);
+        this.authState = {
+          isConnected: false,
+          error: error instanceof Error ? error.message : 'Authentication failed'
+        };
+      }
+    }
+
+    return false;
   }
 
   /**

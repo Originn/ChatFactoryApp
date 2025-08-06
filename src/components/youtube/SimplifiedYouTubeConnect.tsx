@@ -26,8 +26,23 @@ export default function SimplifiedYouTubeConnect({
 
   useEffect(() => {
     youtubeService.setUserId(userId);
-    checkConnection();
+    handleInitialLoad();
   }, [userId]);
+
+  const handleInitialLoad = async () => {
+    // First check if we're returning from a redirect auth flow
+    const handleRedirectResult = await youtubeService.handleRedirectCallback();
+    
+    if (handleRedirectResult) {
+      // Successfully handled redirect, update state
+      const currentState = youtubeService.getAuthState();
+      setAuthState(currentState);
+      onConnectionChange?.(currentState.isConnected);
+    } else {
+      // No redirect callback, just check existing connection
+      checkConnection();
+    }
+  };
 
   const checkConnection = async () => {
     try {
