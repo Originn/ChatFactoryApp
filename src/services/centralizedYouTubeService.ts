@@ -1,16 +1,13 @@
-// DEBUG: Centralized YouTube Service - uses platform API keys for all users
+// Simplified YouTube Service - authentication removed
 'use client';
 
-import { YouTubeVideo, YouTubeChannel, YouTubeAuthState } from '@/types/youtube';
-import { isMobileDevice, isPopupLikelyBlocked } from '@/lib/utils';
+import { YouTubeVideo, YouTubeChannel } from '@/types/youtube';
 
 /**
- * Centralized YouTube Service - Uses platform's API keys
- * Much better UX - users just click "Connect YouTube"
+ * YouTube Service - Basic video operations without authentication
  */
 export class CentralizedYouTubeService {
   private static instance: CentralizedYouTubeService;
-  private authState: YouTubeAuthState = { isConnected: false };
   private userId: string | null = null;
 
   static getInstance(): CentralizedYouTubeService {
@@ -25,185 +22,6 @@ export class CentralizedYouTubeService {
    */
   setUserId(userId: string) {
     this.userId = userId;
-  }
-
-  /**
-   * Get current auth state
-   */
-  getAuthState(): YouTubeAuthState {
-    return this.authState;
-  }
-
-  /**
-   * Generate YouTube OAuth URL using platform credentials
-   */
-  async generateAuthUrl(): Promise<string> {
-    if (!this.userId) {
-      throw new Error('User ID not set');
-    }
-
-    try {
-      const response = await fetch(`/api/youtube/auth?userId=${this.userId}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to generate auth URL');
-      }
-
-      const data = await response.json();
-      return data.authUrl;
-    } catch (error) {
-      console.error('Error generating auth URL:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Connect to YouTube - uses redirect flow for better compatibility
-   */
-  async connectWithPopup(): Promise<void> {
-    // Always use redirect flow due to COOP policy issues with popups
-    console.log('🔄 Using redirect flow for YouTube authentication');
-    return this.connectWithRedirect();
-  }
-
-  /**
-   * Connect using redirect flow (mobile-friendly)
-   */
-  private async connectWithRedirect(): Promise<void> {
-    const authUrl = await this.generateAuthUrl();
-    
-    // Store current location to return to after auth
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('youtube_auth_redirect_url', window.location.href);
-      sessionStorage.setItem('youtube_auth_user_id', this.userId || '');
-      
-      // Redirect to auth URL
-      window.location.href = authUrl;
-    }
-    
-    // This promise will never resolve because we're redirecting
-    // The auth will be handled when the user returns from the callback
-    return new Promise(() => {});
-  }
-
-  /**
-   * Handle OAuth callback and exchange code for tokens
-   */
-  async handleAuthCallback(code: string, userId: string): Promise<void> {
-    try {
-      const response = await fetch('/api/youtube/exchange-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, userId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to exchange auth code for tokens');
-      }
-
-      const data = await response.json();
-      
-      this.authState = {
-        isConnected: true,
-        channel: data.channelInfo
-      };
-
-    } catch (error) {
-      this.authState = {
-        isConnected: false,
-        error: error instanceof Error ? error.message : 'Authentication failed'
-      };
-      throw error;
-    }
-  }
-
-  /**
-   * Check if user has connected YouTube account
-   */
-  async checkConnection(): Promise<boolean> {
-    if (!this.userId) {
-      return false;
-    }
-
-    try {
-      const response = await fetch(`/api/youtube/user-tokens?userId=${this.userId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        this.authState = {
-          isConnected: true,
-          channel: data.channelInfo
-        };
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('Error checking YouTube connection:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Check if we're returning from a redirect auth flow and handle it
-   */
-  async handleRedirectCallback(): Promise<boolean> {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    const error = urlParams.get('error');
-
-    // Check if this is a YouTube auth callback
-    if (!code && !error) {
-      return false;
-    }
-
-    // Clear URL parameters
-    const url = new URL(window.location.href);
-    url.searchParams.delete('code');
-    url.searchParams.delete('state');
-    url.searchParams.delete('error');
-    window.history.replaceState({}, '', url.toString());
-
-    if (error) {
-      console.error('YouTube auth error:', error);
-      this.authState = {
-        isConnected: false,
-        error: `Authentication failed: ${error}`
-      };
-      return false;
-    }
-
-    if (code) {
-      try {
-        // Get stored user ID
-        const storedUserId = sessionStorage.getItem('youtube_auth_user_id');
-        if (!storedUserId) {
-          throw new Error('Missing user ID from redirect flow');
-        }
-
-        // Handle the auth callback
-        await this.handleAuthCallback(code, storedUserId);
-
-        // Clean up session storage
-        sessionStorage.removeItem('youtube_auth_redirect_url');
-        sessionStorage.removeItem('youtube_auth_user_id');
-
-        return true;
-      } catch (error) {
-        console.error('Error handling redirect callback:', error);
-        this.authState = {
-          isConnected: false,
-          error: error instanceof Error ? error.message : 'Authentication failed'
-        };
-      }
-    }
-
-    return false;
   }
 
   /**
@@ -279,27 +97,4 @@ export class CentralizedYouTubeService {
     }
   }
 
-  /**
-   * Disconnect from YouTube
-   */
-  async disconnect(): Promise<void> {
-    if (!this.userId) {
-      throw new Error('User ID not set');
-    }
-
-    try {
-      const response = await fetch('/api/youtube/disconnect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: this.userId })
-      });
-
-      if (response.ok) {
-        this.authState = { isConnected: false };
-      }
-    } catch (error) {
-      console.error('Failed to disconnect YouTube:', error);
-      throw error;
-    }
-  }
 }
