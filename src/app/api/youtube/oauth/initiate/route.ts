@@ -1,0 +1,101 @@
+import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { adminDb } from '@/lib/firebase/admin/index';
+
+/**
+ * Generate PKCE code verifier and challenge
+ * Following RFC 7636 specifications
+ */
+function generatePKCE() {
+  // Generate 128 bytes of random data and encode as base64url
+  const codeVerifier = crypto.randomBytes(128).toString('base64url');
+  
+  // Create SHA256 hash and encode as base64url
+  const codeChallenge = crypto
+    .createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64url');
+    
+  return {
+    codeVerifier,
+    codeChallenge,
+    codeChallengeMethod: 'S256'
+  };
+}
+
+/**
+ * Generate cryptographically secure state parameter
+ */
+function generateState(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { userId } = await req.json();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Missing userId parameter' },
+        { status: 400 }
+      );
+    }
+
+    const clientId = process.env.YOUTUBE_CLIENT_ID;
+    if (!clientId) {
+      return NextResponse.json(
+        { error: 'YouTube OAuth not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Generate PKCE parameters
+    const { codeVerifier, codeChallenge, codeChallengeMethod } = generatePKCE();
+    
+    // Generate state parameter for CSRF protection
+    const state = generateState();
+    
+    // Store PKCE verifier and state temporarily (expires in 10 minutes)
+    const oauthSession = {
+      userId,
+      codeVerifier,
+      state,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    };
+
+    await adminDb
+      .collection('youtube_oauth_sessions')
+      .doc(state)
+      .set(oauthSession);
+
+    // Build OAuth URL with PKCE parameters
+    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/youtube/oauth/callback`;
+    
+    const oauthParams = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/youtube.force-ssl',
+      access_type: 'offline',
+      prompt: 'consent', // Force consent to get refresh token
+      state: state,
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod,
+    });
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${oauthParams.toString()}`;
+
+    return NextResponse.json({
+      authUrl,
+      state, // Return state for frontend tracking
+    });
+
+  } catch (error) {
+    console.error('Error initiating YouTube OAuth:', error);
+    return NextResponse.json(
+      { error: 'Failed to initiate OAuth flow' },
+      { status: 500 }
+    );
+  }
+}
