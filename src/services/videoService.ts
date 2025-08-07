@@ -493,8 +493,15 @@ export class VideoService {
       console.log('  ⚙️ processing_enabled:', result.processing_enabled);
       console.log('  🔧 embedding_model:', result.embedding_model);
       console.log('  💾 pinecone_enabled:', result.pinecone_enabled);
+      // Check if Pinecone embedding failed - this should be treated as a failure
       if (result.pinecone_error) {
-        console.error('⚠️ [YouTube] Pinecone error:', result.pinecone_error);
+        console.error('❌ [YouTube] Pinecone embedding failed:', result.pinecone_error);
+        return {
+          success: false,
+          error: `Embedding failed: ${result.pinecone_error}`,
+          transcription: result.transcription, // Include transcription for debugging
+          vectorCount: 0
+        };
       }
 
       // Create video metadata in database

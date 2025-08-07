@@ -141,29 +141,6 @@ class DatabaseService {
     }
   }
 
-  static async updateVectorstoreDocumentCount(
-    chatbotId: string,
-    incrementBy: number
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const chatbotRef = adminDb.collection('chatbots').doc(chatbotId);
-      
-      await chatbotRef.update({
-        'vectorstore.documentsCount': FieldValue.increment(incrementBy),
-        'vectorstore.lastDocumentUpload': FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      console.log(`✅ Updated vectorstore document count for chatbot ${chatbotId}`);
-      return { success: true };
-    } catch (error) {
-      console.error(`❌ Failed to update vectorstore document count:`, error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  }
 
   // PDF Metadata Management Methods
   static async createPDFMetadata(
@@ -455,16 +432,104 @@ class DatabaseService {
     }
   }
 
+
   static async deleteVideoMetadata(
-    videoId: string
+    videoId: string,
+    userId: string,
+    chatbotId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await adminDb.collection('user_videos').doc(videoId).delete();
+      // Delete from user_videos collection by document ID
+      const videoDoc = await adminDb.collection('user_videos').doc(videoId).get();
+      if (videoDoc.exists) {
+        const videoData = videoDoc.data();
+        // Verify ownership before deletion
+        if (videoData?.userId === userId && videoData?.chatbotId === chatbotId) {
+          await videoDoc.ref.delete();
+          console.log(`✅ Deleted video metadata for ${videoId}`);
+        } else {
+          return {
+            success: false,
+            error: 'Video not found or access denied'
+          };
+        }
+      }
 
-      console.log(`✅ Deleted video metadata ${videoId}`);
       return { success: true };
     } catch (error) {
       console.error(`❌ Failed to delete video metadata:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async deleteProcessedVideo(
+    chatbotId: string,
+    videoId: string,
+    userId: string
+  ): Promise<{ success: boolean; vectorCount?: number; error?: string }> {
+    try {
+      const docId = `${chatbotId}_${videoId}`;
+      const processedVideoRef = adminDb.collection('processed_youtube_videos').doc(docId);
+      
+      const doc = await processedVideoRef.get();
+      if (!doc.exists) {
+        return {
+          success: false,
+          error: 'Processed video record not found'
+        };
+      }
+
+      const videoData = doc.data();
+      
+      // Verify ownership
+      if (videoData?.userId !== userId || videoData?.chatbotId !== chatbotId) {
+        return {
+          success: false,
+          error: 'Video not found or access denied'
+        };
+      }
+
+      const vectorCount = videoData?.vectorCount || 0;
+      
+      await processedVideoRef.delete();
+      console.log(`✅ Deleted processed video record for ${videoId}`);
+
+      return { 
+        success: true, 
+        vectorCount 
+      };
+    } catch (error) {
+      console.error(`❌ Failed to delete processed video:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async updateVectorstoreDocumentCount(
+    chatbotId: string,
+    countChange: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (countChange === 0) {
+        return { success: true }; // No change needed
+      }
+
+      const chatbotRef = adminDb.collection('chatbots').doc(chatbotId);
+      
+      await chatbotRef.update({
+        'vectorstore.documentCount': FieldValue.increment(countChange),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      console.log(`✅ Updated vectorstore document count by ${countChange} for chatbot ${chatbotId}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to update vectorstore document count:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

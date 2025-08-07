@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from "@/components/ui/progress";
 import SimplifiedYouTubeConnect from '@/components/youtube/SimplifiedYouTubeConnect';
@@ -12,7 +13,7 @@ import TranscriptDialog from '@/components/youtube/TranscriptDialog';
 import YouTubeVideoPlayer from '@/components/youtube/YouTubeVideoPlayer';
 import { CentralizedYouTubeService } from '@/services/centralizedYouTubeService';
 import { YouTubeVideo } from '@/types/youtube';
-import { Play, FileText, Youtube, Search, Subtitles, Languages } from 'lucide-react';
+import { Play, FileText, Youtube, Search, Subtitles, Languages, Trash2 } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 
 interface UploadedFile {
@@ -90,6 +91,18 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     videoTitle: ''
   });
 
+  // Video deletion state
+  const [deletingVideoIds, setDeletingVideoIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    isOpen: boolean;
+    videoId: string;
+    videoTitle: string;
+  }>({
+    isOpen: false,
+    videoId: '',
+    videoTitle: ''
+  });
+
   // Load processed videos on component mount
   const loadProcessedVideos = async () => {
     if (!user?.uid || !chatbotId) return;
@@ -100,7 +113,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
       const result = await response.json();
       
       if (result.success && result.processedVideos) {
-        const videoIds = new Set(result.processedVideos.map((v: any) => v.videoId));
+        const videoIds = new Set<string>(result.processedVideos.map((v: any) => v.videoId));
         setProcessedVideoIds(videoIds);
         console.log(`✅ Loaded ${videoIds.size} processed videos from database`);
       }
@@ -721,6 +734,78 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     });
   };
 
+  const handleDeleteVideo = (video: YouTubeVideo) => {
+    setDeleteConfirmDialog({
+      isOpen: true,
+      videoId: video.id,
+      videoTitle: video.title
+    });
+  };
+
+  const closeDeleteConfirmDialog = () => {
+    setDeleteConfirmDialog({
+      isOpen: false,
+      videoId: '',
+      videoTitle: ''
+    });
+  };
+
+  const confirmDeleteVideo = async () => {
+    const { videoId, videoTitle } = deleteConfirmDialog;
+    
+    if (!videoId || !user?.uid) return;
+    
+    // Close dialog first
+    closeDeleteConfirmDialog();
+    
+    // Add to deleting set
+    setDeletingVideoIds(prev => new Set(prev).add(videoId));
+    
+    try {
+      const response = await fetch('/api/youtube/delete-video', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId,
+          chatbotId,
+          userId: user.uid
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Remove from processed videos set
+        setProcessedVideoIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(videoId);
+          return newSet;
+        });
+        
+        console.log(`✅ Successfully deleted video: ${videoTitle}`);
+        console.log(`🗑️ Deleted ${result.deletedCount} vectors from Pinecone`);
+        
+        // Show success message (you could add a toast notification here)
+        
+      } else {
+        console.error(`❌ Failed to delete video: ${result.error}`);
+        // Show error message (you could add a toast notification here)
+      }
+    } catch (error) {
+      console.error('Error deleting video:', error);
+      // Show error message (you could add a toast notification here)
+    } finally {
+      // Remove from deleting set
+      setDeletingVideoIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(videoId);
+        return newSet;
+      });
+    }
+  };
+
   return (
     <Card className="mb-8 dark:bg-gray-800 dark:border-gray-700">
       <CardContent className="p-8">
@@ -963,15 +1048,28 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                               </div>
                             )}
                             
-                            {/* Completed indicator */}
+                            {/* Delete button for processed videos */}
                             {isProcessed && (
-                              <div className="absolute top-2 right-2 flex items-center space-x-1">
-                                <div className="h-4 w-4 bg-green-500 rounded-full flex items-center justify-center">
-                                  <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                </div>
-                                <span className="text-xs text-green-600 dark:text-green-400 font-medium">Processed</span>
+                              <div className="absolute top-2 right-2">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!deletingVideoIds.has(video.id)) {
+                                      handleDeleteVideo(video);
+                                    }
+                                  }}
+                                  disabled={deletingVideoIds.has(video.id)}
+                                  className={`p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors ${
+                                    deletingVideoIds.has(video.id) ? 'opacity-50 cursor-not-allowed' : 'text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
+                                  }`}
+                                  title={deletingVideoIds.has(video.id) ? 'Deleting...' : 'Delete video from knowledge base'}
+                                >
+                                  {deletingVideoIds.has(video.id) ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-t border-b border-red-500"></div>
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </button>
                               </div>
                             )}
                             
@@ -986,8 +1084,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                                 }`}
                               />
                               <div 
-                                className="flex-1 min-w-0 cursor-pointer"
-                                onClick={() => handleVideoSelection(video.id)}
+                                className={`flex-1 min-w-0 ${
+                                  isProcessed || isCurrentlyProcessing || isProcessingVideos 
+                                    ? 'cursor-default' 
+                                    : 'cursor-pointer'
+                                }`}
+                                onClick={() => {
+                                  if (!isProcessed && !isCurrentlyProcessing && !isProcessingVideos) {
+                                    handleVideoSelection(video.id);
+                                  }
+                                }}
                               >
                                 <div className="flex items-center space-x-2 mb-2 flex-wrap gap-1">
                                   <Play className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
@@ -1005,6 +1111,15 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                                     >
                                       <Subtitles className="h-3 w-3 mr-1" />
                                       Transcript
+                                    </Badge>
+                                  )}
+                                  {isProcessed && (
+                                    <Badge 
+                                      variant="outline" 
+                                      className="text-xs bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200"
+                                    >
+                                      <div className="h-2 w-2 bg-green-500 rounded-full mr-1"></div>
+                                      Processed
                                     </Badge>
                                   )}
                                 </div>
@@ -1179,6 +1294,28 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         videoId={videoPlayer.videoId}
         videoTitle={videoPlayer.videoTitle}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmDialog.isOpen} onOpenChange={closeDeleteConfirmDialog}>
+        <DialogContent className="p-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Delete Video</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Are you sure you want to delete "{deleteConfirmDialog.videoTitle}"? This will remove all embeddings from your knowledge base and cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={closeDeleteConfirmDialog}>
+                Cancel
+              </Button>
+              <Button onClick={confirmDeleteVideo} className="bg-red-600 hover:bg-red-700 text-white">
+                Delete
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
