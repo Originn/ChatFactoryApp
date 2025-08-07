@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from "@/components/ui/progress";
 import SimplifiedYouTubeConnect from '@/components/youtube/SimplifiedYouTubeConnect';
 import TranscriptDialog from '@/components/youtube/TranscriptDialog';
+import YouTubeVideoPlayer from '@/components/youtube/YouTubeVideoPlayer';
 import { CentralizedYouTubeService } from '@/services/centralizedYouTubeService';
 import { YouTubeVideo } from '@/types/youtube';
 import { Play, FileText, Youtube, Search, Subtitles, Languages } from 'lucide-react';
@@ -76,6 +77,17 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     videoId: '',
     videoTitle: '',
     language: ''
+  });
+
+  // Video player state
+  const [videoPlayer, setVideoPlayer] = useState<{
+    isOpen: boolean;
+    videoId: string;
+    videoTitle: string;
+  }>({
+    isOpen: false,
+    videoId: '',
+    videoTitle: ''
   });
 
   // Load processed videos on component mount
@@ -693,6 +705,22 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     });
   };
 
+  const handlePlayVideo = (video: YouTubeVideo) => {
+    setVideoPlayer({
+      isOpen: true,
+      videoId: video.id,
+      videoTitle: video.title
+    });
+  };
+
+  const closeVideoPlayer = () => {
+    setVideoPlayer({
+      isOpen: false,
+      videoId: '',
+      videoTitle: ''
+    });
+  };
+
   return (
     <Card className="mb-8 dark:bg-gray-800 dark:border-gray-700">
       <CardContent className="p-8">
@@ -1018,11 +1046,19 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                               </div>
                             </div>
                             {video.thumbnailUrl && (
-                              <img
-                                src={video.thumbnailUrl}
-                                alt={video.title}
-                                className="w-full h-20 object-cover rounded mt-3"
-                              />
+                              <div className="relative mt-3 group cursor-pointer" onClick={() => handlePlayVideo(video)}>
+                                <img
+                                  src={video.thumbnailUrl}
+                                  alt={video.title}
+                                  className="w-full h-20 object-cover rounded transition-transform group-hover:scale-[1.02]"
+                                />
+                                {/* Play button overlay */}
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                  <div className="bg-red-600 hover:bg-red-700 text-white rounded-full p-2 transform group-hover:scale-110 transition-transform">
+                                    <Play className="h-4 w-4 fill-current" />
+                                  </div>
+                                </div>
+                              </div>
                             )}
                           </div>
                           );
@@ -1134,6 +1170,14 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         videoTitle={transcriptDialog.videoTitle}
         language={transcriptDialog.language}
         userId={user?.uid || ''}
+      />
+
+      {/* YouTube Video Player */}
+      <YouTubeVideoPlayer
+        isOpen={videoPlayer.isOpen}
+        onClose={closeVideoPlayer}
+        videoId={videoPlayer.videoId}
+        videoTitle={videoPlayer.videoTitle}
       />
     </Card>
   );
