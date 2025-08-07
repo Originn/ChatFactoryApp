@@ -15,6 +15,7 @@ export interface YouTubeVideo {
   viewCount?: string;
   privacy: 'public' | 'unlisted' | 'private';
   transcripts?: YouTubeTranscript[];
+  language?: string; // Language detected by YouTube API
 }
 
 export interface YouTubeChannel {

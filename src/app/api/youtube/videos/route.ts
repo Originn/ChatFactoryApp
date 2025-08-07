@@ -172,7 +172,8 @@ export async function GET(req: NextRequest) {
       viewCount: video.statistics?.viewCount,
       privacy: video.status.privacyStatus === 'public' ? 'public' : 
                video.status.privacyStatus === 'unlisted' ? 'unlisted' : 'private',
-      transcripts: captionsByVideo.get(video.id) || []
+      transcripts: captionsByVideo.get(video.id) || [],
+      language: video.snippet.defaultAudioLanguage || video.snippet.defaultLanguage || 'none'
     }));
 
     // Filter by search query if provided (like the working version)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +63,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     errors?: any[];
   } | null>(null);
   const [processedVideoIds, setProcessedVideoIds] = useState<Set<string>>(new Set());
+  const [isLoadingProcessedVideos, setIsLoadingProcessedVideos] = useState(false);
   
   // Transcript dialog state
   const [transcriptDialog, setTranscriptDialog] = useState<{
@@ -76,6 +77,32 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     videoTitle: '',
     language: ''
   });
+
+  // Load processed videos on component mount
+  const loadProcessedVideos = async () => {
+    if (!user?.uid || !chatbotId) return;
+    
+    setIsLoadingProcessedVideos(true);
+    try {
+      const response = await fetch(`/api/youtube/processed-videos?chatbotId=${chatbotId}&userId=${user.uid}`);
+      const result = await response.json();
+      
+      if (result.success && result.processedVideos) {
+        const videoIds = new Set(result.processedVideos.map((v: any) => v.videoId));
+        setProcessedVideoIds(videoIds);
+        console.log(`✅ Loaded ${videoIds.size} processed videos from database`);
+      }
+    } catch (error) {
+      console.error('Failed to load processed videos:', error);
+    } finally {
+      setIsLoadingProcessedVideos(false);
+    }
+  };
+
+  // Load processed videos when component mounts or chatbotId/user changes
+  useEffect(() => {
+    loadProcessedVideos();
+  }, [chatbotId, user?.uid]);
   
   const youtubeService = CentralizedYouTubeService.getInstance();
 
@@ -608,11 +635,24 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
           setSelectedVideos(new Set());
           setProcessingJobId(null);
           
-          // Auto-clear processing status after 3 seconds for completed jobs
+          // Auto-clear processing status based on job outcome
           if (jobStatus.status === 'completed') {
+            if (jobStatus.errors && jobStatus.errors.length > 0) {
+              // Keep error status visible longer (10 seconds) so user can read errors
+              setTimeout(() => {
+                setProcessingStatus(null);
+              }, 10000);
+            } else {
+              // Clear successful completion after 3 seconds
+              setTimeout(() => {
+                setProcessingStatus(null);
+              }, 3000);
+            }
+          } else if (jobStatus.status === 'error') {
+            // Keep full error status visible for 15 seconds
             setTimeout(() => {
               setProcessingStatus(null);
-            }, 3000);
+            }, 15000);
           }
           
           if (onUploadComplete) {
@@ -943,16 +983,26 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 mb-1">
                                   {video.title}
                                 </h4>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                  {video.duration} • {video.viewCount ? `${parseInt(video.viewCount).toLocaleString()} views` : 'No views'}
-                                </p>
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {video.duration} • {video.viewCount ? `${parseInt(video.viewCount).toLocaleString()} views` : 'No views'}
+                                  </p>
+                                  {video.language && video.language !== 'none' && (
+                                    <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                                      {video.language.toUpperCase()}
+                                    </Badge>
+                                  )}
+                                </div>
                                 
                                 {/* Transcript Languages */}
                                 {video.transcripts && video.transcripts.length > 0 && (
                                   <div className="flex items-center space-x-1 mb-2">
                                     <Languages className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                                     <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                                      {video.transcripts.map(t => t.languageName).join(', ')}
+                                      {video.transcripts
+                                        .filter(t => t.languageName && t.languageName.trim()) // Filter out empty language names
+                                        .map(t => t.languageName)
+                                        .join(', ') || 'Transcript available'} {/* Fallback text */}
                                       {video.transcripts.some(t => t.isAutoGenerated) && (
                                         <span className="text-gray-500 dark:text-gray-400 ml-1">(Auto)</span>
                                       )}
@@ -997,9 +1047,42 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                             </p>
                           )}
                           {processingStatus.errors && processingStatus.errors.length > 0 && (
-                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                              {processingStatus.errors.length} error(s) occurred
-                            </p>
+                            <div className="mt-2 space-y-1">
+                              <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                                {processingStatus.errors.length} error(s) occurred:
+                              </p>
+                              <div className="max-h-24 overflow-y-auto space-y-1">
+                                {processingStatus.errors.map((error: any, index: number) => {
+                                  const videoTitle = youtubeVideos.find(v => v.id === error.videoId)?.title || error.videoId;
+                                  const errorType = error.type || 'unknown_error';
+                                  const userFriendlyMessage = 
+                                    errorType === 'jina_api_error' ? 'Embedding service temporarily unavailable' :
+                                    errorType === 'deepgram_api_error' ? 'Transcription service error' :
+                                    errorType === 'timeout_error' ? 'Processing timeout - video may be too long' :
+                                    errorType === 'network_error' ? 'Network connectivity issue' :
+                                    'Processing failed';
+                                  
+                                  return (
+                                    <div key={index} className="text-xs bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                                      <p className="font-medium text-red-700 dark:text-red-300 truncate">
+                                        {videoTitle}
+                                      </p>
+                                      <p className="text-red-600 dark:text-red-400 mt-1">
+                                        {userFriendlyMessage}
+                                      </p>
+                                      {error.timestamp && (
+                                        <p className="text-red-500 dark:text-red-500 text-xs mt-1">
+                                          {new Date(error.timestamp).toLocaleTimeString()}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-xs text-red-500 dark:text-red-500 italic mt-1">
+                                💡 Tip: Try processing failed videos again later if API services were temporarily unavailable
+                              </p>
+                            </div>
                           )}
                         </div>
                       )}

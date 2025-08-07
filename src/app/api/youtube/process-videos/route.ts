@@ -339,16 +339,51 @@ async function processYouTubeVideos(processingJob: any, accessToken: string, cha
         if (result.success) {
           totalVectorCount += result.vectorCount || 0;
           console.log(`✅ YouTube video processed: ${videoId} (${result.vectorCount} vectors)`);
+          
+          // Store successfully processed video in Firestore for persistence
+          try {
+            await adminDb.collection('processed_youtube_videos')
+              .doc(`${processingJob.chatbotId}_${videoId}`)
+              .set({
+                chatbotId: processingJob.chatbotId,
+                userId: processingJob.userId,
+                videoId: videoId,
+                processedAt: new Date().toISOString(),
+                vectorCount: result.vectorCount || 0,
+                status: 'completed'
+              });
+          } catch (dbError) {
+            console.warn(`⚠️ Failed to store processed video ${videoId} in Firestore:`, dbError);
+          }
         } else {
-          errors.push({ videoId, error: result.error });
-          console.error(`❌ Failed to process YouTube video ${videoId}: ${result.error}`);
+          // Enhanced error logging with more details
+          const errorDetails = {
+            videoId,
+            error: result.error,
+            timestamp: new Date().toISOString(),
+            type: result.error?.includes('Jina') ? 'jina_api_error' : 
+                  result.error?.includes('Deepgram') ? 'deepgram_api_error' : 
+                  result.error?.includes('timeout') ? 'timeout_error' : 'unknown_error'
+          };
+          errors.push(errorDetails);
+          console.error(`❌ Failed to process YouTube video ${videoId}:`, errorDetails);
         }
 
         processedCount++;
 
       } catch (error) {
-        errors.push({ videoId, error: error instanceof Error ? error.message : 'Unknown error' });
-        console.error(`❌ Error processing YouTube video ${videoId}:`, error);
+        // Enhanced error handling with more context
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorDetails = {
+          videoId,
+          error: errorMessage,
+          timestamp: new Date().toISOString(),
+          type: errorMessage.includes('timeout') ? 'timeout_error' : 
+                errorMessage.includes('network') ? 'network_error' : 'processing_error',
+          stack: error instanceof Error ? error.stack : undefined
+        };
+        errors.push(errorDetails);
+        console.error(`❌ Error processing YouTube video ${videoId}:`, errorDetails);
         processedCount++;
       }
     }
