@@ -37,7 +37,8 @@ async function getYouTubeVideoMetadata(videoId: string, accessToken: string) {
     duration: video.contentDetails.duration,
     publishedAt: video.snippet.publishedAt,
     viewCount: video.statistics.viewCount,
-    thumbnailUrl: video.snippet.thumbnails?.medium?.url
+    thumbnailUrl: video.snippet.thumbnails?.medium?.url,
+    language: video.snippet.defaultAudioLanguage || video.snippet.defaultLanguage || 'none'
   };
 }
 

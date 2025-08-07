@@ -359,21 +359,41 @@ export class VideoService {
 
   /**
    * Format YouTube transcript items into timestamped text format
+   * Sends timestamps and transcript together as one unit: "0:01 Hello hi my name"
    */
   static formatYouTubeTranscript(transcriptItems: any[]): string {
     if (!transcriptItems || transcriptItems.length === 0) {
+      console.log('📺 [YouTube] No transcript items to format');
       return '';
     }
 
-    // Convert YouTube transcript to timestamped format
-    return transcriptItems.map(item => {
+    console.log(`📺 [YouTube] Formatting ${transcriptItems.length} transcript items`);
+
+    // Convert YouTube transcript to simple timestamp + text format
+    const formattedLines = transcriptItems.map((item, index) => {
       const startTime = Math.floor(item.start);
       const minutes = Math.floor(startTime / 60);
       const seconds = startTime % 60;
-      const timestamp = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      const timestamp = `${minutes}:${seconds.toString().padStart(2, '0')}`;
       
-      return `[${timestamp} --> ${timestamp}] ${item.text}`;
-    }).join('\n');
+      const line = `${timestamp} ${item.text}`;
+      
+      // Log first few items for debugging
+      if (index < 3) {
+        console.log(`📺 [YouTube] Item ${index + 1}: "${line}"`);
+      }
+      
+      return line;
+    });
+
+    const finalTranscript = formattedLines.join('\n');
+    
+    console.log('📺 [YouTube] Final transcript format:');
+    console.log('📺 [YouTube] First 200 chars:', finalTranscript.substring(0, 200) + '...');
+    console.log('📺 [YouTube] Total length:', finalTranscript.length, 'characters');
+    console.log('📺 [YouTube] Total lines:', formattedLines.length);
+
+    return finalTranscript;
   }
 
   /**
@@ -420,10 +440,28 @@ export class VideoService {
           duration: request.videoMetadata.duration,
           publishedAt: request.videoMetadata.publishedAt,
           viewCount: request.videoMetadata.viewCount,
-          thumbnailUrl: request.videoMetadata.thumbnailUrl
-        }
+          thumbnailUrl: request.videoMetadata.thumbnailUrl,
+          language: request.videoMetadata.language
+        },
+        // Pass language for Deepgram
+        language: request.videoMetadata.language
       };
 
+      console.log('🚀 [YouTube] Sending request to transcription container:');
+      console.log('🚀 [YouTube] URL:', `${VIDEO_TRANSCRIBER_URL}/process-transcript`);
+      console.log('🚀 [YouTube] Request payload summary:');
+      console.log('  📝 transcript_text length:', requestData.transcript_text.length);
+      console.log('  📝 transcript_text first 300 chars:', requestData.transcript_text.substring(0, 300) + '...');
+      console.log('  🎬 video_name:', requestData.video_name);
+      console.log('  🆔 video_id:', requestData.video_id);
+      console.log('  🔗 video_url:', requestData.video_url);
+      console.log('  🤖 chatbot_id:', requestData.chatbot_id);
+      console.log('  👤 user_id:', requestData.user_id);
+      console.log('  ⚙️ enable_processing:', requestData.enable_processing);
+      console.log('  📊 embedding_model:', requestData.embedding_model);
+      console.log('  🎯 pinecone_index:', requestData.pinecone_index);
+      console.log('  📁 pinecone_namespace:', requestData.pinecone_namespace);
+      console.log('  📱 video_metadata:', JSON.stringify(requestData.video_metadata, null, 2));
       
       const response = await fetch(`${VIDEO_TRANSCRIBER_URL}/process-transcript`, {
         method: 'POST',
@@ -435,12 +473,29 @@ export class VideoService {
         signal: AbortSignal.timeout(300000) // 5 minutes
       });
 
+      console.log('📥 [YouTube] Response from transcription container:');
+      console.log('📥 [YouTube] Status:', response.status, response.statusText);
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ [YouTube] Error response:', errorText);
         throw new Error(`YouTube transcript processing failed: ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
+      
+      console.log('✅ [YouTube] Success response from container:');
+      console.log('  ✅ success:', result.success);
+      console.log('  📄 transcription length:', result.transcription?.length || 0);
+      console.log('  🧠 processed_transcript length:', result.processed_transcript?.length || 0);
+      console.log('  🎯 vector_count:', result.vector_count);
+      console.log('  📦 chunks_created:', result.chunks_created);
+      console.log('  ⚙️ processing_enabled:', result.processing_enabled);
+      console.log('  🔧 embedding_model:', result.embedding_model);
+      console.log('  💾 pinecone_enabled:', result.pinecone_enabled);
+      if (result.pinecone_error) {
+        console.error('⚠️ [YouTube] Pinecone error:', result.pinecone_error);
+      }
 
       // Create video metadata in database
       const videoMetadataResult = await DatabaseService.createVideoMetadata({
@@ -454,7 +509,7 @@ export class VideoService {
         publicUrl: `https://youtube.com/watch?v=${request.videoId}`,
         fileSize: 0, // YouTube videos don't have file size
         duration: this.parseYouTubeDuration(request.videoMetadata.duration),
-        language: 'auto', // YouTube API doesn't provide language info consistently
+        language: request.videoMetadata.language || 'auto', // Use detected language from YouTube API
         transcription: result.transcription,
         status: 'completed',
         vectorCount: result.vector_count || 0,
@@ -473,7 +528,7 @@ export class VideoService {
         vectorCount: result.vector_count || 0,
         videoUrl: `https://youtube.com/watch?v=${request.videoId}`,
         transcription: result.transcription,
-        language: 'auto'
+        language: request.videoMetadata.language || 'auto'
       };
 
     } catch (error) {

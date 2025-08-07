@@ -53,6 +53,16 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isProcessingVideos, setIsProcessingVideos] = useState(false);
+  const [processingJobId, setProcessingJobId] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<{
+    progress: number;
+    processedVideos: number;
+    totalVideos: number;
+    currentVideo?: string;
+    status: string;
+    errors?: any[];
+  } | null>(null);
+  const [processedVideoIds, setProcessedVideoIds] = useState<Set<string>>(new Set());
   
   // Transcript dialog state
   const [transcriptDialog, setTranscriptDialog] = useState<{
@@ -525,23 +535,97 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     if (!user?.uid || selectedVideos.size === 0) return;
 
     setIsProcessingVideos(true);
+    setProcessingStatus({
+      progress: 0,
+      processedVideos: 0,
+      totalVideos: selectedVideos.size,
+      status: 'starting'
+    });
+    
     try {
-      await youtubeService.processVideos(
-        Array.from(selectedVideos), 
-        false, // isPublic
-        chatbotId
-      );
+      // Call the API to start processing
+      const response = await fetch('/api/youtube/process-videos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoIds: Array.from(selectedVideos),
+          isPublic: false,
+          chatbotId,
+          userId: user.uid
+        }),
+      });
+
+      const result = await response.json();
       
-      // Clear selection and refresh
-      setSelectedVideos(new Set());
-      if (onUploadComplete) {
-        onUploadComplete();
+      if (result.success) {
+        setProcessingJobId(result.jobId);
+        // Start polling for status updates
+        pollProcessingStatus(result.jobId);
+      } else {
+        throw new Error(result.error || 'Failed to start processing');
       }
     } catch (error) {
       console.error('Error processing YouTube videos:', error);
-    } finally {
       setIsProcessingVideos(false);
+      setProcessingStatus(null);
     }
+  };
+
+  const pollProcessingStatus = async (jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/youtube/process-videos?jobId=${jobId}`);
+        const jobStatus = await response.json();
+        
+        setProcessingStatus({
+          progress: jobStatus.progress || 0,
+          processedVideos: jobStatus.processedVideos || 0,
+          totalVideos: jobStatus.totalVideos || selectedVideos.size,
+          currentVideo: jobStatus.currentVideo,
+          status: jobStatus.status || 'processing',
+          errors: jobStatus.errors || []
+        });
+        
+        if (jobStatus.status === 'completed' || jobStatus.status === 'error') {
+          clearInterval(pollInterval);
+          setIsProcessingVideos(false);
+          
+          // Mark processed videos
+          if (jobStatus.status === 'completed') {
+            const processedIds = Array.from(selectedVideos).filter(
+              videoId => !jobStatus.errors?.some((err: any) => err.videoId === videoId)
+            );
+            setProcessedVideoIds(prev => {
+              const newSet = new Set(prev);
+              processedIds.forEach(id => newSet.add(id));
+              return newSet;
+            });
+          }
+          
+          // Clear selection and refresh
+          setSelectedVideos(new Set());
+          setProcessingJobId(null);
+          
+          // Auto-clear processing status after 3 seconds for completed jobs
+          if (jobStatus.status === 'completed') {
+            setTimeout(() => {
+              setProcessingStatus(null);
+            }, 3000);
+          }
+          
+          if (onUploadComplete) {
+            onUploadComplete();
+          }
+        }
+      } catch (error) {
+        console.error('Error polling processing status:', error);
+        clearInterval(pollInterval);
+        setIsProcessingVideos(false);
+        setProcessingStatus(null);
+      }
+    }, 2000); // Poll every 2 seconds
   };
 
   const filteredVideos = youtubeVideos.filter(video =>
@@ -786,21 +870,52 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   {!isLoadingVideos && filteredVideos.length > 0 && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredVideos.map((video) => (
+                        {filteredVideos.map((video) => {
+                          const isProcessed = processedVideoIds.has(video.id);
+                          const isCurrentlyProcessing = processingStatus?.currentVideo === video.id;
+                          
+                          return (
                           <div
                             key={video.id}
-                            className={`border-2 rounded-lg p-4 transition-all duration-200 ${
-                              selectedVideos.has(video.id)
+                            className={`border-2 rounded-lg p-4 transition-all duration-200 relative ${
+                              isProcessed
+                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20 dark:border-green-400'
+                                : isCurrentlyProcessing
+                                ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-400'
+                                : selectedVideos.has(video.id)
                                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400'
                                 : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                             }`}
                           >
+                            {/* Processing indicator overlay */}
+                            {isCurrentlyProcessing && (
+                              <div className="absolute top-2 right-2 flex items-center space-x-1">
+                                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-orange-500"></div>
+                                <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">Processing...</span>
+                              </div>
+                            )}
+                            
+                            {/* Completed indicator */}
+                            {isProcessed && (
+                              <div className="absolute top-2 right-2 flex items-center space-x-1">
+                                <div className="h-4 w-4 bg-green-500 rounded-full flex items-center justify-center">
+                                  <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                                <span className="text-xs text-green-600 dark:text-green-400 font-medium">Processed</span>
+                              </div>
+                            )}
+                            
                             <div className="flex items-start space-x-3">
                               <input
                                 type="checkbox"
                                 checked={selectedVideos.has(video.id)}
                                 onChange={() => handleVideoSelection(video.id)}
-                                className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                disabled={isProcessed || isCurrentlyProcessing || isProcessingVideos}
+                                className={`mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer ${
+                                  isProcessed || isCurrentlyProcessing || isProcessingVideos ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                               />
                               <div 
                                 className="flex-1 min-w-0 cursor-pointer"
@@ -860,9 +975,35 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                               />
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
+                      {/* Processing Status */}
+                      {processingStatus && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                              Processing YouTube Videos
+                            </span>
+                            <span className="text-sm text-blue-700 dark:text-blue-300">
+                              {processingStatus.processedVideos} / {processingStatus.totalVideos}
+                            </span>
+                          </div>
+                          <Progress value={processingStatus.progress} className="h-2 mb-2" />
+                          {processingStatus.currentVideo && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400">
+                              Currently processing: {youtubeVideos.find(v => v.id === processingStatus.currentVideo)?.title || processingStatus.currentVideo}
+                            </p>
+                          )}
+                          {processingStatus.errors && processingStatus.errors.length > 0 && (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                              {processingStatus.errors.length} error(s) occurred
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
                       {/* Process Selected Videos Button */}
                       {selectedVideos.size > 0 && (
                         <div className="flex justify-center pt-4">
