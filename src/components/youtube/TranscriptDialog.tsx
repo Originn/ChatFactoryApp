@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Copy, Download, X } from 'lucide-react';
+import { Loader2, Copy, Download, X, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface TranscriptItem {
@@ -31,6 +31,7 @@ export default function TranscriptDialog({
   const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -66,9 +67,23 @@ export default function TranscriptDialog({
     }
   }, [isOpen, videoId]);
 
-  const copyTranscript = () => {
-    const text = transcript.map(item => item.text).join(' ');
-    navigator.clipboard.writeText(text);
+  const copyTranscript = async () => {
+    try {
+      const text = transcript.map(item => 
+        `[${formatTime(item.start)}] ${item.text}`
+      ).join('\n');
+      
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      
+      // Reset copy success indicator after 2 seconds
+      setTimeout(() => {
+        setCopySuccess(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy transcript:', err);
+      // You could add error handling here if needed
+    }
   };
 
   const downloadTranscript = () => {
@@ -156,8 +171,17 @@ export default function TranscriptDialog({
             <>
               <div className="flex justify-end space-x-2 mb-4">
                 <Button onClick={copyTranscript} variant="outline" size="sm">
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy
+                  {copySuccess ? (
+                    <>
+                      <Check className="h-4 w-4 mr-1 text-green-600" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </>
+                  )}
                 </Button>
                 <Button onClick={downloadTranscript} variant="outline" size="sm">
                   <Download className="h-4 w-4 mr-1" />

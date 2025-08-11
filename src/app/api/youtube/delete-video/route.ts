@@ -110,28 +110,29 @@ export async function DELETE(req: NextRequest) {
       });
       
       if (!queryResponse.matches || queryResponse.matches.length === 0) {
-        throw new Error(`No vectors found for video: ${videoName}`);
-      }
-
-      const foundVectorCount = queryResponse.matches.length;
-      const vectorIdsToDelete = queryResponse.matches.map(match => match.id);
-      
-      // Validate we found the expected number of vectors
-      if (expectedVectorCount > 0 && foundVectorCount !== expectedVectorCount) {
-        console.warn(`⚠️ Vector count mismatch: expected ${expectedVectorCount}, found ${foundVectorCount}`);
+        console.warn(`⚠️ No vectors found for video: ${videoName} (may have been already deleted)`);
+        console.log(`✅ Skipping Pinecone deletion - no vectors to delete`);
+      } else {
+        const foundVectorCount = queryResponse.matches.length;
+        const vectorIdsToDelete = queryResponse.matches.map(match => match.id);
         
-        // If we found significantly fewer vectors than expected, something might be wrong
-        if (foundVectorCount < expectedVectorCount * 0.8) { // Less than 80% of expected
-          throw new Error(`Found only ${foundVectorCount} vectors but expected ${expectedVectorCount}. Aborting to prevent partial deletion.`);
+        // Validate we found the expected number of vectors
+        if (expectedVectorCount > 0 && foundVectorCount !== expectedVectorCount) {
+          console.warn(`⚠️ Vector count mismatch: expected ${expectedVectorCount}, found ${foundVectorCount}`);
+          
+          // If we found significantly fewer vectors than expected, something might be wrong
+          if (foundVectorCount < expectedVectorCount * 0.8) { // Less than 80% of expected
+            throw new Error(`Found only ${foundVectorCount} vectors but expected ${expectedVectorCount}. Aborting to prevent partial deletion.`);
+          }
         }
-      }
-      
-      console.log(`📊 Found ${foundVectorCount} vectors to delete (expected: ${expectedVectorCount})`);
+        
+        console.log(`📊 Found ${foundVectorCount} vectors to delete (expected: ${expectedVectorCount})`);
 
-      // Step 2: Delete vectors by IDs
-      await index.namespace(namespace || '').deleteMany(vectorIdsToDelete);
-      
-      console.log(`✅ Successfully deleted ${foundVectorCount} vectors from Pinecone`);
+        // Step 2: Delete vectors by IDs
+        await index.namespace(namespace || '').deleteMany(vectorIdsToDelete);
+        
+        console.log(`✅ Successfully deleted ${foundVectorCount} vectors from Pinecone`);
+      }
 
     } catch (error) {
       console.error('❌ Pinecone deletion failed:', error);
@@ -144,7 +145,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Clean up database records (only reached if Pinecone deletion succeeded)
+    // Clean up database records (reached if Pinecone deletion succeeded or no vectors were found)
     const cleanupResults = {
       processedVideoRemoved: false,
       userVideoRemoved: false,
