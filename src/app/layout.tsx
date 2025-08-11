@@ -7,8 +7,21 @@ import { ThemeProvider } from '@/contexts/ThemeContext'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'WizeChat - Turn Documentation Into AI Support',
-  description: 'Transform your product documentation into an intelligent AI chatbot that answers user questions instantly.',
+  title: 'WizeChat - AI Documentation Assistant Coming Soon',
+  description: 'Revolutionary AI-powered documentation assistant. Transform your static docs into intelligent, conversational experiences. Join our waitlist for early access.',
+  keywords: 'AI documentation, chatbot, documentation assistant, artificial intelligence, coming soon',
+  openGraph: {
+    title: 'WizeChat - AI Documentation Assistant Coming Soon',
+    description: 'Revolutionary AI-powered documentation assistant. Join our waitlist for early access.',
+    url: 'https://wizechat.ai',
+    siteName: 'WizeChat',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'WizeChat - AI Documentation Assistant Coming Soon',
+    description: 'Revolutionary AI-powered documentation assistant. Join our waitlist for early access.',
+  },
   icons: {
     icon: [
       { url: '/logo.svg', type: 'image/svg+xml' },
