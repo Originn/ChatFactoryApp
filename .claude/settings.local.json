@@ -9,7 +9,8 @@
       "WebFetch(domain:jina.ai)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:ai.google.dev)",
-      "WebFetch(domain:blog.roboflow.com)"
+      "WebFetch(domain:blog.roboflow.com)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }

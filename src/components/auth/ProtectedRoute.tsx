@@ -19,6 +19,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     // Don't redirect if we're still loading authentication state
     if (loading) return;
     
+    // Skip all authentication checks if in coming soon mode
+    const isComingSoon = process.env.NEXT_PUBLIC_COMING_SOON === 'true';
+    if (isComingSoon) {
+      console.log('🚧 ProtectedRoute: Coming soon mode active, skipping auth checks');
+      return;
+    }
+    
     // Don't redirect if we're already on a public page
     if (pathname === '/login' || pathname === '/signup' || pathname.startsWith('/auth/') || pathname === '/email-verification') {
       return;
@@ -61,8 +68,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
      (localStorage.getItem('devEmailVerified') === 'true' || 
       (user && localStorage.getItem(`user_${user.uid}_verified`) === 'true')));
 
-  // Require email verification
-  if (user && !user.emailVerified && !devEmailVerified && pathname !== '/email-verification') {
+  // Skip email verification check if in coming soon mode
+  const isComingSoon = process.env.NEXT_PUBLIC_COMING_SOON === 'true';
+  
+  // Require email verification (but not in coming soon mode)
+  if (!isComingSoon && user && !user.emailVerified && !devEmailVerified && pathname !== '/email-verification') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-md">
