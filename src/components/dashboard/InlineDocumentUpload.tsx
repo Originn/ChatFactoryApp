@@ -19,8 +19,8 @@ import { Input } from "@/components/ui/input";
 interface UploadedFile {
   file: File;
   id: string;
-  type: 'regular' | 'chm' | 'pdf' | 'video';
-  status: 'pending' | 'uploading' | 'converting' | 'converting_chm' | 'transcribing' | 'generating_embeddings' | 'completed' | 'completed_pdf_only' | 'error';
+  type: 'regular' | 'chm' | 'pdf' | 'video' | 'image';
+  status: 'pending' | 'uploading' | 'converting' | 'converting_chm' | 'transcribing' | 'extracting_text' | 'generating_embeddings' | 'completed' | 'completed_pdf_only' | 'error';
   progress?: number;
   jobId?: string;
   error?: string;
@@ -28,13 +28,18 @@ interface UploadedFile {
   vectorCount?: number;
   embeddingModel?: string;
   embeddingError?: string;
-  pipelineStage?: 'chm_conversion' | 'video_transcription' | 'embedding_generation' | 'completed';
+  pipelineStage?: 'chm_conversion' | 'video_transcription' | 'ocr_extraction' | 'embedding_generation' | 'completed';
   pineconeIndex?: string;
   mode?: 'enhanced_complete' | 'pdf_only' | 'legacy';
   // Video specific
   duration?: number;
   language?: string;
   transcription?: string;
+  // Image specific
+  wordCount?: number;
+  charCount?: number;
+  ocrProvider?: string;
+  ocrModel?: string;
 }
 
 interface InlineDocumentUploadProps {
@@ -155,6 +160,17 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         default:
           return Math.min(elapsed * 2, 10);
       }
+    } else if (type === 'image') {
+      switch(status) {
+        case 'extracting_text': 
+          return Math.min(10 + (elapsed * 2), 85);
+        case 'generating_embeddings':
+          return Math.min(85 + (elapsed * 0.5), 95);
+        case 'completed':
+          return 100;
+        default:
+          return Math.min(elapsed * 3, 10);
+      }
     } else {
       // PDF and other files
       return Math.min(elapsed * 3, 95);
@@ -171,6 +187,8 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         return 'Converting CHM to PDF...';
       case 'transcribing':
         return 'Transcribing video content...';
+      case 'extracting_text':
+        return 'Extracting text with Gemini OCR...';
       case 'generating_embeddings':
         return `Generating embeddings${file.embeddingModel ? ` with ${file.embeddingModel}` : ''}...`;
       case 'completed':
@@ -178,6 +196,8 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
           return '✅ Conversion and ingestion completed successfully';
         } else if (file.type === 'video') {
           return `✅ Video transcribed and embedded! ${file.vectorCount || 0} vectors created${file.duration ? ` (${Math.round(file.duration)}s)` : ''}`;
+        } else if (file.type === 'image') {
+          return `✅ Image OCR completed! ${file.vectorCount || 2} vectors created - ${file.wordCount || 0} words extracted`;
         }
         return `✅ Completed! ${file.vectorCount || 0} vectors created${file.pineconeIndex ? ` in ${file.pineconeIndex}` : ''}`;
       case 'completed_pdf_only':
@@ -194,7 +214,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     if (!files) return;
 
     const newFiles: UploadedFile[] = Array.from(files).map(file => {
-      let fileType: 'regular' | 'chm' | 'pdf' | 'video' = 'regular';
+      let fileType: 'regular' | 'chm' | 'pdf' | 'video' | 'image' = 'regular';
       
       if (file.name.toLowerCase().endsWith('.chm')) {
         fileType = 'chm';
@@ -204,6 +224,9 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                  ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.wmv'].some(ext => 
                    file.name.toLowerCase().endsWith(ext))) {
         fileType = 'video';
+      } else if (file.type.startsWith('image/') && 
+                 ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'].includes(file.type)) {
+        fileType = 'image';
       }
 
       return {
@@ -228,7 +251,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     if (!files) return;
 
     const newFiles: UploadedFile[] = Array.from(files).map(file => {
-      let fileType: 'regular' | 'chm' | 'pdf' | 'video' = 'regular';
+      let fileType: 'regular' | 'chm' | 'pdf' | 'video' | 'image' = 'regular';
       
       if (file.name.toLowerCase().endsWith('.chm')) {
         fileType = 'chm';
@@ -238,6 +261,9 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                  ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.wmv'].some(ext => 
                    file.name.toLowerCase().endsWith(ext))) {
         fileType = 'video';
+      } else if (file.type.startsWith('image/') && 
+                 ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'].includes(file.type)) {
+        fileType = 'image';
       }
 
       return {
@@ -466,6 +492,74 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
     }
   };
 
+  const processImageFile = async (fileItem: UploadedFile, isPublic: boolean = false) => {
+    try {
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileItem.id ? { 
+          ...f, 
+          status: 'extracting_text', 
+          progress: 10,
+          pipelineStage: 'ocr_extraction',
+          isPublic 
+        } : f
+      ));
+
+      const formData = new FormData();
+      formData.append('file', fileItem.file);
+      formData.append('chatbotId', chatbotId);
+      formData.append('userId', user?.uid || '');
+      formData.append('isPublic', isPublic.toString());
+
+      const response = await fetch('/api/image-convert', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileItem.id ? { 
+            ...f, 
+            status: 'completed',
+            progress: 100,
+            vectorCount: result.vectorCount,
+            wordCount: result.wordCount,
+            charCount: result.charCount,
+            ocrProvider: result.ocrProvider,
+            ocrModel: result.ocrModel,
+            embeddingModel: result.embeddingModel,
+            pipelineStage: 'completed'
+          } : f
+        ));
+        
+        console.log(`✅ Image OCR processed: ${result.vectorCount} vectors created`);
+        console.log(`🔍 OCR extracted: ${result.wordCount} words`);
+        console.log(`🧠 Embedding: ${result.embeddingModel}`);
+        
+        if (onUploadComplete) {
+          onUploadComplete();
+        }
+      } else {
+        setUploadedFiles(prev => prev.map(f => 
+          f.id === fileItem.id ? { 
+            ...f, 
+            status: 'error',
+            error: result.error 
+          } : f
+        ));
+      }
+    } catch (error) {
+      setUploadedFiles(prev => prev.map(f => 
+        f.id === fileItem.id ? { 
+          ...f, 
+          status: 'error',
+          error: 'Image OCR processing failed' 
+        } : f
+      ));
+    }
+  };
+
   const uploadFiles = async () => {
     if (!user?.uid) return;
 
@@ -483,6 +577,8 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
             return processPDFFile(file, file.isPublic);
           } else if (file.type === 'video') {
             return processVideoFile(file, file.isPublic);
+          } else if (file.type === 'image') {
+            return processImageFile(file, file.isPublic);
           }
           return Promise.resolve();
         })
@@ -538,6 +634,15 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
         fetch('/api/pdf-convert', { method: 'GET' })
           .then(() => console.log('✅ PDF converter warmed'))
           .catch(() => console.log('⚠️ PDF converter warming failed'))
+      );
+    }
+    
+    if (fileTypes.has('image')) {
+      console.log('🔥 Warming image-ocr-converter container...');
+      warmingPromises.push(
+        fetch('/api/image-convert', { method: 'GET' })
+          .then(() => console.log('✅ Image OCR converter warmed'))
+          .catch(() => console.log('⚠️ Image OCR converter warming failed'))
       );
     }
     
@@ -835,9 +940,9 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Upload Documents & Videos</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Upload Documents, Videos & Images</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Upload your documentation files and videos to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600 dark:text-blue-400">CHM files</strong>, and <strong className="text-purple-600 dark:text-purple-400">Video files</strong>.
+                Upload your documentation files, videos, and images to train your chatbot. We support PDF, Markdown, HTML, Word Documents, Text files, <strong className="text-blue-600 dark:text-blue-400">CHM files</strong>, <strong className="text-purple-600 dark:text-purple-400">Video files</strong>, and <strong className="text-green-600 dark:text-green-400">Images with OCR</strong>.
               </p>
           
           <div className="border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg p-6 sm:p-12 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-600 hover:from-blue-100 hover:to-purple-100 dark:hover:from-gray-600 dark:hover:to-gray-500 transition-all duration-200">
@@ -874,7 +979,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
               </div>
               
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Supports: PDF, MD, HTML, DOCX, TXT, CHM files + Video files (MP4, AVI, MOV, MKV, WebM, WMV) up to 10MB each
+                Supports: PDF, MD, HTML, DOCX, TXT, CHM files + Video files (MP4, AVI, MOV, MKV, WebM, WMV) + Images (JPG, PNG, WebP, HEIC) up to 50MB each
               </p>
             </div>
           </div>
@@ -884,7 +989,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.chm,.md,.html,.docx,.txt,.mp4,.avi,.mov,.mkv,.webm,.wmv,video/*"
+          accept=".pdf,.chm,.md,.html,.docx,.txt,.mp4,.avi,.mov,.mkv,.webm,.wmv,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,image/*"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -899,8 +1004,13 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   <div className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-xs">
                     {file.file.name}
                   </div>
-                  <Badge variant={file.type === 'chm' ? 'default' : file.type === 'video' ? 'secondary' : 'secondary'}>
-                    {file.type.toUpperCase()}
+                  <Badge variant={
+                    file.type === 'chm' ? 'default' : 
+                    file.type === 'video' ? 'secondary' : 
+                    file.type === 'image' ? 'default' :
+                    'secondary'
+                  }>
+                    {file.type === 'image' ? 'IMG' : file.type.toUpperCase()}
                   </Badge>
                   <button
                     onClick={() => toggleFilePrivacy(file.id)}

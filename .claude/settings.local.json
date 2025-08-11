@@ -7,7 +7,9 @@
       "WebFetch(domain:developers.google.com)",
       "Bash(git commit:*)",
       "WebFetch(domain:jina.ai)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:blog.roboflow.com)"
     ],
     "deny": []
   }

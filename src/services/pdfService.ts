@@ -61,9 +61,8 @@ export class PDFService {
       formData.append('chatbot_id', request.chatbotId);
       formData.append('pinecone_index', request.pineconeIndex);
       
-      if (request.pineconeNamespace) {
-        formData.append('pinecone_namespace', request.pineconeNamespace);
-      }
+      // Always send namespace parameter, even if empty (prevents default namespace usage)
+      formData.append('pinecone_namespace', request.pineconeNamespace || '');
       
       // Add embedding configuration
       formData.append('embedding_provider', request.embeddingProvider);
