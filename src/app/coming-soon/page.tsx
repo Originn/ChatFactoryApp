@@ -98,7 +98,7 @@ export default function ComingSoonPage() {
           
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-8">
             <Sparkles className="h-5 w-5 text-purple-500" />
-            <span className="font-medium">Launching Q1 2025</span>
+            <span className="font-medium">Launching Q1 2026</span>
           </div>
         </div>
 
@@ -197,7 +197,7 @@ export default function ComingSoonPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse-soft"></div>
-              <span>Coming Q1 2025</span>
+              <span>Coming Q1 2026</span>
             </div>
           </div>
         </div>
