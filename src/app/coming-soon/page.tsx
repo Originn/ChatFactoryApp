@@ -4,13 +4,20 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { CheckCircle, Sparkles, Zap, Shield, BarChart3, Mail } from "lucide-react";
+import { CheckCircle, Sparkles, Zap, Shield, BarChart3, Mail, Moon, Sun } from "lucide-react";
+import { useTheme } from 'next-themes';
+import { useEffect } from 'react';
 
 export default function ComingSoonPage() {
   const [email, setEmail] = useState('');
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const { theme, setTheme, resolvedTheme } = useTheme();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +63,20 @@ export default function ComingSoonPage() {
           <img src="/logo.svg" alt="WizeChat" className="h-10 w-10" />
           <div className="font-bold text-xl text-gradient">WizeChat</div>
         </div>
-        <ThemeToggle />
+        {mounted && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            className="h-8 w-8"
+          >
+            {resolvedTheme === 'dark' ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
+        )}
       </header>
 
       {/* Main Content */}
