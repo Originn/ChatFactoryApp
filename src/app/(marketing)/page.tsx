@@ -3,8 +3,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import MarketingHeader from '@/components/shared/MarketingHeader';
+import { redirect } from 'next/navigation';
 
 export default function LandingPage() {
+  // Check if coming soon mode is enabled
+  if (process.env.NEXT_PUBLIC_COMING_SOON === 'true') {
+    redirect('/coming-soon');
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header/Navigation */}
