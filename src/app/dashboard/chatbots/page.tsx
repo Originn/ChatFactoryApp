@@ -281,7 +281,8 @@ export default function ChatbotsPage() {
       }
       
       // Delete entire chatbot folder from Firebase Storage (includes logos and any other files)
-      if (chatbotUserId) {
+      // Only delete storage if user chose to delete the vector store as well
+      if (deleteVectorstore && chatbotUserId) {
         try {
           console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
           await deleteChatbotFolder(chatbotUserId, id);
@@ -290,6 +291,8 @@ export default function ChatbotsPage() {
           console.error('❌ Error deleting chatbot folder:', storageError);
           // Continue with deletion even if storage deletion fails
         }
+      } else if (!deleteVectorstore && chatbotUserId) {
+        console.log('ℹ️ Preserving Firebase Storage data since vector store is being kept');
       } else {
         console.log('ℹ️ No user ID found, skipping storage deletion');
       }
