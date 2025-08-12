@@ -68,6 +68,8 @@ export default function ChatbotsPage() {
   const [hasVectorstore, setHasVectorstore] = useState(false);
   const [vectorStoreName, setVectorStoreName] = useState<string>('');
   const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
+  const [vectorCount, setVectorCount] = useState<number>(0);
+  const [isLoadingVectorCount, setIsLoadingVectorCount] = useState(false);
   
   // Function to fetch chatbots
   const fetchChatbots = useCallback(async () => {
@@ -134,14 +136,59 @@ export default function ChatbotsPage() {
   };
   
   // Show delete dialog
-  const showDeleteChatbotDialog = (chatbot: Chatbot) => {
+  const showDeleteChatbotDialog = async (chatbot: Chatbot) => {
     const vectorstoreInfo = checkVectorstoreExists(chatbot);
     
     setChatbotToDelete(chatbot);
     setHasVectorstore(vectorstoreInfo.hasVectorstore);
     setVectorStoreIndexName(vectorstoreInfo.indexName);
     setVectorStoreName(vectorstoreInfo.displayName);
+    setVectorCount(0);
+    setIsLoadingVectorCount(vectorstoreInfo.hasVectorstore);
     setShowDeleteDialog(true);
+
+    // Fetch real vector count if vectorstore exists
+    if (vectorstoreInfo.hasVectorstore && vectorstoreInfo.indexName && user) {
+      try {
+        console.log('📊 Fetching vector count for index:', vectorstoreInfo.indexName);
+        
+        const response = await fetch('/api/vectorstore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'stats',
+            indexName: vectorstoreInfo.indexName,
+            userId: user.uid
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.stats) {
+            // Extract vector count from stats - check multiple possible locations
+            let count = 0;
+            
+            if (result.stats.totalRecordCount) {
+              count = result.stats.totalRecordCount;
+            } else if (result.stats.namespaces) {
+              // Sum up records from all namespaces
+              count = Object.values(result.stats.namespaces).reduce((total, namespace: any) => {
+                return total + (namespace.recordCount || namespace.vectorCount || 0);
+              }, 0) as number;
+            }
+            
+            console.log('✅ Vector count fetched:', count);
+            setVectorCount(count);
+          }
+        } else {
+          console.warn('⚠️ Failed to fetch vector count');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching vector count:', error);
+      } finally {
+        setIsLoadingVectorCount(false);
+      }
+    }
   };
   
   // Delete chatbot function (called from dialog)
@@ -182,10 +229,11 @@ export default function ChatbotsPage() {
         console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
         
         try {
-          const response = await fetch('/api/vectorstore/index', {
-            method: 'DELETE',
+          const response = await fetch('/api/vectorstore', {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              action: 'delete',
               indexName: vectorStoreIndexName,
               userId: user?.uid
             }),
@@ -778,7 +826,8 @@ export default function ChatbotsPage() {
           chatbotName={chatbotToDelete.name}
           hasVectorstore={hasVectorstore}
           vectorStoreName={vectorStoreName}
-          documentsCount={chatbotToDelete.documents?.length || 0}
+          documentsCount={vectorCount}
+          isLoadingCount={isLoadingVectorCount}
           onConfirm={handleDeleteChatbot}
           onCancel={() => setShowDeleteDialog(false)}
           isDeleting={deletingId === chatbotToDelete.id}
