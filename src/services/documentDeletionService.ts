@@ -17,6 +17,7 @@ interface DeletionServiceResponse {
   document_id: string;
   total_items_deleted: number;
   timestamp: string;
+  error?: string; // Top-level error message for complete failures
   deletion_results: {
     pinecone: {
       success: boolean;
