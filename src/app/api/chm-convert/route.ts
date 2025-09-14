@@ -3,6 +3,7 @@ import { CHMService } from '@/services/chmService';
 import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import { DatabaseService } from '@/services/databaseService';
 import { adminDb } from '@/lib/firebase/admin';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +25,10 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Generate document ID for complete traceability (CRITICAL)
+    const document_id = uuidv4();
     console.log(`📄 Processing CHM file: ${file.name} for chatbot: ${chatbotId}`);
+    console.log(`🆔 Generated document_id: ${document_id}`);
 
     // Get chatbot configuration from database (same as PDF)
     const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
@@ -43,25 +47,63 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
+    // Extract user-specific storage configuration (NEW)
+    let userStorageConfig = {};
+    try {
+      // Get user document for storage configuration
+      const userDoc = await adminDb.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        
+        // Extract Neo4j configuration if available
+        if (userData?.neo4j) {
+          userStorageConfig = {
+            neo4jUri: userData.neo4j.uri,
+            neo4jUsername: userData.neo4j.username || 'neo4j',
+            neo4jPassword: userData.neo4j.password,
+          };
+          console.log(`🗄️ Found user-specific Neo4j configuration`);
+        }
+        
+        // Extract Firebase storage bucket if different from default
+        if (userData?.firebaseStorageBucket) {
+          userStorageConfig = {
+            ...userStorageConfig,
+            firebaseStorageBucket: userData.firebaseStorageBucket
+          };
+          console.log(`🗄️ Found user-specific Firebase bucket: ${userData.firebaseStorageBucket}`);
+        }
+      }
+    } catch (storageError) {
+      console.warn(`⚠️ Could not retrieve user storage config: ${storageError}`);
+    }
+
     // Get vectorstore configuration (same as PDF)
     const vectorstore = chatbotData?.vectorstore;
     if (!vectorstore || !vectorstore.indexName) {
       console.log(`⚠️ No vectorstore configured - using legacy CHM conversion (PDF only)`);
       
-      // Legacy mode: CHM → PDF only (no embeddings)
-      const result = await CHMService.processCHMDocument(
+      // Legacy mode: CHM → PDF only (no embeddings)  
+      const result = await CHMService.processCHMDocument({
         file,
         chatbotId,
         userId,
+        document_id, // 🔑 CRITICAL: Pass document_id for traceability
         firebaseProjectId,
-        isPublic
-      );
+        isPublic,
+        // Minimal configuration for legacy mode
+        embeddingProvider: 'openai',
+        embeddingModel: 'text-embedding-3-small',
+        pineconeIndex: '', // Empty for legacy mode
+        ...userStorageConfig
+      });
 
       if (result.success) {
         console.log(`✅ Legacy CHM processing completed: ${result.vectorCount || 0} vectors created`);
         
         return NextResponse.json({
           success: true,
+          document_id, // 🔑 CRITICAL: Return document_id for tracking
           message: result.message,
           vectorCount: result.vectorCount || 0,
           pdfUrl: result.pdfUrl,
@@ -129,21 +171,23 @@ export async function POST(request: NextRequest) {
     console.log(`🤖 Embedding: ${embeddingProvider}/${embeddingModel} (${dimensions}d)`);
     console.log(`🪣 Image storage bucket: ${imageStorageBucket}`);
 
-    // Process the CHM file with the enhanced converter
-    const result = await CHMService.processCHMDocument(
+    // Process the CHM file with the enhanced converter  
+    const result = await CHMService.processCHMDocument({
       file,
       chatbotId,
       userId,
+      document_id, // 🔑 CRITICAL: Pass document_id for traceability
       firebaseProjectId,
       isPublic,
       // Pass embedding configuration
-      embeddingProvider as any,
+      embeddingProvider: embeddingProvider as any,
       embeddingModel,
       dimensions,
-      vectorstore.indexName,
-      chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
-      imageStorageBucket
-    );
+      pineconeIndex: vectorstore.indexName,
+      pineconeNamespace: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
+      imageStorageBucket,
+      ...userStorageConfig
+    });
 
     // Handle different result statuses
     if (result.success) {
@@ -155,6 +199,7 @@ export async function POST(request: NextRequest) {
         const pdfMetadataResult = await DatabaseService.createPDFMetadata({
           userId,
           chatbotId,
+          document_id, // 🔑 CRITICAL: Store document_id for traceability and deletion
           originalFileName: file.name,
           pdfFileName: file.name.replace('.chm', '.pdf'),
           isPublic,
@@ -177,6 +222,7 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({
         success: true,
+        document_id, // 🔑 CRITICAL: Return document_id for tracking
         message: result.message,
         vectorCount: result.vectorCount,
         pdfUrl: result.pdfUrl,

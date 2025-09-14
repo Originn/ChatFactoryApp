@@ -21,6 +21,8 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingPdfId, setDeletingPdfId] = useState<string | null>(null);
+  const [selectedPdfs, setSelectedPdfs] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Load user's PDFs
   const loadPDFs = async () => {
@@ -104,7 +106,94 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
     }
   };
 
-  // Delete PDF completely
+  // Toggle selection of a PDF
+  const togglePDFSelection = (pdfId: string) => {
+    setSelectedPdfs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pdfId)) {
+        newSet.delete(pdfId);
+      } else {
+        newSet.add(pdfId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all PDFs
+  const toggleSelectAll = () => {
+    if (selectedPdfs.size === pdfs.length) {
+      setSelectedPdfs(new Set());
+    } else {
+      setSelectedPdfs(new Set(pdfs.map(pdf => pdf.id)));
+    }
+  };
+
+  // Delete selected PDFs in bulk
+  const deleteBulkPDFs = async () => {
+    if (!user?.uid || selectedPdfs.size === 0) return;
+
+    const selectedPdfNames = pdfs
+      .filter(pdf => selectedPdfs.has(pdf.id))
+      .map(pdf => pdf.pdfFileName);
+
+    // Confirmation dialog for bulk deletion
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete ${selectedPdfs.size} document(s)?\n\n` +
+      `Files to be deleted:\n${selectedPdfNames.map(name => `• ${name}`).join('\n')}\n\n` +
+      `This will permanently remove:\n` +
+      `• The PDF files from storage\n` +
+      `• All document metadata\n` +
+      `• Any search vectors\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      setBulkDeleting(true);
+      
+      // Delete PDFs in parallel for better performance
+      const deletePromises = Array.from(selectedPdfs).map(async (pdfId) => {
+        const response = await fetch('/api/user-pdfs', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pdfId: pdfId,
+            userId: user.uid
+          })
+        });
+        
+        const result = await response.json();
+        return { pdfId, success: result.success, error: result.error };
+      });
+
+      const results = await Promise.all(deletePromises);
+      
+      // Check for any failures
+      const failures = results.filter(r => !r.success);
+      if (failures.length > 0) {
+        setError(`Failed to delete ${failures.length} document(s). Please try again.`);
+      }
+
+      // Remove successfully deleted PDFs from local state
+      const successfulDeletes = results.filter(r => r.success).map(r => r.pdfId);
+      setPdfs(prev => prev.filter(p => !successfulDeletes.includes(p.id)));
+      
+      // Clear selection
+      setSelectedPdfs(new Set());
+      
+      // Refresh list to ensure consistency
+      await loadPDFs();
+      
+    } catch (err) {
+      setError('Error during bulk deletion');
+      console.error('Bulk PDF deletion error:', err);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  // Delete PDF completely (single deletion)
   const deletePDF = async (pdf: UserPDFMetadata) => {
     if (!user?.uid) return;
 
@@ -137,6 +226,13 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
       if (result.success) {
         // Remove from local state immediately for better UX
         setPdfs(prev => prev.filter(p => p.id !== pdf.id));
+        
+        // Remove from selection if selected
+        setSelectedPdfs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(pdf.id);
+          return newSet;
+        });
         
         // Refresh list to ensure consistency
         await loadPDFs();
@@ -210,78 +306,129 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
             <p className="text-sm mt-1">Upload CHM files to see them here.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {pdfs.map((pdf) => (
-              <div
-                key={pdf.id}
-                className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="font-medium text-gray-900">
-                        {pdf.pdfFileName}
-                      </h3>
-                      {getStatusBadge(pdf.status)}
-                      <Tooltip
-                        content={pdf.isPublic 
-                          ? "Public: Long-term access URL (1 year expiration)"
-                          : "Private: Access URL expires after 7 days (regenerated each time you click View PDF)"
-                        }
-                      >
-                        <Badge variant={pdf.isPublic ? "default" : "secondary"}>
-                          {pdf.isPublic ? '🔓 Public' : '🔒 Private'}
-                        </Badge>
-                      </Tooltip>
-                    </div>
-                    
-                    <div className="text-sm text-gray-500 space-y-1">
-                      <p>Original: {pdf.originalFileName}</p>
-                      <p>Size: {formatFileSize(pdf.fileSize)}</p>
-                      <p>Uploaded: {format(new Date(pdf.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}</p>
-                      {pdf.vectorCount && (
-                        <p>Vectors: {pdf.vectorCount.toLocaleString()}</p>
-                      )}
-                      {pdf.error && (
-                        <p className="text-red-600">Error: {pdf.error}</p>
-                      )}
-                    </div>
-                  </div>
+          <>
+            {/* Bulk actions header */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+              <div className="flex items-center space-x-3">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedPdfs.size === pdfs.length && pdfs.length > 0}
+                    onChange={toggleSelectAll}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium">
+                    Select All ({selectedPdfs.size} of {pdfs.length} selected)
+                  </span>
+                </label>
+              </div>
+              
+              {selectedPdfs.size > 0 && (
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteBulkPDFs}
+                    disabled={bulkDeleting}
+                  >
+                    {bulkDeleting ? 'Deleting...' : `Delete ${selectedPdfs.size} Selected`}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedPdfs(new Set())}
+                  >
+                    Clear Selection
+                  </Button>
+                </div>
+              )}
+            </div>
 
-                  <div className="flex items-center space-x-2">
-                    {/* Always show View PDF button if we have a storage path (PDF exists) */}
-                    {pdf.firebaseStoragePath && (
+            <div className="space-y-4">
+              {pdfs.map((pdf) => (
+                <div
+                  key={pdf.id}
+                  className={`border rounded-lg p-4 transition-colors ${
+                    selectedPdfs.has(pdf.id) ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3 flex-1">
+                      {/* Selection checkbox */}
+                      <input
+                        type="checkbox"
+                        checked={selectedPdfs.has(pdf.id)}
+                        onChange={() => togglePDFSelection(pdf.id)}
+                        className="mt-1 rounded border-gray-300"
+                      />
+                      
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <h3 className="font-medium text-gray-900">
+                            {pdf.pdfFileName}
+                          </h3>
+                          {getStatusBadge(pdf.status)}
+                          <Tooltip
+                            content={pdf.isPublic 
+                              ? "Public: Long-term access URL (1 year expiration)"
+                              : "Private: Access URL expires after 7 days (regenerated each time you click View PDF)"
+                            }
+                          >
+                            <Badge variant={pdf.isPublic ? "default" : "secondary"}>
+                              {pdf.isPublic ? '🔓 Public' : '🔒 Private'}
+                            </Badge>
+                          </Tooltip>
+                        </div>
+                        
+                        <div className="text-sm text-gray-500 space-y-1">
+                          <p>Original: {pdf.originalFileName}</p>
+                          <p>Size: {formatFileSize(pdf.fileSize)}</p>
+                          <p>Uploaded: {format(new Date(pdf.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}</p>
+                          {pdf.vectorCount && (
+                            <p>Vectors: {pdf.vectorCount.toLocaleString()}</p>
+                          )}
+                          {pdf.error && (
+                            <p className="text-red-600">Error: {pdf.error}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      {/* Always show View PDF button if we have a storage path (PDF exists) */}
+                      {pdf.firebaseStoragePath && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => getPDFAccess(pdf)}
+                        >
+                          View PDF
+                        </Button>
+                      )}
+                      
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => getPDFAccess(pdf)}
+                        onClick={() => togglePDFPrivacy(pdf)}
+                        disabled={!pdf.firebaseStoragePath} // Only disable if no PDF exists
                       >
-                        View PDF
+                        Make {pdf.isPublic ? 'Private' : 'Public'}
                       </Button>
-                    )}
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => togglePDFPrivacy(pdf)}
-                      disabled={!pdf.firebaseStoragePath} // Only disable if no PDF exists
-                    >
-                      Make {pdf.isPublic ? 'Private' : 'Public'}
-                    </Button>
 
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deletePDF(pdf)}
-                      disabled={deletingPdfId === pdf.id}
-                    >
-                      {deletingPdfId === pdf.id ? 'Deleting...' : 'Delete'}
-                    </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => deletePDF(pdf)}
+                        disabled={deletingPdfId === pdf.id}
+                      >
+                        {deletingPdfId === pdf.id ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
         {pdfs.length > 0 && (

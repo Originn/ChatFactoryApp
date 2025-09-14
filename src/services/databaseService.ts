@@ -162,7 +162,7 @@ class DatabaseService {
 
       await pdfRef.set(cleanMetadata);
 
-      console.log(`✅ Created PDF metadata for ${pdfMetadata.pdfFileName}`);
+      console.log(`✅ Created PDF metadata for ${pdfMetadata.pdfFileName} (document_id: ${(pdfMetadata as any).document_id})`);
       return { success: true, pdfId: pdfRef.id };
     } catch (error) {
       console.error(`❌ Failed to create PDF metadata:`, error);
@@ -533,6 +533,217 @@ class DatabaseService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  // Document Deletion Support Methods for DocumentDeletionService Integration
+  
+  /**
+   * Get all document_ids for a specific chatbot
+   * Used by DocumentDeletionService to delete all documents when chatbot is deleted
+   */
+  static async getDocumentIdsByChatbot(
+    chatbotId: string,
+    userId: string
+  ): Promise<string[]> {
+    try {
+      const documentIds: string[] = [];
+
+      // Get PDF document IDs
+      const pdfQuery = adminDb.collection('user_pdfs')
+        .where('chatbotId', '==', chatbotId)
+        .where('userId', '==', userId);
+      
+      const pdfSnapshot = await pdfQuery.get();
+      pdfSnapshot.docs.forEach(doc => {
+        const pdfData = doc.data() as UserPDFMetadata;
+        if (pdfData.document_id) {
+          documentIds.push(pdfData.document_id);
+        }
+      });
+
+      // Get video document IDs (if they have document_id field)
+      const videoQuery = adminDb.collection('user_videos')
+        .where('chatbotId', '==', chatbotId)
+        .where('userId', '==', userId);
+      
+      const videoSnapshot = await videoQuery.get();
+      videoSnapshot.docs.forEach(doc => {
+        const videoData = doc.data() as UserVideoMetadata;
+        if ((videoData as any).document_id) {
+          documentIds.push((videoData as any).document_id);
+        }
+      });
+
+      console.log(`✅ Found ${documentIds.length} document IDs for chatbot ${chatbotId}`);
+      return documentIds;
+      
+    } catch (error) {
+      console.error(`❌ Failed to get document IDs for chatbot ${chatbotId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get document metadata by document_id (for deletion verification)
+   */
+  static async getDocumentByDocumentId(
+    documentId: string,
+    userId: string
+  ): Promise<{ 
+    success: boolean; 
+    document?: UserPDFMetadata | UserVideoMetadata; 
+    type?: 'pdf' | 'video';
+    error?: string;
+  }> {
+    try {
+      // Check PDFs first
+      const pdfQuery = adminDb.collection('user_pdfs')
+        .where('document_id', '==', documentId)
+        .where('userId', '==', userId)
+        .limit(1);
+      
+      const pdfSnapshot = await pdfQuery.get();
+      if (!pdfSnapshot.empty) {
+        const pdfData = pdfSnapshot.docs[0].data() as UserPDFMetadata;
+        return { 
+          success: true, 
+          document: pdfData, 
+          type: 'pdf' 
+        };
+      }
+
+      // Check videos if no PDF found
+      const videoQuery = adminDb.collection('user_videos')
+        .where('document_id', '==', documentId)
+        .where('userId', '==', userId)
+        .limit(1);
+      
+      const videoSnapshot = await videoQuery.get();
+      if (!videoSnapshot.empty) {
+        const videoData = videoSnapshot.docs[0].data() as UserVideoMetadata;
+        return { 
+          success: true, 
+          document: videoData, 
+          type: 'video' 
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Document not found'
+      };
+      
+    } catch (error) {
+      console.error(`❌ Failed to get document by document_id ${documentId}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Delete document metadata after successful deletion from external services
+   * Called by DocumentDeletionService after vectors/graph nodes are deleted
+   */
+  static async deleteDocumentMetadata(
+    documentId: string,
+    userId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Find and delete from PDFs
+      const pdfQuery = adminDb.collection('user_pdfs')
+        .where('document_id', '==', documentId)
+        .where('userId', '==', userId)
+        .limit(1);
+      
+      const pdfSnapshot = await pdfQuery.get();
+      if (!pdfSnapshot.empty) {
+        await pdfSnapshot.docs[0].ref.delete();
+        console.log(`✅ Deleted PDF metadata for document_id: ${documentId}`);
+        return { success: true };
+      }
+
+      // Find and delete from videos
+      const videoQuery = adminDb.collection('user_videos')
+        .where('document_id', '==', documentId)
+        .where('userId', '==', userId)
+        .limit(1);
+      
+      const videoSnapshot = await videoQuery.get();
+      if (!videoSnapshot.empty) {
+        await videoSnapshot.docs[0].ref.delete();
+        console.log(`✅ Deleted video metadata for document_id: ${documentId}`);
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        error: 'Document metadata not found'
+      };
+      
+    } catch (error) {
+      console.error(`❌ Failed to delete document metadata for ${documentId}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Get chatbot configuration for deletion service parameters
+   * Returns Pinecone index, namespace, and Firebase bucket info
+   */
+  static async getChatbotDeletionConfig(
+    chatbotId: string,
+    userId: string
+  ): Promise<{
+    success: boolean;
+    config?: {
+      pineconeIndex: string;
+      pineconeNamespace?: string;
+      firebaseBucket?: string;
+      firebaseProjectId?: string;
+    };
+    error?: string;
+  }> {
+    try {
+      const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+      
+      if (!chatbotDoc.exists) {
+        return {
+          success: false,
+          error: 'Chatbot not found'
+        };
+      }
+
+      const chatbotData = chatbotDoc.data();
+      
+      // Verify ownership
+      if (chatbotData?.userId !== userId) {
+        return {
+          success: false,
+          error: 'Access denied'
+        };
+      }
+
+      const config = {
+        pineconeIndex: chatbotData?.vectorstore?.indexName || `chatbot-${chatbotId}`,
+        pineconeNamespace: chatbotData?.vectorstore?.namespace || "",
+        firebaseBucket: chatbotData?.firebaseProjectId ? `${chatbotData.firebaseProjectId}.appspot.com` : undefined,
+        firebaseProjectId: chatbotData?.firebaseProjectId
+      };
+
+      return { success: true, config };
+      
+    } catch (error) {
+      console.error(`❌ Failed to get chatbot deletion config for ${chatbotId}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }

@@ -10,7 +10,15 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:ai.google.dev)",
       "WebFetch(domain:blog.roboflow.com)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "WebFetch(domain:cloud.google.com)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker build:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker run:*)",
+      "Read(//c/Users/ori.somekh/code_projects/pdf-parser-comprehensive/**)"
     ],
     "deny": []
   }

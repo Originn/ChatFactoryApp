@@ -4,6 +4,7 @@ export interface UserPDFMetadata {
   id: string;
   userId: string;
   chatbotId: string;
+  document_id: string; // 🔑 CRITICAL: Unique identifier for traceability and deletion
   originalFileName: string; // Original CHM filename
   pdfFileName: string; // Converted PDF filename
   isPublic: boolean;

@@ -10,6 +10,7 @@ interface CHMProcessingRequest {
   file: File;
   chatbotId: string;
   userId: string;
+  document_id: string; // 🔑 CRITICAL: Unique identifier for traceability and deletion (NEW)
   firebaseProjectId: string;
   isPublic?: boolean;
   // Embedding configuration (same as PDF)
@@ -21,6 +22,11 @@ interface CHMProcessingRequest {
   pineconeNamespace?: string;
   // Image storage configuration
   imageStorageBucket?: string;
+  // User-specific storage configuration (NEW)
+  neo4jUri?: string;
+  neo4jUsername?: string;
+  neo4jPassword?: string;
+  firebaseStorageBucket?: string;
 }
 
 interface CHMConversionResult {
@@ -74,10 +80,14 @@ export class CHMService {
     try {
       const formData = new FormData();
       formData.append('file', request.file);
-      formData.append('chatbot_id', request.chatbotId);
-      formData.append('user_id', request.userId);
-      formData.append('pinecone_index', request.pineconeIndex);
       
+      // Document traceability and user context (CRITICAL)
+      formData.append('document_id', request.document_id); // 🔑 CRITICAL: Pass document_id for traceability
+      formData.append('user_id', request.userId);
+      formData.append('chatbot_id', request.chatbotId);
+      
+      // Pinecone configuration
+      formData.append('pinecone_index', request.pineconeIndex);
       if (request.pineconeNamespace) {
         formData.append('pinecone_namespace', request.pineconeNamespace);
       }
@@ -95,15 +105,32 @@ export class CHMService {
         formData.append('image_storage_bucket', request.imageStorageBucket);
       }
 
+      // User-specific storage configuration (NEW)
+      if (request.neo4jUri) {
+        formData.append('neo4j_uri', request.neo4jUri);
+        formData.append('neo4j_username', request.neo4jUsername || 'neo4j');
+        if (request.neo4jPassword) {
+          formData.append('neo4j_password', request.neo4jPassword);
+        }
+      }
+
+      if (request.firebaseStorageBucket) {
+        formData.append('firebase_project_id', request.firebaseProjectId);
+        formData.append('firebase_bucket', request.firebaseStorageBucket);
+      }
+
       // 🔒 SECURITY: Pass privacy flag to cloud converter
       if (request.isPublic !== undefined) {
         formData.append('is_public', request.isPublic.toString());
       }
 
       console.log(`🔄 Processing CHM with enhanced converter: ${request.file.name}`);
+      console.log(`🆔 Document ID: ${request.document_id}`); // NEW: Document traceability
+      console.log(`👤 User context: ${request.userId} / ${request.chatbotId}`); // NEW: User context
       console.log(`📝 Embedding config: ${request.embeddingProvider}/${request.embeddingModel}`);
       console.log(`📊 Pinecone: ${request.pineconeIndex}${request.pineconeNamespace ? `/${request.pineconeNamespace}` : ''}`);
       console.log(`🔒 Privacy setting: ${request.isPublic ? 'Public' : 'Private'}`);
+      console.log(`🗄️ User-specific storage: Neo4j=${!!request.neo4jUri}, Firebase=${!!request.firebaseStorageBucket}`);
       const response = await fetch(`${CHM_CONVERTER_URL}/convert`, {
         method: 'POST',
         body: formData,
@@ -418,39 +445,18 @@ For now, the PDF is stored and can be accessed directly.`;
    * Complete CHM processing with enhanced embeddings: convert, store, and vectorize
    */
   static async processCHMDocument(
-    file: File,
-    chatbotId: string,
-    userId: string,
-    firebaseProjectId: string,
-    isPublic: boolean = false,
-    // NEW: Embedding configuration parameters (same as PDF service)
-    embeddingProvider: 'openai' | 'cohere' | 'voyage' | 'azure' | 'huggingface' | 'bedrock' | 'jina' = 'openai',
-    embeddingModel: string = 'text-embedding-3-small',
-    dimensions?: number,
-    pineconeIndex?: string,
-    pineconeNamespace?: string,
-    imageStorageBucket?: string
+    request: CHMProcessingRequest
   ): Promise<CHMProcessingResult> {
     try {
-      console.log(`🔄 Starting enhanced CHM processing for: ${file.name}`);
+      console.log(`🔄 Starting enhanced CHM processing for: ${request.file.name}`);
+      console.log(`🆔 Document ID: ${request.document_id}`);
+      console.log(`👤 User context: ${request.userId} / ${request.chatbotId}`);
 
       // If embeddings are configured, use the enhanced converter
-      if (pineconeIndex) {
+      if (request.pineconeIndex) {
         console.log(`🚀 Using enhanced CHM converter with embeddings`);
         
-        const enhancedResult = await this.processCHMWithEmbeddings({
-          file,
-          chatbotId,
-          userId,
-          firebaseProjectId,
-          isPublic,
-          embeddingProvider,
-          embeddingModel,
-          dimensions,
-          pineconeIndex,
-          pineconeNamespace,
-          imageStorageBucket
-        });
+        const enhancedResult = await this.processCHMWithEmbeddings(request);
 
         if (!enhancedResult.success) {
           return {
@@ -509,7 +515,7 @@ For now, the PDF is stored and can be accessed directly.`;
         // Fallback to old converter workflow (CHM → PDF only, manual vectorization)
         console.log(`⚠️ Using legacy CHM converter (no embeddings configured)`);
         
-        const conversionResult = await this.convertCHMToPDF(file, chatbotId, userId);
+        const conversionResult = await this.convertCHMToPDF(request.file, request.chatbotId, request.userId);
         
         if (!conversionResult.success) {
           return {
@@ -542,11 +548,11 @@ For now, the PDF is stored and can be accessed directly.`;
 
         const storageResult = await this.storePDFInFirebase(
           pdfBuffer,
-          chatbotId,
-          userId,
-          file.name.replace('.chm', ''),
-          firebaseProjectId,
-          isPublic
+          request.chatbotId,
+          request.userId,
+          request.file.name.replace('.chm', ''),
+          request.firebaseProjectId,
+          request.isPublic || false
         );
 
         if (!storageResult.success) {
@@ -557,13 +563,14 @@ For now, the PDF is stored and can be accessed directly.`;
         }
 
         const pdfMetadataResult = await DatabaseService.createPDFMetadata({
-          userId,
-          chatbotId,
-          originalFileName: file.name,
-          pdfFileName: file.name.replace('.chm', '.pdf'),
-          isPublic,
+          userId: request.userId,
+          chatbotId: request.chatbotId,
+          document_id: request.document_id, // 🔑 CRITICAL: Add document_id for traceability 
+          originalFileName: request.file.name,
+          pdfFileName: request.file.name.replace('.chm', '.pdf'),
+          isPublic: request.isPublic || false,
           firebaseStoragePath: storageResult.storagePath,
-          firebaseProjectId,
+          firebaseProjectId: request.firebaseProjectId,
           ...(storageResult.publicUrl && { publicUrl: storageResult.publicUrl }),
           fileSize: pdfBuffer.length,
           status: 'converting'
@@ -586,12 +593,12 @@ For now, the PDF is stored and can be accessed directly.`;
         }
 
         const vectorResult = await PineconeService.uploadDocument(
-          chatbotId,
-          userId,
-          file.name.replace('.chm', '.pdf'),
+          request.chatbotId,
+          request.userId,
+          request.file.name.replace('.chm', '.pdf'),
           'pdf',
           textContent,
-          `CHM converted: ${file.name}`
+          `CHM converted: ${request.file.name}`
         );
 
         if (!vectorResult.success) {
@@ -604,7 +611,7 @@ For now, the PDF is stored and can be accessed directly.`;
           };
         }
 
-        await DatabaseService.updateVectorstoreDocumentCount(chatbotId, 1);
+        await DatabaseService.updateVectorstoreDocumentCount(request.chatbotId, 1);
         
         if (pdfMetadataResult.pdfId) {
           await DatabaseService.updatePDFStatus(pdfMetadataResult.pdfId, 'completed', undefined, vectorResult.vectorCount);

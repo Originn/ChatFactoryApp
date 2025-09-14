@@ -131,7 +131,8 @@ export class VideoService {
       }
       
       // Create file path based on privacy setting
-      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      // ✅ FIXED: Unicode-safe filename sanitization (preserves Hebrew, Arabic, Chinese, etc.)
+      const sanitizedFileName = this.sanitizeUnicodeFilename(fileName);
       let filePath: string;
       
       if (isPublic) {

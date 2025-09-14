@@ -10,6 +10,7 @@ interface PDFProcessingRequest {
   file: File;
   chatbotId: string;
   userId: string;
+  document_id: string; // 🔑 CRITICAL: Unique identifier for traceability and deletion
   firebaseProjectId: string;
   isPublic?: boolean;
   // Embedding configuration
@@ -50,6 +51,53 @@ interface PDFProcessingResult {
 export class PDFService {
   
   /**
+   * Sanitize filename while preserving Unicode characters (Hebrew, Arabic, Chinese, etc.)
+   * Only removes truly dangerous filesystem characters, keeps all language characters
+   */
+  private static sanitizeUnicodeFilename(filename: string): string {
+    if (!filename) {
+      return filename;
+    }
+    
+    // Get just the filename part (no path)
+    const path = require('path');
+    filename = path.basename(filename);
+    
+    // Normalize Unicode to handle composed/decomposed characters properly
+    filename = filename.normalize('NFC');
+    
+    // Remove only filesystem-dangerous characters, keep all Unicode letters/numbers
+    // Dangerous: < > : " / \ | ? * and control characters
+    const dangerousChars = /[<>:"/\\|?*\x00-\x1f\x7f]/g;
+    filename = filename.replace(dangerousChars, '_');
+    
+    // Remove leading/trailing dots and spaces (Windows issues)
+    filename = filename.trim().replace(/^\.+|\.+$/g, '').replace(/^\s+|\s+$/g, '');
+    
+    // Ensure we don't have empty filename
+    if (!filename) {
+      filename = 'document';
+    }
+    
+    // Handle length limit (most filesystems support 255 bytes)
+    if (Buffer.byteLength(filename, 'utf8') > 200) {
+      // Truncate name part while preserving extension
+      const ext = path.extname(filename);
+      const name = path.basename(filename, ext);
+      const maxNameBytes = 200 - Buffer.byteLength(ext, 'utf8');
+      
+      // Safely truncate UTF-8 string
+      let truncatedName = name;
+      while (Buffer.byteLength(truncatedName, 'utf8') > maxNameBytes && truncatedName.length > 0) {
+        truncatedName = truncatedName.slice(0, -1);
+      }
+      filename = truncatedName + ext;
+    }
+    
+    return filename;
+  }
+  
+  /**
    * Process PDF file using the PDF converter service with embedding configuration
    */
   static async processPDFWithEmbeddings(
@@ -59,6 +107,7 @@ export class PDFService {
       const formData = new FormData();
       formData.append('file', request.file);
       formData.append('chatbot_id', request.chatbotId);
+      formData.append('document_id', request.document_id); // 🔑 CRITICAL: Pass document_id to PDF container
       formData.append('pinecone_index', request.pineconeIndex);
       
       // Always send namespace parameter, even if empty (prevents default namespace usage)
@@ -206,7 +255,8 @@ export class PDFService {
       }
       
       // Create file path based on privacy setting
-      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      // ✅ FIXED: Unicode-safe filename sanitization (preserves Hebrew, Arabic, Chinese, etc.)
+      const sanitizedFileName = this.sanitizeUnicodeFilename(fileName);
       let filePath: string;
       
       if (isPublic) {
@@ -404,6 +454,7 @@ export class PDFService {
       const pdfMetadataResult = await DatabaseService.createPDFMetadata({
         userId: request.userId,
         chatbotId: request.chatbotId,
+        document_id: request.document_id, // 🔑 CRITICAL: Store document_id for traceability
         originalFileName: request.file.name,
         pdfFileName: request.file.name,
         isPublic: request.isPublic || false,

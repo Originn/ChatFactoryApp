@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PDFService } from '@/services/pdfService';
 import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import { adminDb } from '@/lib/firebase/admin';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`📄 Processing PDF file: ${file.name} for chatbot: ${chatbotId}`);
+
+    // 🔑 CRITICAL: Generate document_id for traceability and deletion
+    const document_id = uuidv4();
+    console.log(`📋 Generated document_id: ${document_id}`);
 
     // Get chatbot configuration from database
     const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
@@ -101,6 +106,7 @@ export async function POST(request: NextRequest) {
       file,
       chatbotId,
       userId,
+      document_id, // 🔑 CRITICAL: Pass document_id for traceability
       firebaseProjectId,
       isPublic,
       embeddingProvider: embeddingProvider as any,
@@ -118,6 +124,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: result.message,
+        document_id, // 🔑 CRITICAL: Return document_id for frontend tracking
         vectorCount: result.vectorCount,
         pdfUrl: result.pdfUrl,
         fileName: file.name,

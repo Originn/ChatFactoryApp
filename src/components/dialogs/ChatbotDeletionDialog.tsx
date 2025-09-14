@@ -74,7 +74,10 @@ export function ChatbotDeletionDialog({
                       </span>
                     ) : (
                       <>Contains {documentsCount.toLocaleString()} processed chunks and embeddings.
-                      Deleting saves on Pinecone storage costs.</>
+                      <br />
+                      <strong>Complete cleanup:</strong> Pinecone vectors, Neo4j graph, Firebase files.
+                      <br />
+                      Deleting saves on storage costs and ensures no orphaned data.</>
                     )}
                   </p>
                   {!deleteVectorstore && (
