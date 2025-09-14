@@ -107,6 +107,7 @@ export class PDFService {
       const formData = new FormData();
       formData.append('file', request.file);
       formData.append('chatbot_id', request.chatbotId);
+      formData.append('user_id', request.userId); // 🔑 CRITICAL: Pass user_id to PDF container
       formData.append('document_id', request.document_id); // 🔑 CRITICAL: Pass document_id to PDF container
       formData.append('pinecone_index', request.pineconeIndex);
       
