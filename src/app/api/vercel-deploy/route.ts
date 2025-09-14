@@ -283,6 +283,11 @@ export async function POST(request: NextRequest) {
       CHATFACTORY_MAIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
       CHATFACTORY_MAIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
       
+      // Firebase credentials (for PDF/video/CHM services)
+      FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
+      FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+      FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
+      
       // AI Model defaults
       MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-5-chat-latest',
       IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-5-mini',
