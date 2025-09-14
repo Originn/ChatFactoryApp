@@ -115,7 +115,12 @@ export async function POST(request: NextRequest) {
       dimensions,
       pineconeIndex: vectorstore.indexName,
       pineconeNamespace: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
-      imageStorageBucket
+      imageStorageBucket,
+      // Neo4j configuration for GraphRAG processing
+      neo4jUri: chatbotData?.neo4j?.uri,
+      neo4jUsername: chatbotData?.neo4j?.username,
+      neo4jPassword: chatbotData?.neo4j?.password,
+      neo4jDatabase: chatbotData?.neo4j?.database
     });
 
     if (result.success) {

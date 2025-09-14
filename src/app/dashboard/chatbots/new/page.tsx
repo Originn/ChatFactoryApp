@@ -520,6 +520,13 @@ export default function NewChatbotPage() {
           queries: 0,
           successRate: 0,
           lastUpdated: serverTimestamp(),
+        },
+        // Neo4j configuration for GraphRAG processing
+        neo4j: {
+          uri: 'neo4j+s://caff65b9.databases.neo4j.io',
+          username: 'neo4j',
+          password: '5Q1vlOyp_pO2gpekLf-1YUFatyg8yniGevdF8uXvfLo',
+          database: 'neo4j'
         }
       };
 

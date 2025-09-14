@@ -25,6 +25,11 @@ interface PDFProcessingRequest {
   imageStorageBucket?: string;
   // PDF source URL for metadata
   pdfSourceUrl?: string;
+  // Neo4j configuration for GraphRAG processing
+  neo4jUri?: string;
+  neo4jUsername?: string;
+  neo4jPassword?: string;
+  neo4jDatabase?: string;
 }
 
 interface PDFConversionResult {
@@ -139,6 +144,18 @@ export class PDFService {
       // 🔒 SECURITY: Pass privacy flag to cloud converter
       if (request.isPublic !== undefined) {
         formData.append('is_public', request.isPublic.toString());
+      }
+
+      // Neo4j configuration for GraphRAG processing (optional)
+      if (request.neo4jUri) {
+        formData.append('neo4j_uri', request.neo4jUri);
+        formData.append('neo4j_username', request.neo4jUsername || 'neo4j');
+        if (request.neo4jPassword) {
+          formData.append('neo4j_password', request.neo4jPassword);
+        }
+        if (request.neo4jDatabase) {
+          formData.append('neo4j_database', request.neo4jDatabase);
+        }
       }
 
       console.log(`🔄 Processing PDF with converter: ${request.file.name}`);
