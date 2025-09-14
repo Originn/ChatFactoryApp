@@ -713,6 +713,53 @@ export class VideoService {
   }
 
   /**
+   * Sanitize filename while preserving Unicode characters (Hebrew, Arabic, Chinese, etc.)
+   * Only removes truly dangerous filesystem characters, keeps all language characters
+   */
+  private static sanitizeUnicodeFilename(filename: string): string {
+    if (!filename) {
+      return filename;
+    }
+    
+    // Get just the filename part (no path)
+    const path = require('path');
+    filename = path.basename(filename);
+    
+    // Normalize Unicode to handle composed/decomposed characters properly
+    filename = filename.normalize('NFC');
+    
+    // Remove only filesystem-dangerous characters, keep all Unicode letters/numbers
+    // Dangerous: < > : " / \ | ? * and control characters
+    const dangerousChars = /[<>:"/\\|?*\x00-\x1f\x7f]/g;
+    filename = filename.replace(dangerousChars, '_');
+    
+    // Remove leading/trailing dots and spaces (Windows issues)
+    filename = filename.trim().replace(/^\.+|\.+$/g, '').replace(/^\s+|\s+$/g, '');
+    
+    // Ensure we don't have empty filename
+    if (!filename) {
+      filename = 'video';
+    }
+    
+    // Handle length limit (most filesystems support 255 bytes)
+    if (Buffer.byteLength(filename, 'utf8') > 200) {
+      // Truncate name part while preserving extension
+      const ext = path.extname(filename);
+      const name = path.basename(filename, ext);
+      const maxNameBytes = 200 - Buffer.byteLength(ext, 'utf8');
+      
+      // Safely truncate UTF-8 string
+      let truncatedName = name;
+      while (Buffer.byteLength(truncatedName, 'utf8') > maxNameBytes && truncatedName.length > 0) {
+        truncatedName = truncatedName.slice(0, -1);
+      }
+      filename = truncatedName + ext;
+    }
+    
+    return filename;
+  }
+
+  /**
    * Get video content type based on file extension
    */
   private static _getVideoContentType(fileName: string): string {
