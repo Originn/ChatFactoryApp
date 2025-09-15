@@ -216,6 +216,7 @@ export class Neo4jAuraService {
 
       console.log(`🏗️ Creating AuraDB instance: ${instanceName}...`);
       console.log(`📍 Region: ${instanceRequest.region}, Memory: ${instanceRequest.memory}, Provider: ${instanceRequest.cloud_provider}`);
+      console.log('📋 Request payload:', JSON.stringify(instanceRequest, null, 2));
 
       const response = await fetch(`${this.AURA_API_BASE}${this.INSTANCES_ENDPOINT}`, {
         method: 'POST',
@@ -226,6 +227,8 @@ export class Neo4jAuraService {
         body: JSON.stringify(instanceRequest)
       });
 
+      console.log(`📡 Response status: ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`❌ Failed to create instance: ${response.status} - ${errorText}`);
@@ -235,7 +238,54 @@ export class Neo4jAuraService {
         };
       }
 
-      const instance: AuraInstance = await response.json();
+      const responseData = await response.json();
+      console.log('🔍 Raw Neo4j API response:', JSON.stringify(responseData, null, 2));
+
+      // Check if the response has the expected structure
+      if (!responseData || typeof responseData !== 'object') {
+        console.error('❌ Invalid API response format:', responseData);
+        return {
+          success: false,
+          error: 'Invalid API response format from Neo4j AuraDB'
+        };
+      }
+
+      // Neo4j API now wraps the instance data in a "data" object
+      const instance: AuraInstance = responseData.data || responseData;
+
+      // Validate required fields are present
+      if (!instance.id || !instance.connection_url || !instance.username || !instance.password || !instance.name) {
+        console.error('❌ API response missing required fields:', {
+          hasId: !!instance.id,
+          hasUri: !!instance.connection_url,
+          hasUsername: !!instance.username,
+          hasPassword: !!instance.password,
+          hasName: !!instance.name
+        });
+        console.error('❌ Full response object:', responseData);
+        console.error('❌ Available fields in response:', Object.keys(responseData));
+
+        // Check if this is an async operation response (some APIs return operation IDs)
+        if (responseData.operation_id || responseData.operationId || responseData.async) {
+          return {
+            success: false,
+            error: 'AuraDB instance creation appears to be asynchronous. The current implementation expects immediate instance details. You may need to poll for completion.'
+          };
+        }
+
+        // Check for free tier limitations
+        if (responseData.message && responseData.message.includes('free')) {
+          return {
+            success: false,
+            error: `Free tier limitation: ${responseData.message}`
+          };
+        }
+
+        return {
+          success: false,
+          error: 'Neo4j API response missing required instance fields. This may indicate an API change, free tier limitations, or configuration issue. Check logs for full response.'
+        };
+      }
 
       console.log(`✅ AuraDB instance created successfully: ${instance.id}`);
       console.log(`🔗 Connection URL: ${instance.connection_url}`);
@@ -281,7 +331,8 @@ export class Neo4jAuraService {
         throw new Error(`Failed to get instance status: ${response.status}`);
       }
 
-      const instance: AuraInstance = await response.json();
+      const responseData = await response.json();
+      const instance: AuraInstance = responseData.data || responseData;
       return instance;
 
     } catch (error) {
@@ -390,7 +441,8 @@ export class Neo4jAuraService {
         throw new Error(`Failed to list instances: ${response.status}`);
       }
 
-      const instances: AuraInstance[] = await response.json();
+      const responseData = await response.json();
+      const instances: AuraInstance[] = responseData.data || responseData;
       return instances;
 
     } catch (error) {
@@ -420,7 +472,8 @@ export class Neo4jAuraService {
         throw new Error(`API test failed: ${response.status}`);
       }
 
-      const projects: AuraProject[] = await response.json();
+      const responseData = await response.json();
+      const projects: AuraProject[] = responseData.data || responseData;
 
       console.log(`✅ Neo4j Aura API connection successful. Found ${projects.length} projects.`);
 

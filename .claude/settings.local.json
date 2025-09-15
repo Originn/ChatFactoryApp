@@ -18,7 +18,12 @@
       "Bash(docker build:*)",
       "Bash(docker rm:*)",
       "Bash(docker run:*)",
-      "Read(//c/Users/ori.somekh/code_projects/pdf-parser-comprehensive/**)"
+      "Read(//c/Users/ori.somekh/code_projects/pdf-parser-comprehensive/**)",
+      "WebFetch(domain:neo4j.com)",
+      "WebSearch",
+      "WebFetch(domain:support.neo4j.com)",
+      "WebFetch(domain:status.neo4j.io)",
+      "WebFetch(domain:neo4j-aura.canny.io)"
     ],
     "deny": []
   }

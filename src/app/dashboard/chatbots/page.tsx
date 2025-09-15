@@ -42,6 +42,7 @@ interface Chatbot {
   status: string;
   createdAt: any; // Using 'any' for Firestore Timestamp
   vercelProjectId?: string;
+  firebaseProjectId?: string;
   logoUrl?: string;
   stats?: {
     queries: number;
@@ -70,6 +71,8 @@ export default function ChatbotsPage() {
   const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
   const [vectorCount, setVectorCount] = useState<number>(0);
   const [isLoadingVectorCount, setIsLoadingVectorCount] = useState(false);
+  const [hasAuraDB, setHasAuraDB] = useState(false);
+  const [auraDBInstanceName, setAuraDBInstanceName] = useState<string>('');
   
   // Function to fetch chatbots
   const fetchChatbots = useCallback(async () => {
@@ -134,17 +137,37 @@ export default function ChatbotsPage() {
       displayName: ''
     };
   };
-  
+
+  // Check if AuraDB exists for this chatbot (synchronous check using existing data)
+  const checkAuraDBExists = (chatbot: Chatbot): { hasAuraDB: boolean; instanceName: string } => {
+    // For now, assume AuraDB exists if chatbot has firebaseProjectId
+    // In a real implementation, you might want to fetch the Firebase project data
+    if (chatbot.firebaseProjectId) {
+      return {
+        hasAuraDB: true,
+        instanceName: `chatbot-${chatbot.id}`
+      };
+    }
+
+    return {
+      hasAuraDB: false,
+      instanceName: ''
+    };
+  };
+
   // Show delete dialog
   const showDeleteChatbotDialog = async (chatbot: Chatbot) => {
     const vectorstoreInfo = checkVectorstoreExists(chatbot);
-    
+    const auraDBInfo = checkAuraDBExists(chatbot);
+
     setChatbotToDelete(chatbot);
     setHasVectorstore(vectorstoreInfo.hasVectorstore);
     setVectorStoreIndexName(vectorstoreInfo.indexName);
     setVectorStoreName(vectorstoreInfo.displayName);
     setVectorCount(0);
     setIsLoadingVectorCount(vectorstoreInfo.hasVectorstore);
+    setHasAuraDB(auraDBInfo.hasAuraDB);
+    setAuraDBInstanceName(auraDBInfo.instanceName);
     setShowDeleteDialog(true);
 
     // Fetch real vector count if vectorstore exists
@@ -192,7 +215,7 @@ export default function ChatbotsPage() {
   };
   
   // Delete chatbot function (called from dialog)
-  const handleDeleteChatbot = async (deleteVectorstore: boolean) => {
+  const handleDeleteChatbot = async (deleteVectorstore: boolean, deleteAuraDB: boolean) => {
     if (!chatbotToDelete) return;
     
     const id = chatbotToDelete.id;
@@ -828,7 +851,9 @@ export default function ChatbotsPage() {
         <ChatbotDeletionDialog
           chatbotName={chatbotToDelete.name}
           hasVectorstore={hasVectorstore}
+          hasAuraDB={hasAuraDB}
           vectorStoreName={vectorStoreName}
+          auraDBInstanceName={auraDBInstanceName}
           documentsCount={vectorCount}
           isLoadingCount={isLoadingVectorCount}
           onConfirm={handleDeleteChatbot}

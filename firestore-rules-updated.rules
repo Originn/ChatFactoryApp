@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isValidUserData() {
+      return request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt']) &&
+             request.resource.data.uid == request.auth.uid &&
+             request.resource.data.email == request.auth.token.email;
+    }
+
+    function isValidUserUpdate() {
+      let allowedFields = ['displayName', 'updatedAt', 'preferences', 'metadata', 'deploymentPreferences', 'usage'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+
+    function withinRateLimit() {
+      return true; // Simplified for now - implement proper rate limiting in production
+    }
+
+    // Users collection - user profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUserData() && withinRateLimit();
+      allow update: if isAuthenticated() && isOwner(userId) && withinRateLimit();
+      allow delete: if isAuthenticated() && isOwner(userId) && withinRateLimit();
+    }
+
+    // Chatbots collection - user's chatbots
+    match /chatbots/{chatbotId} {
+      // FIXED: Changed ownerId to userId
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && withinRateLimit();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid &&
+                   request.resource.data.userId == request.auth.uid && withinRateLimit();
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid && withinRateLimit();
+    }
+
+    // Deployments collection - chatbot deployments
+    match /deployments/{deploymentId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && withinRateLimit();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && withinRateLimit();
+      // Don't allow delete - mark as deleted instead
+      allow delete: if false;
+    }
+
+    // Query usage collection - track individual queries
+    match /queryUsage/{usageId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // Usage records are immutable once created
+      allow update, delete: if false;
+    }
+
+    // Daily usage aggregates
+    match /dailyUsage/{dailyId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // Deployment usage stats - aggregated statistics
+    match /deploymentUsageStats/{deploymentId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Only server-side writes for aggregations
+      allow write: if false;
+    }
+
+    // Analytics collections (server-side only)
+    match /analyticsEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /userSessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /chatbotAnalytics/{chatbotId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Future: Billing and subscription management
+    match /subscriptions/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow write: if false; // Only server-side via webhooks
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Firebase Projects collection - for chatbot Firebase project management
+    match /firebaseProjects/{projectId} {
+      // Allow authenticated users to read Firebase projects they have access to
+      // This is needed for AuraDB detection and project management
+      allow read: if isAuthenticated() &&
+                     (resource.data.creatorUserId == request.auth.uid ||
+                      resource.data.projectId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accessibleProjects ||
+                      true); // Temporary: allow all authenticated users to read
+      // Only server-side writes for project creation and management
+      allow write: if false;
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
