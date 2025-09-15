@@ -4,6 +4,12 @@ import { DatabaseService } from '@/services/databaseService';
 import { Neo4jAuraService } from '@/services/neo4jAuraService';
 import { adminDb } from '@/lib/firebase/admin';
 import * as admin from 'firebase-admin';
+import type {
+  ChatbotDeletionRequest,
+  ChatbotDeletionResponse,
+  ChatbotDeletionPreviewRequest,
+  ChatbotDeletionHealthCheckRequest
+} from '@/types/chatbot-deletion';
 
 /**
  * Enhanced Chatbot Deletion API
@@ -19,23 +25,26 @@ import * as admin from 'firebase-admin';
  * Called by ChatbotDeletionDialog when user confirms deletion.
  */
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: NextRequest): Promise<NextResponse<ChatbotDeletionResponse>> {
   try {
-    const body = await request.json();
-    const { chatbotId, userId, deleteVectorstore = false } = body;
+    const body: ChatbotDeletionRequest = await request.json();
+    const { chatbotId, userId, deleteVectorstore = false, deleteAuraDB = false } = body;
 
     if (!chatbotId || !userId) {
-      return NextResponse.json({ 
-        error: 'Missing required fields: chatbotId, userId' 
-      }, { status: 400 });
+      return NextResponse.json({
+        success: false,
+        message: 'Missing required fields: chatbotId, userId',
+        details: { chatbot_id: chatbotId || 'unknown' }
+      } as ChatbotDeletionResponse, { status: 400 });
     }
 
-    console.log(`🗑️ Chatbot deletion request: ${chatbotId} (deleteVectorstore: ${deleteVectorstore})`);
+    console.log(`🗑️ Chatbot deletion request: ${chatbotId} (deleteVectorstore: ${deleteVectorstore}, deleteAuraDB: ${deleteAuraDB})`);
 
     const results = {
       chatbot: false,
       documents: false,
       vectorstore: false,
+      auradb: false,
       errors: [] as string[],
       details: {
         documents_deleted: 0,
@@ -81,48 +90,67 @@ export async function DELETE(request: NextRequest) {
         results.vectorstore = true; // Consider it successful if not requested
       }
 
-      // Step 2: Clean up Neo4j AuraDB instance
-      console.log('🗄️ Cleaning up AuraDB instance...');
-      try {
-        // Get chatbot configuration to find Firebase project
-        const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
-        if (chatbotDoc.exists) {
-          const chatbotData = chatbotDoc.data();
-          const firebaseProjectId = chatbotData?.firebaseProjectId || chatbotData?.deployment?.firebaseProjectId;
+      // Step 2: Clean up Neo4j AuraDB instance (if requested)
+      if (deleteAuraDB) {
+        console.log('🗄️ Cleaning up AuraDB instance...');
+        try {
+          // Get chatbot configuration to find Firebase project
+          const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+          if (chatbotDoc.exists) {
+            const chatbotData = chatbotDoc.data();
+            const firebaseProjectId = chatbotData?.firebaseProjectId || chatbotData?.deployment?.firebaseProjectId;
 
-          if (firebaseProjectId) {
-            // Get Firebase project with Neo4j instance
-            const projectDoc = await adminDb.collection('firebaseProjects').doc(firebaseProjectId).get();
-            if (projectDoc.exists) {
-              const projectData = projectDoc.data();
-              if (projectData?.neo4jInstance?.instanceId) {
-                const instanceId = projectData.neo4jInstance.instanceId;
-                console.log(`🗑️ Deleting AuraDB instance: ${instanceId}`);
+            if (firebaseProjectId) {
+              // Get Firebase project with Neo4j instance
+              // For reusable projects, the document ID is in format: ${projectId}-${chatbotId}
+              const compoundDocId = `${firebaseProjectId}-${chatbotId}`;
+              console.log(`🔍 Looking for Firebase project document: ${compoundDocId}`);
+              const projectDoc = await adminDb.collection('firebaseProjects').doc(compoundDocId).get();
+              if (projectDoc.exists) {
+                const projectData = projectDoc.data();
+                if (projectData?.neo4jInstance?.instanceId) {
+                  const instanceId = projectData.neo4jInstance.instanceId;
+                  console.log(`🗑️ Deleting AuraDB instance: ${instanceId}`);
 
-                const deleted = await Neo4jAuraService.deleteInstance(instanceId);
-                if (deleted) {
-                  console.log(`✅ AuraDB instance deleted: ${instanceId}`);
+                  const deleted = await Neo4jAuraService.deleteInstance(instanceId);
+                  if (deleted) {
+                    console.log(`✅ AuraDB instance deleted: ${instanceId}`);
 
-                  // Update Firebase project to remove Neo4j instance reference
-                  await adminDb.collection('firebaseProjects').doc(firebaseProjectId).update({
-                    'neo4jInstance.status': 'deleted',
-                    updatedAt: admin.firestore.Timestamp.now()
-                  });
+                    // Update Firebase project to remove Neo4j instance reference
+                    await adminDb.collection('firebaseProjects').doc(compoundDocId).update({
+                      'neo4jInstance.status': 'deleted',
+                      updatedAt: admin.firestore.Timestamp.now()
+                    });
 
-                  results.details.services_cleaned.push('neo4j-aura');
+                    results.details.services_cleaned.push('neo4j-aura');
+                    results.auradb = true;
+                  } else {
+                    console.warn('⚠️ Failed to delete AuraDB instance (may already be deleted)');
+                    results.errors.push('Failed to delete AuraDB instance');
+                  }
                 } else {
-                  console.warn('⚠️ Failed to delete AuraDB instance (may already be deleted)');
-                  results.errors.push('Failed to delete AuraDB instance');
+                  console.log('📝 No AuraDB instance found for this chatbot');
+                  results.auradb = true; // Consider successful if no instance exists
                 }
               } else {
-                console.log('📝 No AuraDB instance found for this chatbot');
+                console.log('📝 No Firebase project found for this chatbot');
+                results.auradb = true; // Consider successful if no project exists
               }
+            } else {
+              console.log('📝 No Firebase project ID found for this chatbot');
+              results.auradb = true; // Consider successful if no project ID exists
             }
+          } else {
+            console.log('📝 Chatbot document not found');
+            results.auradb = true; // Consider successful if chatbot not found
           }
+        } catch (auraError) {
+          console.error('❌ AuraDB cleanup failed:', auraError);
+          results.errors.push('Failed to clean up AuraDB instance');
         }
-      } catch (auraError) {
-        console.error('❌ AuraDB cleanup failed:', auraError);
-        results.errors.push('Failed to clean up AuraDB instance');
+      } else {
+        console.log('⏭️ Skipping AuraDB deletion (user choice)');
+        results.auradb = true; // Consider it successful if not requested
       }
 
       // Step 3: Delete chatbot metadata from local database
@@ -139,7 +167,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Determine overall success
-      const overallSuccess = results.chatbot && results.documents && results.vectorstore;
+      const overallSuccess = results.chatbot && results.documents && results.vectorstore && results.auradb;
 
       if (overallSuccess) {
         console.log(`✅ Complete chatbot deletion successful: ${chatbotId}`);
@@ -149,6 +177,7 @@ export async function DELETE(request: NextRequest) {
           details: {
             chatbot_id: chatbotId,
             vectorstore_deleted: deleteVectorstore,
+            auradb_deleted: deleteAuraDB,
             documents_deleted: results.details.documents_deleted,
             total_items_deleted: results.details.total_items_deleted,
             services_cleaned: results.details.services_cleaned
@@ -164,6 +193,7 @@ export async function DELETE(request: NextRequest) {
             chatbot_id: chatbotId,
             chatbot_deleted: results.chatbot,
             vectorstore_deleted: results.vectorstore,
+            auradb_deleted: results.auradb,
             documents_deleted: results.details.documents_deleted,
             total_items_deleted: results.details.total_items_deleted
           }
@@ -174,23 +204,28 @@ export async function DELETE(request: NextRequest) {
       console.error('❌ Chatbot deletion service error:', error);
       return NextResponse.json({
         success: false,
-        error: `Chatbot deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        details: results.details
-      }, { status: 500 });
+        message: `Chatbot deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        details: {
+          chatbot_id: chatbotId,
+          ...results.details
+        }
+      } as ChatbotDeletionResponse, { status: 500 });
     }
 
   } catch (error) {
     console.error('Chatbot deletion API error:', error);
-    return NextResponse.json({ 
-      error: 'Internal server error during chatbot deletion' 
-    }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      message: 'Internal server error during chatbot deletion',
+      details: { chatbot_id: 'unknown' }
+    } as ChatbotDeletionResponse, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { action, chatbotId, userId } = body;
+    const body: ChatbotDeletionPreviewRequest | ChatbotDeletionHealthCheckRequest = await request.json();
+    const { action } = body;
 
     if (action === 'health-check') {
       // Health check for deletion service
@@ -206,9 +241,13 @@ export async function POST(request: NextRequest) {
 
     if (action === 'preview-deletion') {
       // Preview what would be deleted
+      const previewBody = body as ChatbotDeletionPreviewRequest;
+      const { chatbotId, userId } = previewBody;
+
       if (!chatbotId || !userId) {
-        return NextResponse.json({ 
-          error: 'Missing required fields for preview: chatbotId, userId' 
+        return NextResponse.json({
+          success: false,
+          error: 'Missing required fields for preview: chatbotId, userId'
         }, { status: 400 });
       }
 
