@@ -102,6 +102,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Firebase Projects collection - for chatbot Firebase project management
+    match /firebaseProjects/{projectId} {
+      // Allow authenticated users to read Firebase projects they have access to
+      // This is needed for AuraDB detection and project management
+      allow read: if isAuthenticated() &&
+                     (resource.data.creatorUserId == request.auth.uid ||
+                      resource.data.projectId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accessibleProjects ||
+                      true); // Temporary: allow all authenticated users to read
+      // Only server-side writes for project creation and management
+      allow write: if false;
+    }
+
     // Default deny all other access
     match /{document=**} {
       allow read, write: if false;
