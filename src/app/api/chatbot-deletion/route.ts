@@ -94,51 +94,59 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
       if (deleteAuraDB) {
         console.log('🗄️ Cleaning up AuraDB instance...');
         try {
-          // Get chatbot configuration to find Firebase project
+          // Get chatbot configuration to find Neo4j instance
           const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
           if (chatbotDoc.exists) {
             const chatbotData = chatbotDoc.data();
-            const firebaseProjectId = chatbotData?.firebaseProjectId || chatbotData?.deployment?.firebaseProjectId;
 
-            if (firebaseProjectId) {
-              // Get Firebase project with Neo4j instance
-              // For reusable projects, the document ID is in format: ${projectId}-${chatbotId}
-              const compoundDocId = `${firebaseProjectId}-${chatbotId}`;
-              console.log(`🔍 Looking for Firebase project document: ${compoundDocId}`);
-              const projectDoc = await adminDb.collection('firebaseProjects').doc(compoundDocId).get();
-              if (projectDoc.exists) {
-                const projectData = projectDoc.data();
-                if (projectData?.neo4jInstance?.instanceId) {
-                  const instanceId = projectData.neo4jInstance.instanceId;
-                  console.log(`🗑️ Deleting AuraDB instance: ${instanceId}`);
+            // Check if chatbot has Neo4j instance data
+            if (chatbotData?.neo4j) {
+              const neo4jData = chatbotData.neo4j;
+              console.log('🔍 Found Neo4j data in chatbot:', {
+                hasUri: !!neo4jData.uri,
+                hasDatabase: !!neo4jData.database,
+                hasPassword: !!neo4jData.password
+              });
 
-                  const deleted = await Neo4jAuraService.deleteInstance(instanceId);
-                  if (deleted) {
-                    console.log(`✅ AuraDB instance deleted: ${instanceId}`);
-
-                    // Update Firebase project to remove Neo4j instance reference
-                    await adminDb.collection('firebaseProjects').doc(compoundDocId).update({
-                      'neo4jInstance.status': 'deleted',
-                      updatedAt: admin.firestore.Timestamp.now()
-                    });
-
-                    results.details.services_cleaned.push('neo4j-aura');
-                    results.auradb = true;
-                  } else {
-                    console.warn('⚠️ Failed to delete AuraDB instance (may already be deleted)');
-                    results.errors.push('Failed to delete AuraDB instance');
-                  }
+              // Extract instance ID from URI (e.g., "neo4j+s://caff65b9.databases.neo4j.io" -> "caff65b9")
+              let instanceId = null;
+              if (neo4jData.uri) {
+                const uriMatch = neo4jData.uri.match(/\/\/([a-f0-9]+)\.databases\.neo4j\.io/);
+                if (uriMatch) {
+                  instanceId = uriMatch[1];
+                  console.log(`🎯 Extracted instance ID from URI: ${instanceId}`);
                 } else {
-                  console.log('📝 No AuraDB instance found for this chatbot');
-                  results.auradb = true; // Consider successful if no instance exists
+                  console.warn('⚠️ Could not extract instance ID from URI:', neo4jData.uri);
+                }
+              }
+
+              if (instanceId) {
+                console.log(`🗑️ Deleting AuraDB instance: ${instanceId}`);
+
+                const deleted = await Neo4jAuraService.deleteInstance(instanceId);
+                if (deleted) {
+                  console.log(`✅ AuraDB instance deleted: ${instanceId}`);
+
+                  // Update chatbot document to mark Neo4j as deleted
+                  await adminDb.collection('chatbots').doc(chatbotId).update({
+                    'neo4j.status': 'deleted',
+                    'neo4j.deletedAt': admin.firestore.Timestamp.now(),
+                    updatedAt: admin.firestore.Timestamp.now()
+                  });
+
+                  results.details.services_cleaned.push('neo4j-aura');
+                  results.auradb = true;
+                } else {
+                  console.warn('⚠️ Failed to delete AuraDB instance (may already be deleted)');
+                  results.errors.push('Failed to delete AuraDB instance');
                 }
               } else {
-                console.log('📝 No Firebase project found for this chatbot');
-                results.auradb = true; // Consider successful if no project exists
+                console.log('❌ Could not determine instance ID from Neo4j data');
+                results.errors.push('Could not determine Neo4j instance ID');
               }
             } else {
-              console.log('📝 No Firebase project ID found for this chatbot');
-              results.auradb = true; // Consider successful if no project ID exists
+              console.log('📝 No Neo4j instance data found in chatbot document');
+              results.auradb = true; // Consider successful if no instance exists
             }
           } else {
             console.log('📝 Chatbot document not found');

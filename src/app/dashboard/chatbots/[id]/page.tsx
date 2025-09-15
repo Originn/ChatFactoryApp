@@ -113,49 +113,34 @@ export default function ChatbotDetailPage() {
         const chatbotData = chatbotSnap.data();
         console.log('📋 Chatbot data keys:', Object.keys(chatbotData));
 
-        const firebaseProjectId = chatbotData.firebaseProjectId;
-        console.log('🔗 Firebase Project ID:', firebaseProjectId);
+        // Check if chatbot has Neo4j instance data directly
+        if (chatbotData.neo4j) {
+          const neo4jData = chatbotData.neo4j;
+          console.log('🗄️ Found Neo4j data in chatbot:', {
+            hasUri: !!neo4jData.uri,
+            hasDatabase: !!neo4jData.database,
+            hasPassword: !!neo4jData.password,
+            status: neo4jData.status
+          });
 
-        if (firebaseProjectId) {
-          // Check the Firebase project document for Neo4j instance
-          // For reusable projects, the document ID is in format: ${projectId}-${chatbotId}
-          const compoundDocId = `${firebaseProjectId}-${chatbotId}`;
-          console.log('🔍 Looking for Firebase project document:', compoundDocId);
-          const projectRef = doc(db, "firebaseProjects", compoundDocId);
-          const projectSnap = await getDoc(projectRef);
-
-          if (projectSnap.exists()) {
-            const projectData = projectSnap.data();
-            console.log('📋 Project data keys:', Object.keys(projectData));
-
-            const neo4jInstance = projectData.neo4jInstance;
-            console.log('🗄️ Neo4j instance data:', neo4jInstance ? 'Found' : 'Not found');
-
-            if (neo4jInstance) {
-              console.log('🔍 Neo4j instance details:', {
-                hasInstanceId: !!neo4jInstance.instanceId,
-                status: neo4jInstance.status,
-                instanceName: neo4jInstance.instanceName
-              });
-
-              if (neo4jInstance.instanceId && neo4jInstance.status !== 'deleted') {
-                console.log('✅ AuraDB instance found:', neo4jInstance.instanceName);
-                setAuraDBInstanceName(neo4jInstance.instanceName || `chatbot-${chatbotId}`);
-                return true;
-              } else {
-                console.log('❌ AuraDB instance invalid:', {
-                  hasId: !!neo4jInstance.instanceId,
-                  status: neo4jInstance.status
-                });
-              }
+          // Extract instance ID from URI and check if it's valid
+          if (neo4jData.uri && neo4jData.status !== 'deleted') {
+            const uriMatch = neo4jData.uri.match(/\/\/([a-f0-9]+)\.databases\.neo4j\.io/);
+            if (uriMatch) {
+              const instanceId = uriMatch[1];
+              console.log('✅ AuraDB instance found with ID:', instanceId);
+              setAuraDBInstanceName(`chatbot-${chatbotId}`);
+              return true;
             } else {
-              console.log('❌ No neo4jInstance in project data');
+              console.log('❌ Could not extract instance ID from URI:', neo4jData.uri);
             }
+          } else if (neo4jData.status === 'deleted') {
+            console.log('❌ Neo4j instance marked as deleted');
           } else {
-            console.log('❌ Firebase project document not found:', compoundDocId);
+            console.log('❌ No valid Neo4j URI found');
           }
         } else {
-          console.log('❌ No firebaseProjectId in chatbot data');
+          console.log('❌ No neo4j field in chatbot data');
         }
       } else {
         console.log('❌ Chatbot document not found:', chatbotId);
