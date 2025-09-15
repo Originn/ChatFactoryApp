@@ -319,6 +319,12 @@ export class FirebaseAPIService {
 
         // Step 9: Create Neo4j AuraDB instance for this chatbot
         console.log('🗄️ Creating Neo4j AuraDB instance for GraphRAG...');
+        console.log(`🔧 Chatbot ID: ${chatbotId}`);
+        console.log(`🏷️ Display Name: ${displayName}`);
+        console.log(`🔑 Checking environment variables...`);
+        console.log(`🔑 NEO4J_AURA_CLIENT_ID: ${process.env.NEO4J_AURA_CLIENT_ID ? 'SET' : 'MISSING'}`);
+        console.log(`🔑 NEO4J_AURA_CLIENT_SECRET: ${process.env.NEO4J_AURA_CLIENT_SECRET ? 'SET' : 'MISSING'}`);
+
         let neo4jInstance = null;
         try {
           const auraResult = await Neo4jAuraService.createInstance(chatbotId, displayName, {

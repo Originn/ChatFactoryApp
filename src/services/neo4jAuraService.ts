@@ -69,16 +69,25 @@ export class Neo4jAuraService {
    * Get OAuth 2.0 bearer token for Aura API authentication
    */
   private static async getAccessToken(): Promise<string> {
+    console.log('🔐 Getting Neo4j Aura access token...');
+
     // Check if we have a valid cached token
     if (this.tokenCache && Date.now() < this.tokenCache.expires_at) {
+      console.log('✅ Using cached token');
       return this.tokenCache.access_token;
     }
 
     const clientId = process.env.NEO4J_AURA_CLIENT_ID;
     const clientSecret = process.env.NEO4J_AURA_CLIENT_SECRET;
 
+    console.log(`🔍 Client ID present: ${!!clientId}`);
+    console.log(`🔍 Client Secret present: ${!!clientSecret}`);
+    console.log(`🔍 Client ID value: ${clientId ? clientId.substring(0, 8) + '...' : 'undefined'}`);
+
     if (!clientId || !clientSecret) {
-      throw new Error('Missing Neo4j Aura API credentials. Please set NEO4J_AURA_CLIENT_ID and NEO4J_AURA_CLIENT_SECRET environment variables.');
+      const errorMsg = 'Missing Neo4j Aura API credentials. Please set NEO4J_AURA_CLIENT_ID and NEO4J_AURA_CLIENT_SECRET environment variables.';
+      console.error('❌', errorMsg);
+      throw new Error(errorMsg);
     }
 
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
