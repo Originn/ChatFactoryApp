@@ -40,6 +40,8 @@ export default function ChatbotDetailPage() {
   const [vectorstoreDocCount, setVectorstoreDocCount] = useState(0);
   const [vectorStoreName, setVectorStoreName] = useState<string>('');
   const [vectorStoreIndexName, setVectorStoreIndexName] = useState<string>('');
+  const [hasAuraDB, setHasAuraDB] = useState(false);
+  const [auraDBInstanceName, setAuraDBInstanceName] = useState<string>('');
   const [refreshKey, setRefreshKey] = useState(0);
   
   // Vector store deployment dialogs
@@ -99,6 +101,74 @@ export default function ChatbotDetailPage() {
     }
   };
 
+  // Check if AuraDB exists for this chatbot
+  const checkAuraDBExists = async (chatbotId: string): Promise<boolean> => {
+    try {
+      console.log('🔍 Checking if AuraDB exists for chatbot:', chatbotId);
+
+      const chatbotRef = doc(db, "chatbots", chatbotId);
+      const chatbotSnap = await getDoc(chatbotRef);
+
+      if (chatbotSnap.exists()) {
+        const chatbotData = chatbotSnap.data();
+        console.log('📋 Chatbot data keys:', Object.keys(chatbotData));
+
+        const firebaseProjectId = chatbotData.firebaseProjectId;
+        console.log('🔗 Firebase Project ID:', firebaseProjectId);
+
+        if (firebaseProjectId) {
+          // Check the Firebase project document for Neo4j instance
+          // For reusable projects, the document ID is in format: ${projectId}-${chatbotId}
+          const compoundDocId = `${firebaseProjectId}-${chatbotId}`;
+          console.log('🔍 Looking for Firebase project document:', compoundDocId);
+          const projectRef = doc(db, "firebaseProjects", compoundDocId);
+          const projectSnap = await getDoc(projectRef);
+
+          if (projectSnap.exists()) {
+            const projectData = projectSnap.data();
+            console.log('📋 Project data keys:', Object.keys(projectData));
+
+            const neo4jInstance = projectData.neo4jInstance;
+            console.log('🗄️ Neo4j instance data:', neo4jInstance ? 'Found' : 'Not found');
+
+            if (neo4jInstance) {
+              console.log('🔍 Neo4j instance details:', {
+                hasInstanceId: !!neo4jInstance.instanceId,
+                status: neo4jInstance.status,
+                instanceName: neo4jInstance.instanceName
+              });
+
+              if (neo4jInstance.instanceId && neo4jInstance.status !== 'deleted') {
+                console.log('✅ AuraDB instance found:', neo4jInstance.instanceName);
+                setAuraDBInstanceName(neo4jInstance.instanceName || `chatbot-${chatbotId}`);
+                return true;
+              } else {
+                console.log('❌ AuraDB instance invalid:', {
+                  hasId: !!neo4jInstance.instanceId,
+                  status: neo4jInstance.status
+                });
+              }
+            } else {
+              console.log('❌ No neo4jInstance in project data');
+            }
+          } else {
+            console.log('❌ Firebase project document not found:', compoundDocId);
+          }
+        } else {
+          console.log('❌ No firebaseProjectId in chatbot data');
+        }
+      } else {
+        console.log('❌ Chatbot document not found:', chatbotId);
+      }
+
+      console.log('❌ AuraDB detection failed - returning false');
+      return false;
+    } catch (error) {
+      console.error('❌ Error checking AuraDB:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     const fetchChatbot = async () => {
       try {
@@ -111,7 +181,7 @@ export default function ChatbotDetailPage() {
           
           // Check for vector store
           const vectorstoreExists = await checkVectorstoreExists(chatbotId);
-          
+
           // Fallback: also check if documents exist in the chatbot data
           if (!vectorstoreExists && chatbotData.documents && chatbotData.documents.length > 0) {
             console.log('🔄 Fallback: Found documents in chatbot data, assuming vectorstore exists');
@@ -122,6 +192,10 @@ export default function ChatbotDetailPage() {
             setVectorStoreIndexName(legacyIndexName);
             setVectorStoreName('Knowledge Base (Legacy)');
           }
+
+          // Check for AuraDB
+          const auraDBExists = await checkAuraDBExists(chatbotId);
+          setHasAuraDB(auraDBExists);
         } else {
           setError('Chatbot not found');
         }
@@ -152,7 +226,7 @@ export default function ChatbotDetailPage() {
     }
   };
 
-  const confirmDeleteChatbot = async (deleteVectorstore: boolean) => {
+  const confirmDeleteChatbot = async (deleteVectorstore: boolean, deleteAuraDB: boolean) => {
     if (!chatbot) return;
     
     const id = chatbot.id;
@@ -930,7 +1004,9 @@ export default function ChatbotDetailPage() {
         <ChatbotDeletionDialog
           chatbotName={chatbot.name}
           hasVectorstore={hasVectorstore}
+          hasAuraDB={hasAuraDB}
           vectorStoreName={vectorStoreName}
+          auraDBInstanceName={auraDBInstanceName}
           onConfirm={confirmDeleteChatbot}
           onCancel={() => setShowDeleteDialog(false)}
           isDeleting={isDeleting}
