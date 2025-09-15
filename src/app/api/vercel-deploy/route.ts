@@ -995,6 +995,7 @@ export async function POST(request: NextRequest) {
           // Update chatbot document with deployment info
           await adminDb.collection('chatbots').doc(chatbotId).update({
             status: 'active',
+            firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
             deployment: {
               deploymentId: deploymentRef.id,
               deploymentUrl: finalFallbackUrl,
@@ -1002,6 +1003,7 @@ export async function POST(request: NextRequest) {
               deployedAt: Timestamp.now(),
               vercelProjectId: projectName,
               vercelDeploymentId: deploymentData.id,
+              firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
             },
             updatedAt: Timestamp.now()
           });
@@ -1149,6 +1151,7 @@ export async function POST(request: NextRequest) {
       // Update chatbot document with deployment info
       await adminDb.collection('chatbots').doc(chatbotId).update({
         status: 'active',
+        firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
         deployment: {
           deploymentId: deploymentRef.id,
           deploymentUrl: finalDeploymentUrl,
@@ -1156,6 +1159,7 @@ export async function POST(request: NextRequest) {
           deployedAt: Timestamp.now(),
           vercelProjectId: projectName,
           vercelDeploymentId: deploymentData.id,
+          firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
         },
         updatedAt: Timestamp.now()
       });
@@ -1211,6 +1215,7 @@ export async function POST(request: NextRequest) {
       if (dedicatedFirebaseProject?.projectId) {
         try {
           await adminDb.collection('chatbots').doc(chatbotId).update({
+            firebaseProjectId: dedicatedFirebaseProject.projectId,
             'firebaseProject.services.hosting': true,
             'firebaseProject.urls.hosting': finalDeploymentUrl,
             'firebaseProject.deployment': {
