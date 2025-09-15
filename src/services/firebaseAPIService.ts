@@ -337,28 +337,23 @@ export class FirebaseAPIService {
             const instance = auraResult.instance;
             console.log(`✅ AuraDB instance created: ${instance.id}`);
 
-            // Wait for instance to become ready (up to 10 minutes)
-            console.log('⏳ Waiting for AuraDB instance to become ready...');
-            const readyInstance = await Neo4jAuraService.waitForInstanceReady(instance.id, 10);
-
-            if (readyInstance) {
-              neo4jInstance = {
-                instanceId: readyInstance.id,
-                uri: readyInstance.connection_url,
-                username: 'neo4j',
-                password: readyInstance.password,
-                database: 'neo4j',
-                instanceName: readyInstance.name,
-                status: readyInstance.status,
-                region: 'us-central1',
-                memory: '1GB',
-                cloudProvider: 'gcp' as const,
-                createdAt: Timestamp.now()
-              };
-              console.log(`✅ AuraDB instance ready: ${readyInstance.connection_url}`);
-            } else {
-              console.error('❌ AuraDB instance failed to become ready within timeout');
-            }
+            // Store instance information immediately (free tier instances take longer to provision)
+            console.log('📋 Storing AuraDB instance details (instance will be ready in a few minutes)...');
+            neo4jInstance = {
+              instanceId: instance.id,
+              uri: instance.connection_url,
+              username: instance.username,
+              password: instance.password,
+              database: 'neo4j',
+              instanceName: instance.name,
+              status: instance.status, // Will be 'creating' initially
+              region: 'us-central1',
+              memory: '1GB',
+              cloudProvider: 'gcp' as const,
+              createdAt: Timestamp.now()
+            };
+            console.log(`✅ AuraDB instance details stored: ${instance.connection_url}`);
+            console.log(`⏳ Instance status: ${instance.status} (will transition to 'running' when ready)`)
           } else {
             console.error('❌ Failed to create AuraDB instance:', auraResult.error);
           }
@@ -574,7 +569,52 @@ export class FirebaseAPIService {
         // Extract OAuth client ID from auth configuration
         const oauthClientId = authConfig?.clientId || 'firebase-default';
         console.log(`🔑 OAuth Client ID: ${oauthClientId}`);
-        
+
+        // Step 2.6: Create Neo4j AuraDB instance for this chatbot
+        console.log('🗄️ Creating Neo4j AuraDB instance for GraphRAG...');
+        console.log(`🔧 Chatbot ID: ${chatbotId}`);
+        console.log(`🏷️ Display Name: ${displayName}`);
+        console.log(`🔑 Checking environment variables...`);
+        console.log(`🔑 NEO4J_AURA_CLIENT_ID: ${process.env.NEO4J_AURA_CLIENT_ID ? 'SET' : 'MISSING'}`);
+        console.log(`🔑 NEO4J_AURA_CLIENT_SECRET: ${process.env.NEO4J_AURA_CLIENT_SECRET ? 'SET' : 'MISSING'}`);
+
+        let neo4jInstance = null;
+        try {
+          const auraResult = await Neo4jAuraService.createInstance(chatbotId, displayName, {
+            region: 'us-central1',
+            memory: '1GB',
+            cloudProvider: 'gcp'
+          });
+
+          if (auraResult.success && auraResult.instance) {
+            const instance = auraResult.instance;
+            console.log(`✅ AuraDB instance created: ${instance.id}`);
+
+            // Store instance information immediately (free tier instances take longer to provision)
+            console.log('📋 Storing AuraDB instance details (instance will be ready in a few minutes)...');
+            neo4jInstance = {
+              instanceId: instance.id,
+              uri: instance.connection_url,
+              username: instance.username,
+              password: instance.password,
+              database: 'neo4j',
+              instanceName: instance.name,
+              status: instance.status, // Will be 'creating' initially
+              region: 'us-central1',
+              memory: '1GB',
+              cloudProvider: 'gcp' as const,
+              createdAt: Timestamp.now()
+            };
+            console.log(`✅ AuraDB instance details stored: ${instance.connection_url}`);
+            console.log(`⏳ Instance status: ${instance.status} (will transition to 'running' when ready)`)
+          } else {
+            console.log('❌ Failed to create AuraDB instance:', auraResult.error);
+          }
+        } catch (auraError) {
+          console.error('❌ Error creating AuraDB instance:', auraError);
+          // Don't fail the entire process - the chatbot can still work without GraphRAG
+        }
+
         // Step 2.7: Deploy Firestore security rules
         console.log('🛡️ Deploying Firestore security rules...');
         try {
@@ -616,7 +656,8 @@ export class FirebaseAPIService {
           firebaseAppId: firebaseConfig.appId,
           createdAt: Timestamp.now(),
           status: 'active',
-          ...(authConfig && { authConfig })
+          ...(authConfig && { authConfig }),
+          ...(neo4jInstance && { neo4jInstance })
         };
 
         // Update project record with success
@@ -631,14 +672,15 @@ export class FirebaseAPIService {
           oauthClientId,
           completedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
-          ...(authConfig?.success && { 
+          ...(authConfig?.success && {
             authConfig: {
               success: authConfig.success,
               providers: authConfig.providers,
               authType: authConfig.authType,
               customOAuthConfigured: authConfig.customOAuthConfigured
             }
-          })
+          }),
+          ...(neo4jInstance && { neo4jInstance })
         });
 
         console.log('✅ Existing Firebase project successfully configured for chatbot');

@@ -45,7 +45,7 @@ interface CreateInstanceRequest {
   version: string;
   region: string;
   memory: string;
-  type: string;
+  type: 'free' | 'enterprise-db' | 'enterprise-ds' | 'professional-db' | 'professional-ds';
   tenant_id: string;
   cloud_provider: 'gcp' | 'aws' | 'azure';
 }
@@ -128,13 +128,26 @@ export class Neo4jAuraService {
   }
 
   /**
-   * Get the default project ID for creating instances
+   * Get the tenant ID for creating instances
+   * For free accounts, this extracts the user ID from the JWT token
    */
-  private static async getDefaultProjectId(): Promise<string> {
+  private static async getTenantId(): Promise<string> {
     const token = await this.getAccessToken();
 
     try {
-      console.log('📋 Fetching Aura projects...');
+      console.log('🔍 Determining tenant ID from JWT token...');
+
+      // Decode JWT token to extract user ID (which serves as tenant_id for free accounts)
+      const parts = token.split('.');
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+
+      if (payload.usr) {
+        console.log(`📋 Using user ID as tenant: ${payload.usr}`);
+        return payload.usr;
+      }
+
+      // Fallback: try to fetch projects if user ID is not available
+      console.log('📋 User ID not found in token, attempting to fetch projects...');
 
       const response = await fetch(`${this.AURA_API_BASE}${this.PROJECTS_ENDPOINT}`, {
         headers: {
@@ -145,6 +158,12 @@ export class Neo4jAuraService {
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        // Handle billing restriction scenario (403 on Free/Professional accounts)
+        if (response.status === 403) {
+          throw new Error(`Neo4j Aura API access restricted. This appears to be a Free or Professional account without billing information. According to Neo4j documentation, "Users with Free and Professional instances must have entered billing information or be a member of a marketplace project before they can create API credentials." For free instances, the system will attempt to use the user ID from the JWT token as tenant ID. Status: ${response.status} - ${errorText}`);
+        }
+
         throw new Error(`Failed to fetch projects: ${response.status} - ${errorText}`);
       }
 
@@ -161,7 +180,7 @@ export class Neo4jAuraService {
       return activeProject.id;
 
     } catch (error) {
-      console.error('❌ Failed to fetch Aura projects:', error);
+      console.error('❌ Failed to get tenant ID:', error);
       throw error;
     }
   }
@@ -180,16 +199,18 @@ export class Neo4jAuraService {
   ): Promise<CreateInstanceResponse> {
     try {
       const token = await this.getAccessToken();
-      const projectId = await this.getDefaultProjectId();
+      const tenantId = await this.getTenantId();
 
       const instanceName = `chatbot-${chatbotId}`;
+
+      // Use free tier configuration for accounts without billing
       const instanceRequest: CreateInstanceRequest = {
         name: instanceName,
         version: '5',
         region: options.region || 'us-central1',
-        memory: options.memory || '1GB',
-        type: 'enterprise-db',
-        tenant_id: projectId,
+        memory: '1GB', // Free instances must use 1GB
+        type: 'free', // Use free tier instead of enterprise-db
+        tenant_id: tenantId,
         cloud_provider: options.cloudProvider || 'gcp'
       };
 
@@ -219,6 +240,11 @@ export class Neo4jAuraService {
       console.log(`✅ AuraDB instance created successfully: ${instance.id}`);
       console.log(`🔗 Connection URL: ${instance.connection_url}`);
       console.log(`⏳ Status: ${instance.status}`);
+
+      if (instance.status === 'creating') {
+        console.log('💡 Free tier instances take 5-15 minutes to provision. The instance will be available shortly.');
+        console.log('📋 Connection details have been stored and GraphRAG will work once the instance is ready.');
+      }
 
       return {
         success: true,
