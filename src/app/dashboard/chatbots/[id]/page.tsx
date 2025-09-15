@@ -247,10 +247,11 @@ export default function ChatbotDetailPage() {
         console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
         
         try {
-          const response = await fetch('/api/vectorstore/index', {
-            method: 'DELETE',
+          const response = await fetch('/api/vectorstore', {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              action: 'delete',
               indexName: vectorStoreIndexName,
               userId: user?.uid
             }),
