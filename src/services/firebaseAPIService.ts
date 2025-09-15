@@ -35,6 +35,7 @@ import {
   // Removed iapClient - using REST API instead for better control
 } from '@/lib/gcp-clients';
 import { getAuthClient } from '@/lib/gcp-auth';
+import { Neo4jAuraService } from '@/services/neo4jAuraService';
 // Removed ProjectsClient import - already available through resourceManagerClient
 
 
@@ -86,6 +87,19 @@ export interface FirebaseProject {
   };
   oauthClientId?: string;
   firebaseAppId?: string;
+  neo4jInstance?: {
+    instanceId: string;
+    uri: string;
+    username: string; // Always 'neo4j' for AuraDB
+    password: string;
+    database: string; // Always 'neo4j' for AuraDB
+    instanceName: string;
+    status: 'creating' | 'running' | 'failed' | 'deleted';
+    region?: string;
+    memory?: string;
+    cloudProvider?: 'gcp' | 'aws' | 'azure';
+    createdAt?: Timestamp;
+  };
 }
 
 export class FirebaseAPIService {
@@ -303,6 +317,50 @@ export class FirebaseAPIService {
         console.log('🔐 Configuring Firebase Authentication with Google provider...');
         const authConfig = await this.setupFirebaseAuthentication(projectId, projectNumber); // Pass cached project number
 
+        // Step 9: Create Neo4j AuraDB instance for this chatbot
+        console.log('🗄️ Creating Neo4j AuraDB instance for GraphRAG...');
+        let neo4jInstance = null;
+        try {
+          const auraResult = await Neo4jAuraService.createInstance(chatbotId, displayName, {
+            region: 'us-central1',
+            memory: '1GB',
+            cloudProvider: 'gcp'
+          });
+
+          if (auraResult.success && auraResult.instance) {
+            const instance = auraResult.instance;
+            console.log(`✅ AuraDB instance created: ${instance.id}`);
+
+            // Wait for instance to become ready (up to 10 minutes)
+            console.log('⏳ Waiting for AuraDB instance to become ready...');
+            const readyInstance = await Neo4jAuraService.waitForInstanceReady(instance.id, 10);
+
+            if (readyInstance) {
+              neo4jInstance = {
+                instanceId: readyInstance.id,
+                uri: readyInstance.connection_url,
+                username: 'neo4j',
+                password: readyInstance.password,
+                database: 'neo4j',
+                instanceName: readyInstance.name,
+                status: readyInstance.status,
+                region: 'us-central1',
+                memory: '1GB',
+                cloudProvider: 'gcp' as const,
+                createdAt: Timestamp.now()
+              };
+              console.log(`✅ AuraDB instance ready: ${readyInstance.connection_url}`);
+            } else {
+              console.error('❌ AuraDB instance failed to become ready within timeout');
+            }
+          } else {
+            console.error('❌ Failed to create AuraDB instance:', auraResult.error);
+          }
+        } catch (auraError) {
+          console.error('❌ Error creating AuraDB instance:', auraError);
+          // Don't fail the entire process - the chatbot can still work without GraphRAG
+        }
+
         // Update project record with success
         const completeProject: FirebaseProject = {
           projectId,
@@ -312,7 +370,7 @@ export class FirebaseAPIService {
           createdAt: Timestamp.now(),
           status: 'active',
           config: firebaseConfig,
-          ...(Object.keys(buckets).length > 0 && { 
+          ...(Object.keys(buckets).length > 0 && {
             buckets: {
               documents: buckets.documents || '',
               privateImages: buckets.privateImages || '',
@@ -320,7 +378,8 @@ export class FirebaseAPIService {
             }
           }),
           ...(serviceAccount && { serviceAccount }),
-          ...(authConfig && { authConfig })
+          ...(authConfig && { authConfig }),
+          ...(neo4jInstance && { neo4jInstance })
         };
 
         // IMPORTANT: Store OAuth credentials for future use
@@ -337,14 +396,15 @@ export class FirebaseAPIService {
           updatedAt: Timestamp.now(),
           ...(Object.keys(buckets).length > 0 && { buckets }),
           ...(serviceAccount && { serviceAccount }),
-          ...(authConfig?.success && { 
+          ...(authConfig?.success && {
             authConfig: {
               success: authConfig.success,
               providers: authConfig.providers,
               authType: authConfig.authType,
               customOAuthConfigured: authConfig.customOAuthConfigured
             }
-          })
+          }),
+          ...(neo4jInstance && { neo4jInstance })
         });
 
         // Update chatbot with Firebase project reference

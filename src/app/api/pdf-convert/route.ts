@@ -101,6 +101,33 @@ export async function POST(request: NextRequest) {
     console.log(`🎯 Dual Embedding: Always enabled (default strategy)`);
     console.log(`🪣 Image storage bucket: ${imageStorageBucket}`);
 
+    // Get Neo4j AuraDB instance configuration for this chatbot
+    let neo4jConfig = null;
+    try {
+      const firebaseProjectDoc = await adminDb.collection('firebaseProjects').doc(firebaseProjectId).get();
+      if (firebaseProjectDoc.exists) {
+        const projectData = firebaseProjectDoc.data();
+        if (projectData?.neo4jInstance) {
+          const neo4jInstance = projectData.neo4jInstance;
+          if (neo4jInstance.status === 'running') {
+            neo4jConfig = {
+              uri: neo4jInstance.uri,
+              username: neo4jInstance.username,
+              password: neo4jInstance.password,
+              database: neo4jInstance.database
+            };
+            console.log(`🗄️ Using AuraDB instance: ${neo4jInstance.instanceName} (${neo4jInstance.uri})`);
+          } else {
+            console.warn(`⚠️ AuraDB instance not ready, status: ${neo4jInstance.status}`);
+          }
+        } else {
+          console.log(`📝 No Neo4j AuraDB instance configured for this chatbot`);
+        }
+      }
+    } catch (neo4jError) {
+      console.error('❌ Error retrieving Neo4j configuration:', neo4jError);
+    }
+
     // Process the PDF file with the cloud converter
     const result = await PDFService.processPDFDocument({
       file,
@@ -116,11 +143,11 @@ export async function POST(request: NextRequest) {
       pineconeIndex: vectorstore.indexName,
       pineconeNamespace: chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined,
       imageStorageBucket,
-      // Neo4j configuration for GraphRAG processing
-      neo4jUri: chatbotData?.neo4j?.uri,
-      neo4jUsername: chatbotData?.neo4j?.username,
-      neo4jPassword: chatbotData?.neo4j?.password,
-      neo4jDatabase: chatbotData?.neo4j?.database
+      // Neo4j AuraDB configuration for GraphRAG processing (user-specific instance)
+      neo4jUri: neo4jConfig?.uri,
+      neo4jUsername: neo4jConfig?.username,
+      neo4jPassword: neo4jConfig?.password,
+      neo4jDatabase: neo4jConfig?.database
     });
 
     if (result.success) {

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DocumentDeletionService } from '@/services/documentDeletionService';
 import { DatabaseService } from '@/services/databaseService';
+import { Neo4jAuraService } from '@/services/neo4jAuraService';
+import { adminDb } from '@/lib/firebase/admin';
+import * as admin from 'firebase-admin';
 
 /**
  * Enhanced Chatbot Deletion API
@@ -78,13 +81,56 @@ export async function DELETE(request: NextRequest) {
         results.vectorstore = true; // Consider it successful if not requested
       }
 
-      // Step 2: Delete chatbot metadata from local database
-      console.log('🗄️ Deleting chatbot metadata...');
-      
+      // Step 2: Clean up Neo4j AuraDB instance
+      console.log('🗄️ Cleaning up AuraDB instance...');
       try {
-        // This would be the existing chatbot deletion logic
-        // For now, we'll just mark it as successful
-        // TODO: Implement actual chatbot metadata deletion
+        // Get chatbot configuration to find Firebase project
+        const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+        if (chatbotDoc.exists) {
+          const chatbotData = chatbotDoc.data();
+          const firebaseProjectId = chatbotData?.firebaseProjectId || chatbotData?.deployment?.firebaseProjectId;
+
+          if (firebaseProjectId) {
+            // Get Firebase project with Neo4j instance
+            const projectDoc = await adminDb.collection('firebaseProjects').doc(firebaseProjectId).get();
+            if (projectDoc.exists) {
+              const projectData = projectDoc.data();
+              if (projectData?.neo4jInstance?.instanceId) {
+                const instanceId = projectData.neo4jInstance.instanceId;
+                console.log(`🗑️ Deleting AuraDB instance: ${instanceId}`);
+
+                const deleted = await Neo4jAuraService.deleteInstance(instanceId);
+                if (deleted) {
+                  console.log(`✅ AuraDB instance deleted: ${instanceId}`);
+
+                  // Update Firebase project to remove Neo4j instance reference
+                  await adminDb.collection('firebaseProjects').doc(firebaseProjectId).update({
+                    'neo4jInstance.status': 'deleted',
+                    updatedAt: admin.firestore.Timestamp.now()
+                  });
+
+                  results.details.services_cleaned.push('neo4j-aura');
+                } else {
+                  console.warn('⚠️ Failed to delete AuraDB instance (may already be deleted)');
+                  results.errors.push('Failed to delete AuraDB instance');
+                }
+              } else {
+                console.log('📝 No AuraDB instance found for this chatbot');
+              }
+            }
+          }
+        }
+      } catch (auraError) {
+        console.error('❌ AuraDB cleanup failed:', auraError);
+        results.errors.push('Failed to clean up AuraDB instance');
+      }
+
+      // Step 3: Delete chatbot metadata from local database
+      console.log('🗄️ Deleting chatbot metadata...');
+
+      try {
+        // Delete the chatbot document from Firestore
+        await adminDb.collection('chatbots').doc(chatbotId).delete();
         results.chatbot = true;
         console.log('✅ Chatbot metadata deletion completed');
       } catch (error) {
