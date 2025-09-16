@@ -182,24 +182,28 @@ export function KnowledgeGraph({ chatbotId }: Props) {
     }
 
     // Construct URL for browser.neo4j.io with pre-filled credentials
+    // Format: dbms=neo4j+s://username@hostname:port&db=database
+    const connectionUrl = neo4jConfig.uri.replace('neo4j+s://', `neo4j+s://${neo4jConfig.username}@`);
+
     const params = new URLSearchParams({
-      connectURL: neo4jConfig.uri,
-      database: neo4jConfig.database,
-      // Pre-fill authentication
-      username: neo4jConfig.username,
-      password: neo4jConfig.password,
+      dbms: connectionUrl,
+      db: neo4jConfig.database,
+      // Note: Password cannot be pre-filled via URL for security reasons
+      // User will need to enter password manually: neo4jConfig.password
       // FREE TIER: Opens entire database (no user isolation)
       // ENTERPRISE TODO: Add user-specific database parameter
-      // database: neo4jConfig.userDatabase || neo4jConfig.database
+      // db: neo4jConfig.userDatabase || neo4jConfig.database
     });
 
     const browserUrl = `https://browser.neo4j.io/?${params.toString()}`;
 
     console.log('🔗 Opening Neo4j Browser with config:', {
-      uri: neo4jConfig.uri,
+      originalUri: neo4jConfig.uri,
+      connectionUrl: connectionUrl,
       database: neo4jConfig.database,
       username: neo4jConfig.username,
-      instanceName: neo4jConfig.instanceName
+      instanceName: neo4jConfig.instanceName,
+      finalUrl: browserUrl
     });
 
     // Open in new tab
@@ -427,10 +431,19 @@ export function KnowledgeGraph({ chatbotId }: Props) {
           </div>
         </div>
 
-        {/* Enterprise Upgrade Notice */}
-        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <div className="text-sm text-blue-800 dark:text-blue-200">
-            <strong>🚀 Enterprise Features:</strong> User-specific databases, RBAC, query history, advanced security controls
+        {/* Password Notice & Enterprise Upgrade */}
+        <div className="mt-3 space-y-2">
+          {neo4jConfig && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>🔑 Password Required:</strong> After clicking "Neo4j Browser", enter password: <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{neo4jConfig.password}</code>
+              </div>
+            </div>
+          )}
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>🚀 Enterprise Features:</strong> User-specific databases, RBAC, query history, advanced security controls
+            </div>
           </div>
         </div>
       </div>
