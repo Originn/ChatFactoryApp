@@ -173,7 +173,7 @@ export function KnowledgeGraph({ chatbotId }: Props) {
     setIsFullscreen(!isFullscreen);
   };
 
-  // FREE TIER: Open in Neo4j Browser with basic connection
+  // FREE TIER: Open in Neo4j Browser with credentials pre-filled
   // ENTERPRISE TODO: Open with user-specific database and permissions
   const openInNeo4jBrowser = () => {
     if (!neo4jConfig) {
@@ -181,15 +181,26 @@ export function KnowledgeGraph({ chatbotId }: Props) {
       return;
     }
 
-    // Construct URL for browser.neo4j.io
+    // Construct URL for browser.neo4j.io with pre-filled credentials
     const params = new URLSearchParams({
       connectURL: neo4jConfig.uri,
+      database: neo4jConfig.database,
+      // Pre-fill authentication
+      username: neo4jConfig.username,
+      password: neo4jConfig.password,
       // FREE TIER: Opens entire database (no user isolation)
-      // ENTERPRISE TODO: Add database parameter for user-specific access
+      // ENTERPRISE TODO: Add user-specific database parameter
       // database: neo4jConfig.userDatabase || neo4jConfig.database
     });
 
     const browserUrl = `https://browser.neo4j.io/?${params.toString()}`;
+
+    console.log('🔗 Opening Neo4j Browser with config:', {
+      uri: neo4jConfig.uri,
+      database: neo4jConfig.database,
+      username: neo4jConfig.username,
+      instanceName: neo4jConfig.instanceName
+    });
 
     // Open in new tab
     window.open(browserUrl, '_blank', 'noopener,noreferrer');
@@ -287,7 +298,10 @@ export function KnowledgeGraph({ chatbotId }: Props) {
             onClick={openInNeo4jBrowser}
             disabled={!neo4jConfig}
             className="flex items-center gap-2 bg-[#4581C3] hover:bg-[#3D73B1] text-white border-[#4581C3]"
-            title="Open in Neo4j Browser"
+            title={neo4jConfig ?
+              `Open Neo4j Browser with pre-filled credentials for ${neo4jConfig.instanceName}` :
+              "Neo4j configuration loading..."
+            }
           >
             <ExternalLink className="h-4 w-4" />
             Neo4j Browser
@@ -395,9 +409,16 @@ export function KnowledgeGraph({ chatbotId }: Props) {
           {/* Connection Status */}
           <div className="flex items-center gap-4 text-xs">
             {neo4jConfig && (
-              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span>Connected to {neo4jConfig.instanceName}</span>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span>Connected: {neo4jConfig.instanceName}</span>
+                </div>
+                <div className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
+                  <span>DB: {neo4jConfig.database}</span>
+                  <span>User: {neo4jConfig.username}</span>
+                  <span>{neo4jConfig.uri.split('://')[0].toUpperCase()}</span>
+                </div>
               </div>
             )}
             <div className="text-gray-500 dark:text-gray-400">

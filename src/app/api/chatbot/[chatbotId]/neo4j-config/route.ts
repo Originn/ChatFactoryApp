@@ -68,7 +68,7 @@ export async function GET(
       );
     }
 
-    // FREE TIER: Return connection parameters for browser.neo4j.io
+    // FREE TIER: Return connection parameters for browser.neo4j.io with credentials
     // NOTE: This gives access to the entire chatbot database
     // ENTERPRISE TODO: Return user-specific database alias and credentials
     return NextResponse.json({
@@ -76,8 +76,10 @@ export async function GET(
       config: {
         uri: neo4jConfig.uri,
         username: neo4jConfig.username,
-        database: neo4jConfig.database || 'neo4j',
+        password: neo4jConfig.password, // Include password for auto-fill
+        database: neo4jConfig.database || neo4jConfig.instanceId || 'neo4j',
         instanceName: neo4jConfig.instanceName || `chatbot-${chatbotId}`,
+        instanceId: neo4jConfig.instanceId,
         // ENTERPRISE TODO: Add user-specific fields
         // userDatabase: `chatbot_${chatbotId}_user_${userId}`,
         // userRole: `${chatbotId}_user_role`,
