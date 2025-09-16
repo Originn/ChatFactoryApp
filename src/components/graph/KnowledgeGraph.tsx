@@ -54,7 +54,7 @@ export function KnowledgeGraph({ chatbotId }: Props) {
 
   useEffect(() => {
     fetchGraphData();
-  }, [chatbotId]);
+  }, [chatbotId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchGraphData = async () => {
     try {
@@ -230,12 +230,7 @@ export function KnowledgeGraph({ chatbotId }: Props) {
             minZoom: 0.1,
             initialZoom: 1,
             disableWebGL: false,
-            instanceId: `knowledge-graph-${chatbotId}`,
-            layout: {
-              type: 'force',
-              animate: true,
-              animationTime: 3000
-            }
+            instanceId: `knowledge-graph-${chatbotId}`
           }}
           mouseEventCallbacks={{
             onNodeClick: (node) => {
