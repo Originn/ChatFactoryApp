@@ -236,7 +236,6 @@ export function KnowledgeGraph({ chatbotId }: Props) {
             onNodeClick: (node) => {
               console.log('Node clicked:', node);
             },
-            onNodeHover: true,
             onRelationshipClick: (rel) => {
               console.log('Relationship clicked:', rel);
             },
