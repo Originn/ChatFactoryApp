@@ -144,9 +144,6 @@ export function ChatbotDeletionDialog({
                 No AuraDB instance detected for this chatbot. If you have an AuraDB instance that should be deleted,
                 please contact support or delete it manually from the Neo4j console.
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Debug: hasAuraDB={hasAuraDB ? 'true' : 'false'}, instanceName="{auraDBInstanceName}"
-              </p>
             </div>
           )}
         </div>
