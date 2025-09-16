@@ -247,7 +247,35 @@ export default function ChatbotDetailPage() {
           console.warn('⚠️ Error deleting vector store:', vectorError);
         }
       }
-      
+
+      // Delete AuraDB instance if requested
+      if (deleteAuraDB && hasAuraDB) {
+        console.log('🗑️ Deleting AuraDB instance...');
+
+        try {
+          const response = await fetch('/api/chatbot-deletion', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatbotId: id,
+              userId: user?.uid,
+              deleteVectorstore: false, // We already handled this above
+              deleteAuraDB: true
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            console.log('✅ AuraDB instance deleted successfully:', result);
+          } else {
+            const error = await response.json();
+            console.warn('⚠️ Failed to delete AuraDB instance:', error.message);
+          }
+        } catch (auraError) {
+          console.warn('⚠️ Error deleting AuraDB instance:', auraError);
+        }
+      }
+
       // Delete from Vercel if we have project info
       if (vercelProjectId || vercelProjectName) {
         try {
