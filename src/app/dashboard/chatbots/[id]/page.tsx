@@ -19,7 +19,7 @@ import UserPDFManager from '@/components/dashboard/UserPDFManager';
 import InlineDocumentUpload from '@/components/dashboard/InlineDocumentUpload';
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 import { ChatbotConfig } from '@/types/chatbot';
-import { KnowledgeGraph } from '@/components/graph/KnowledgeGraph';
+import { Neo4jBrowserButton } from '@/components/graph/Neo4jBrowserButton';
 
 export default function ChatbotDetailPage() {
   const { user } = useAuth();
@@ -28,7 +28,7 @@ export default function ChatbotDetailPage() {
   const chatbotId = params.id as string;
   
   // State variables
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'graph' | 'users' | 'analytics' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'users' | 'analytics-kg' | 'settings'>('overview');
   const [chatbot, setChatbot] = useState<ChatbotConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -659,18 +659,6 @@ export default function ChatbotDetailPage() {
                   >
                     Documents
                   </button>
-                  {hasAuraDB && (
-                    <button
-                      onClick={() => setActiveTab('graph')}
-                      className={`${
-                        activeTab === 'graph'
-                          ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                      } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
-                    >
-                      Knowledge Graph
-                    </button>
-                  )}
                   <button
                     onClick={() => setActiveTab('users')}
                     className={`${
@@ -682,14 +670,14 @@ export default function ChatbotDetailPage() {
                     Users
                   </button>
                   <button
-                    onClick={() => setActiveTab('analytics')}
+                    onClick={() => setActiveTab('analytics-kg')}
                     className={`${
-                      activeTab === 'analytics'
+                      activeTab === 'analytics-kg'
                         ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
                   >
-                    Analytics
+                    Analytics & KG
                   </button>
                   <button
                     onClick={() => setActiveTab('settings')}
@@ -896,11 +884,6 @@ export default function ChatbotDetailPage() {
                 </div>
               )}
 
-              {activeTab === 'graph' && (
-                <div className="bg-transparent dark:bg-transparent space-y-6">
-                  <KnowledgeGraph chatbotId={chatbotId} />
-                </div>
-              )}
 
               {activeTab === 'users' && (
                 <div className="bg-transparent dark:bg-transparent space-y-6">
@@ -1011,14 +994,39 @@ export default function ChatbotDetailPage() {
                 </div>
               )}
 
-              {activeTab === 'analytics' && (
+              {activeTab === 'analytics-kg' && (
                 <div className="bg-transparent dark:bg-transparent space-y-6">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Analytics</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Analytics & Knowledge Graph</h2>
+
+                  {/* Analytics Section */}
                   <Card className="dark:bg-gray-800 dark:border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-gray-900 dark:text-white">Usage Analytics</CardTitle>
+                    </CardHeader>
                     <CardContent className="p-6">
                       <p className="text-gray-500 dark:text-gray-400 text-center">Analytics dashboard coming soon...</p>
                     </CardContent>
                   </Card>
+
+                  {/* Knowledge Graph Section */}
+                  {hasAuraDB && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Knowledge Graph</h3>
+                      <Neo4jBrowserButton chatbotId={chatbotId} />
+                    </div>
+                  )}
+
+                  {/* No KG Notice */}
+                  {!hasAuraDB && (
+                    <Card className="dark:bg-gray-800 dark:border-gray-700">
+                      <CardContent className="p-6">
+                        <div className="text-center text-gray-500 dark:text-gray-400">
+                          <p className="font-medium mb-2">Knowledge Graph Not Available</p>
+                          <p className="text-sm">Deploy your chatbot with AuraDB to access the knowledge graph.</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               )}
             </>
