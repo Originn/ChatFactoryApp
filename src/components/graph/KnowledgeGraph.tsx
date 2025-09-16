@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { InteractiveNvlWrapper } from '@neo4j-nvl/react';
-import { Loader2, AlertCircle, Maximize2, Minimize2 } from 'lucide-react';
+import { Loader2, AlertCircle, Maximize2, Minimize2, ExternalLink, Database, Play, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface GraphNode {
   id: string;
@@ -51,10 +53,28 @@ export function KnowledgeGraph({ chatbotId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stats, setStats] = useState<{ nodeCount: number; relationshipCount: number } | null>(null);
+  const [neo4jConfig, setNeo4jConfig] = useState<any>(null);
+  const [cypherQuery, setCypherQuery] = useState('MATCH (n) RETURN n LIMIT 25');
+  const [showQueryPanel, setShowQueryPanel] = useState(false);
 
   useEffect(() => {
     fetchGraphData();
+    fetchNeo4jConfig();
   }, [chatbotId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // FREE TIER: Fetch Neo4j config for browser.neo4j.io redirect
+  // ENTERPRISE TODO: This would include user-specific database and credentials
+  const fetchNeo4jConfig = async () => {
+    try {
+      const response = await fetch(`/api/chatbot/${chatbotId}/neo4j-config`);
+      if (response.ok) {
+        const result = await response.json();
+        setNeo4jConfig(result.config);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Neo4j config:', err);
+    }
+  };
 
   const fetchGraphData = async () => {
     try {
@@ -153,6 +173,38 @@ export function KnowledgeGraph({ chatbotId }: Props) {
     setIsFullscreen(!isFullscreen);
   };
 
+  // FREE TIER: Open in Neo4j Browser with basic connection
+  // ENTERPRISE TODO: Open with user-specific database and permissions
+  const openInNeo4jBrowser = () => {
+    if (!neo4jConfig) {
+      alert('Neo4j configuration not available');
+      return;
+    }
+
+    // Construct URL for browser.neo4j.io
+    const params = new URLSearchParams({
+      connectURL: neo4jConfig.uri,
+      // FREE TIER: Opens entire database (no user isolation)
+      // ENTERPRISE TODO: Add database parameter for user-specific access
+      // database: neo4jConfig.userDatabase || neo4jConfig.database
+    });
+
+    const browserUrl = `https://browser.neo4j.io/?${params.toString()}`;
+
+    // Open in new tab
+    window.open(browserUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const executeQuery = () => {
+    // TODO: Implement query execution within the component
+    // For now, this just updates the graph with current data
+    fetchGraphData();
+  };
+
+  const toggleQueryPanel = () => {
+    setShowQueryPanel(!showQueryPanel);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96 bg-gray-50 dark:bg-gray-900 rounded-lg">
@@ -199,9 +251,10 @@ export function KnowledgeGraph({ chatbotId }: Props) {
   return (
     <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-gray-900' : 'relative'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <Database className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             Knowledge Graph
           </h3>
           {stats && (
@@ -209,18 +262,88 @@ export function KnowledgeGraph({ chatbotId }: Props) {
               {stats.nodeCount} nodes, {stats.relationshipCount} relationships
             </p>
           )}
+          {/* FREE TIER WARNING */}
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            ⚠️ Free Tier: All users see the same data
+          </p>
         </div>
-        <button
-          onClick={toggleFullscreen}
-          className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
-          title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Query Panel Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleQueryPanel}
+            className="flex items-center gap-2"
+            title="Toggle query panel"
+          >
+            <Search className="h-4 w-4" />
+            Query
+          </Button>
+
+          {/* Open in Neo4j Browser */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openInNeo4jBrowser}
+            disabled={!neo4jConfig}
+            className="flex items-center gap-2 bg-[#4581C3] hover:bg-[#3D73B1] text-white border-[#4581C3]"
+            title="Open in Neo4j Browser"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Neo4j Browser
+          </Button>
+
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
+            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
+            {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
+      {/* Query Panel */}
+      {showQueryPanel && (
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Cypher Query</h4>
+            <span className="text-xs text-gray-500 dark:text-gray-400">(Neo4j Browser-like interface)</span>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={cypherQuery}
+              onChange={(e) => setCypherQuery(e.target.value)}
+              placeholder="Enter Cypher query..."
+              className="font-mono text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  executeQuery();
+                }
+              }}
+            />
+            <Button
+              onClick={executeQuery}
+              size="sm"
+              className="flex items-center gap-1 bg-[#4581C3] hover:bg-[#3D73B1]"
+            >
+              <Play className="h-3 w-3" />
+              Run
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Press Ctrl+Enter to execute • Currently refreshes the graph view
+          </p>
+          {/* ENTERPRISE TODO: Add query results panel */}
+          <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+            💡 Enterprise: Full query execution with results, history, and user-specific permissions
+          </div>
+        </div>
+      )}
+
       {/* Graph Visualization */}
-      <div className={`${isFullscreen ? 'h-[calc(100vh-80px)]' : 'h-96'} bg-white dark:bg-gray-900`}>
+      <div className={`${isFullscreen ? 'h-[calc(100vh-140px)]' : showQueryPanel ? 'h-80' : 'h-96'} bg-white dark:bg-gray-900`}>
         <InteractiveNvlWrapper
           nodes={graphData.nodes}
           rels={graphData.rels}
@@ -246,24 +369,47 @@ export function KnowledgeGraph({ chatbotId }: Props) {
         />
       </div>
 
-      {/* Legend */}
+      {/* Neo4j Browser-like Footer */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-            <span className="text-gray-700 dark:text-gray-300">Documents</span>
+        <div className="flex flex-wrap justify-between items-center gap-4">
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+              <span className="text-gray-700 dark:text-gray-300">Documents</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span className="text-gray-700 dark:text-gray-300">Chunks</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+              <span className="text-gray-700 dark:text-gray-300">Entities</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+              <span className="text-gray-700 dark:text-gray-300">Concepts</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            <span className="text-gray-700 dark:text-gray-300">Chunks</span>
+
+          {/* Connection Status */}
+          <div className="flex items-center gap-4 text-xs">
+            {neo4jConfig && (
+              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <span>Connected to {neo4jConfig.instanceName}</span>
+              </div>
+            )}
+            <div className="text-gray-500 dark:text-gray-400">
+              Free Tier • Enterprise needed for user isolation
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-            <span className="text-gray-700 dark:text-gray-300">Entities</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-            <span className="text-gray-700 dark:text-gray-300">Concepts</span>
+        </div>
+
+        {/* Enterprise Upgrade Notice */}
+        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="text-sm text-blue-800 dark:text-blue-200">
+            <strong>🚀 Enterprise Features:</strong> User-specific databases, RBAC, query history, advanced security controls
           </div>
         </div>
       </div>
