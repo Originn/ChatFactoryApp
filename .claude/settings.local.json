@@ -23,7 +23,9 @@
       "WebSearch",
       "WebFetch(domain:support.neo4j.com)",
       "WebFetch(domain:status.neo4j.io)",
-      "WebFetch(domain:neo4j-aura.canny.io)"
+      "WebFetch(domain:neo4j-aura.canny.io)",
+      "Read(//c/Users/ori.somekh/code_projects/langextract_project/**)",
+      "Bash(gcloud logging read:*)"
     ],
     "deny": []
   }

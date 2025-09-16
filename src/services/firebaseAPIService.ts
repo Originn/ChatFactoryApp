@@ -92,7 +92,7 @@ export interface FirebaseProject {
     uri: string;
     username: string; // Always 'neo4j' for AuraDB
     password: string;
-    database: string; // Always 'neo4j' for AuraDB
+    database: string; // Instance ID for AuraDB
     instanceName: string;
     status: 'creating' | 'running' | 'failed' | 'deleted';
     region?: string;
@@ -364,7 +364,7 @@ export class FirebaseAPIService {
                 uri: instance.connection_url,
                 username: instance.username,
                 password: instance.password,
-                database: 'neo4j',
+                database: instance.id, // Use instance ID as database name in AuraDB
                 instanceName: instance.name,
                 status: instance.status || 'creating', // Will be 'creating' initially
                 region: 'us-central1',
@@ -647,7 +647,7 @@ export class FirebaseAPIService {
                 uri: instance.connection_url,
                 username: instance.username,
                 password: instance.password,
-                database: 'neo4j',
+                database: instance.id, // Use instance ID as database name in AuraDB
                 instanceName: instance.name,
                 status: instance.status || 'creating', // Will be 'creating' initially
                 region: 'us-central1',
