@@ -101,28 +101,32 @@ export async function POST(request: NextRequest) {
     console.log(`🎯 Dual Embedding: Always enabled (default strategy)`);
     console.log(`🪣 Image storage bucket: ${imageStorageBucket}`);
 
-    // Get Neo4j AuraDB instance configuration for this chatbot
+    // Get Neo4j AuraDB instance configuration from chatbot document
     let neo4jConfig = null;
     try {
-      const firebaseProjectDoc = await adminDb.collection('firebaseProjects').doc(firebaseProjectId).get();
-      if (firebaseProjectDoc.exists) {
-        const projectData = firebaseProjectDoc.data();
-        if (projectData?.neo4jInstance) {
-          const neo4jInstance = projectData.neo4jInstance;
-          if (neo4jInstance.status === 'running') {
-            neo4jConfig = {
-              uri: neo4jInstance.uri,
-              username: neo4jInstance.username,
-              password: neo4jInstance.password,
-              database: neo4jInstance.database
-            };
-            console.log(`🗄️ Using AuraDB instance: ${neo4jInstance.instanceName} (${neo4jInstance.uri})`);
-          } else {
-            console.warn(`⚠️ AuraDB instance not ready, status: ${neo4jInstance.status}`);
-          }
+      if (chatbotData?.neo4j) {
+        const neo4jData = chatbotData.neo4j;
+        console.log(`🔍 Found Neo4j data in chatbot:`, {
+          hasUri: !!neo4jData.uri,
+          hasUsername: !!neo4jData.username,
+          hasPassword: !!neo4jData.password,
+          hasDatabase: !!neo4jData.database,
+          status: neo4jData.status
+        });
+
+        if (neo4jData.uri && neo4jData.username && neo4jData.password && neo4jData.status !== 'deleted') {
+          neo4jConfig = {
+            uri: neo4jData.uri,
+            username: neo4jData.username,
+            password: neo4jData.password,
+            database: neo4jData.database || 'neo4j'
+          };
+          console.log(`🗄️ Using AuraDB instance: ${neo4jData.instanceName || neo4jData.instanceId} (${neo4jData.uri})`);
         } else {
-          console.log(`📝 No Neo4j AuraDB instance configured for this chatbot`);
+          console.warn(`⚠️ AuraDB instance not ready or missing credentials, status: ${neo4jData.status}`);
         }
+      } else {
+        console.log(`📝 No Neo4j AuraDB instance configured for this chatbot`);
       }
     } catch (neo4jError) {
       console.error('❌ Error retrieving Neo4j configuration:', neo4jError);
