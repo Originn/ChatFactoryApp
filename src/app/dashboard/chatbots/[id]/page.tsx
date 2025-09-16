@@ -19,6 +19,7 @@ import UserPDFManager from '@/components/dashboard/UserPDFManager';
 import InlineDocumentUpload from '@/components/dashboard/InlineDocumentUpload';
 import { ClientFirebaseProjectService } from '@/services/clientFirebaseProjectService';
 import { ChatbotConfig } from '@/types/chatbot';
+import { KnowledgeGraph } from '@/components/graph/KnowledgeGraph';
 
 export default function ChatbotDetailPage() {
   const { user } = useAuth();
@@ -27,7 +28,7 @@ export default function ChatbotDetailPage() {
   const chatbotId = params.id as string;
   
   // State variables
-  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'users' | 'analytics' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'graph' | 'users' | 'analytics' | 'settings'>('overview');
   const [chatbot, setChatbot] = useState<ChatbotConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -658,6 +659,18 @@ export default function ChatbotDetailPage() {
                   >
                     Documents
                   </button>
+                  {hasAuraDB && (
+                    <button
+                      onClick={() => setActiveTab('graph')}
+                      className={`${
+                        activeTab === 'graph'
+                          ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                      } whitespace-nowrap py-4 px-2 sm:px-1 border-b-2 font-medium text-sm flex-shrink-0`}
+                    >
+                      Knowledge Graph
+                    </button>
+                  )}
                   <button
                     onClick={() => setActiveTab('users')}
                     className={`${
@@ -880,6 +893,12 @@ export default function ChatbotDetailPage() {
                     chatbotId={chatbotId}
                     showChatbotFilter={false}
                   />
+                </div>
+              )}
+
+              {activeTab === 'graph' && (
+                <div className="bg-transparent dark:bg-transparent space-y-6">
+                  <KnowledgeGraph chatbotId={chatbotId} />
                 </div>
               )}
 
