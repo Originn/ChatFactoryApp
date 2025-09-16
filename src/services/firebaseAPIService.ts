@@ -439,14 +439,30 @@ export class FirebaseAPIService {
 
         await projectRef.update(updateData);
 
-        // Update chatbot with Firebase project reference
-        await adminDb.collection('chatbots').doc(chatbotId).update({
+        const chatbotUpdateData = this.filterUndefinedValues({
           firebaseProjectId: projectId,
           firebaseConfig: firebaseConfig,
           updatedAt: Timestamp.now(),
           ...(Object.keys(buckets).length > 0 && { storageBuckets: buckets }),
-          ...(serviceAccount && { firebaseServiceAccount: serviceAccount })
+          ...(serviceAccount && { firebaseServiceAccount: serviceAccount }),
+          ...(neo4jInstance && {
+            neo4j: {
+              instanceId: neo4jInstance.instanceId,
+              instanceName: neo4jInstance.instanceName,
+              uri: neo4jInstance.uri,
+              username: neo4jInstance.username,
+              password: neo4jInstance.password,
+              database: neo4jInstance.database,
+              status: neo4jInstance.status,
+              region: neo4jInstance.region,
+              memory: neo4jInstance.memory,
+              cloudProvider: neo4jInstance.cloudProvider,
+              createdAt: neo4jInstance.createdAt
+            }
+          })
         });
+
+        await adminDb.collection('chatbots').doc(chatbotId).update(chatbotUpdateData);
 
         console.log('🎉 Firebase project setup completed successfully via SDK:', projectId);
         
@@ -727,6 +743,29 @@ export class FirebaseAPIService {
         });
 
         await projectRef.update(updateDataReusable);
+
+        const chatbotUpdateData = this.filterUndefinedValues({
+          firebaseProjectId: projectId,
+          firebaseConfig,
+          updatedAt: Timestamp.now(),
+          ...(neo4jInstance && {
+            neo4j: {
+              instanceId: neo4jInstance.instanceId,
+              instanceName: neo4jInstance.instanceName,
+              uri: neo4jInstance.uri,
+              username: neo4jInstance.username,
+              password: neo4jInstance.password,
+              database: neo4jInstance.database,
+              status: neo4jInstance.status,
+              region: neo4jInstance.region,
+              memory: neo4jInstance.memory,
+              cloudProvider: neo4jInstance.cloudProvider,
+              createdAt: neo4jInstance.createdAt
+            }
+          })
+        });
+
+        await adminDb.collection('chatbots').doc(chatbotId).update(chatbotUpdateData);
 
         console.log('✅ Existing Firebase project successfully configured for chatbot');
         return { success: true, project: completeProject };
