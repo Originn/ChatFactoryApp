@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { InteractiveNvlWrapper } from '@neo4j-nvl/react';
-import { Loader2, AlertCircle, Maximize2, Minimize2, ExternalLink, Database, Play, Search } from 'lucide-react';
+import { Loader2, AlertCircle, Maximize2, Minimize2, ExternalLink, Database, Play, Search, Copy, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -56,6 +56,8 @@ export function KnowledgeGraph({ chatbotId }: Props) {
   const [neo4jConfig, setNeo4jConfig] = useState<any>(null);
   const [cypherQuery, setCypherQuery] = useState('MATCH (n) RETURN n LIMIT 25');
   const [showQueryPanel, setShowQueryPanel] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     fetchGraphData();
@@ -218,6 +220,24 @@ export function KnowledgeGraph({ chatbotId }: Props) {
 
   const toggleQueryPanel = () => {
     setShowQueryPanel(!showQueryPanel);
+  };
+
+  const copyPassword = async () => {
+    if (!neo4jConfig?.password) return;
+
+    try {
+      await navigator.clipboard.writeText(neo4jConfig.password);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy password:', err);
+    }
+  };
+
+  const getMaskedPassword = (password: string) => {
+    if (!password) return '';
+    // Show first 4 characters, mask the rest
+    return password.substring(0, 4) + '*'.repeat(password.length - 4);
   };
 
   if (loading) {
@@ -435,8 +455,34 @@ export function KnowledgeGraph({ chatbotId }: Props) {
         <div className="mt-3 space-y-2">
           {neo4jConfig && (
             <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <div className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>🔑 Password Required:</strong> After clicking "Neo4j Browser", enter password: <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{neo4jConfig.password}</code>
+              <div className="text-sm text-amber-800 dark:text-amber-200 space-y-2">
+                <div>
+                  <strong>🔑 Password Required:</strong> After clicking "Neo4j Browser", enter the password below:
+                </div>
+                <div className="flex items-center gap-2 bg-amber-100 dark:bg-amber-800 p-2 rounded">
+                  <code className="flex-1 font-mono text-sm">
+                    {showPassword ? neo4jConfig.password : getMaskedPassword(neo4jConfig.password)}
+                  </code>
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1 hover:bg-amber-200 dark:hover:bg-amber-700 rounded transition-colors"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </button>
+                  <button
+                    onClick={copyPassword}
+                    className="p-1 hover:bg-amber-200 dark:hover:bg-amber-700 rounded transition-colors"
+                    title="Copy password"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </button>
+                </div>
+                {copySuccess && (
+                  <div className="text-xs text-green-700 dark:text-green-300">
+                    ✓ Password copied to clipboard!
+                  </div>
+                )}
               </div>
             </div>
           )}
