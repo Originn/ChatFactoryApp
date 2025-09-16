@@ -108,9 +108,13 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
                 hasPassword: !!neo4jData.password
               });
 
-              // Extract instance ID from URI (e.g., "neo4j+s://caff65b9.databases.neo4j.io" -> "caff65b9")
-              let instanceId = null;
-              if (neo4jData.uri) {
+              // Get instance ID directly from neo4j.instanceId field, fallback to URI extraction
+              let instanceId = neo4jData.instanceId;
+
+              if (instanceId) {
+                console.log(`🎯 Using direct instance ID: ${instanceId}`);
+              } else if (neo4jData.uri) {
+                // Fallback: extract from URI if instanceId field is missing
                 const uriMatch = neo4jData.uri.match(/\/\/([a-f0-9]+)\.databases\.neo4j\.io/);
                 if (uriMatch) {
                   instanceId = uriMatch[1];

@@ -123,21 +123,17 @@ export default function ChatbotDetailPage() {
             status: neo4jData.status
           });
 
-          // Extract instance ID from URI and check if it's valid
-          if (neo4jData.uri && neo4jData.status !== 'deleted') {
-            const uriMatch = neo4jData.uri.match(/\/\/([a-f0-9]+)\.databases\.neo4j\.io/);
-            if (uriMatch) {
-              const instanceId = uriMatch[1];
-              console.log('✅ AuraDB instance found with ID:', instanceId);
-              setAuraDBInstanceName(`chatbot-${chatbotId}`);
-              return true;
-            } else {
-              console.log('❌ Could not extract instance ID from URI:', neo4jData.uri);
-            }
+          // Check if instance exists and is not deleted
+          if (neo4jData.instanceId && neo4jData.status !== 'deleted') {
+            console.log('✅ AuraDB instance found with ID:', neo4jData.instanceId);
+            setAuraDBInstanceName(neo4jData.instanceName || `chatbot-${chatbotId}`);
+            return true;
           } else if (neo4jData.status === 'deleted') {
             console.log('❌ Neo4j instance marked as deleted');
+          } else if (!neo4jData.instanceId) {
+            console.log('❌ No instance ID found in Neo4j data');
           } else {
-            console.log('❌ No valid Neo4j URI found');
+            console.log('❌ Neo4j instance not available');
           }
         } else {
           console.log('❌ No neo4j field in chatbot data');
