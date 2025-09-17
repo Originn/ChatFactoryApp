@@ -162,25 +162,25 @@ export function Neo4jBrowserButton({ chatbotId }: Props) {
           </div>
 
           {/* Password Section */}
-          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <div className="text-sm text-amber-800 dark:text-amber-200 space-y-2">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
               <div>
                 <strong>🔑 Password Required:</strong> After clicking "Open Neo4j Browser", enter the password below:
               </div>
-              <div className="flex items-center gap-2 bg-amber-100 dark:bg-amber-800 p-2 rounded">
+              <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-800 p-2 rounded">
                 <code className="flex-1 font-mono text-sm">
                   {showPassword ? neo4jConfig.password : getMaskedPassword(neo4jConfig.password)}
                 </code>
                 <button
                   onClick={() => setShowPassword(!showPassword)}
-                  className="p-1 hover:bg-amber-200 dark:hover:bg-amber-700 rounded transition-colors"
+                  className="p-1 hover:bg-blue-200 dark:hover:bg-blue-700 rounded transition-colors"
                   title={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                 </button>
                 <button
                   onClick={copyPassword}
-                  className="p-1 hover:bg-amber-200 dark:hover:bg-amber-700 rounded transition-colors"
+                  className="p-1 hover:bg-blue-200 dark:hover:bg-blue-700 rounded transition-colors"
                   title="Copy password"
                 >
                   <Copy className="h-3 w-3" />
