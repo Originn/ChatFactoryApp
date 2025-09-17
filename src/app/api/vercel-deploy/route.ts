@@ -674,6 +674,12 @@ export async function POST(request: NextRequest) {
       GCLOUD_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-documents`,
       GCLOUD_PRIVATE_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-private-images`,
       GCLOUD_DOCUMENT_IMAGES_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-document-images`,
+
+      // Neo4j configuration - AVAILABLE FROM FIRESTORE CHATBOT DATA
+      NEO4J_URI: chatbotData?.neo4j?.uri || '',
+      NEO4J_USERNAME: chatbotData?.neo4j?.username || '',
+      NEO4J_PASSWORD: chatbotData?.neo4j?.password || '',
+      NEO4J_DATABASE: chatbotData?.neo4j?.database || 'neo4j',
     };
     
     // Filter out empty values but keep empty strings for optional fields
@@ -703,6 +709,20 @@ export async function POST(request: NextRequest) {
     console.log('🔍 Pinecone Configuration Check:');
     console.log('PINECONE_INDEX_NAME:', filteredDynamicEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
     console.log('PINECONE_NAMESPACE:', filteredDynamicEnvVars.PINECONE_NAMESPACE ? 'SET ✅' : 'MISSING ❌');
+
+    // Debug: Log Neo4j configuration specifically
+    console.log('🔍 Neo4j Configuration Check:');
+    console.log('NEO4J_URI:', filteredDynamicEnvVars.NEO4J_URI ? 'SET ✅' : 'MISSING ❌');
+    console.log('NEO4J_USERNAME:', filteredDynamicEnvVars.NEO4J_USERNAME ? 'SET ✅' : 'MISSING ❌');
+    console.log('NEO4J_PASSWORD:', filteredDynamicEnvVars.NEO4J_PASSWORD ? 'SET ✅' : 'MISSING ❌');
+    console.log('NEO4J_DATABASE:', filteredDynamicEnvVars.NEO4J_DATABASE ? 'SET ✅' : 'MISSING ❌');
+    console.log('Neo4j Source Data:', {
+      hasNeo4jConfig: !!chatbotData?.neo4j,
+      uri: chatbotData?.neo4j?.uri ? 'Present' : 'Missing',
+      username: chatbotData?.neo4j?.username ? 'Present' : 'Missing',
+      password: chatbotData?.neo4j?.password ? 'Present' : 'Missing',
+      database: chatbotData?.neo4j?.database || 'Default'
+    });
     
     // Set Phase 2 environment variables on the project
     console.log('📤 Setting Phase 2 environment variables on project:', projectName);
@@ -741,12 +761,20 @@ export async function POST(request: NextRequest) {
       'NEXT_PUBLIC_CHATBOT_NAME',
       'OPENAI_API_KEY',
       'PINECONE_API_KEY',
-      // Phase 2 critical vars  
+      // Phase 2 critical vars
       'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
       'NEXT_PUBLIC_FIREBASE_API_KEY',
       'FIREBASE_CLIENT_EMAIL',
       'PINECONE_INDEX_NAME'
     ];
+
+    // Add Neo4j variables to critical list if Neo4j is configured for this chatbot
+    if (chatbotData?.neo4j?.uri) {
+      criticalVars.push('NEO4J_URI', 'NEO4J_USERNAME', 'NEO4J_PASSWORD');
+      console.log('📋 Neo4j configured - added Neo4j variables to critical verification list');
+    } else {
+      console.log('📋 No Neo4j configuration found - skipping Neo4j variable verification');
+    }
     
     while (retryCount < maxRetries) {
       verification = await verifyEnvironmentVariables(VERCEL_API_TOKEN, projectName, criticalVars);
