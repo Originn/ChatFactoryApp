@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { shouldBypassComingSoon, getClientIP } from '@/lib/bypass'
 
 export function middleware(request: NextRequest) {
   console.log('🚧 MIDDLEWARE IS RUNNING!', request.nextUrl.pathname)
   const { pathname } = request.nextUrl
-  
+
   // Always allow access to API routes, static assets, and Next.js internals
   if (
     pathname.startsWith('/_next/') ||
@@ -18,30 +19,38 @@ export function middleware(request: NextRequest) {
   ) {
     return NextResponse.next()
   }
-  
+
   // Check if coming soon mode is enabled
   const isComingSoon = process.env.NEXT_PUBLIC_COMING_SOON === 'true'
-  
+
   console.log('🚧 Middleware executing:', {
     path: pathname,
     isComingSoon,
     envVar: process.env.NEXT_PUBLIC_COMING_SOON,
-    url: request.url
+    url: request.url,
+    ip: getClientIP(request)
   });
-  
+
   if (!isComingSoon) {
     console.log('🚧 Coming soon mode disabled, allowing normal access');
     return NextResponse.next()
   }
-  
+
   // Allow access to coming soon page itself
   if (pathname === '/coming-soon') {
     console.log('🚧 Allowing access to coming soon page');
     return NextResponse.next()
   }
-  
+
+  // Check bypass conditions
+  const canBypass = shouldBypassComingSoon(request);
+  if (canBypass) {
+    console.log('🟢 Bypass granted, allowing normal access');
+    return NextResponse.next()
+  }
+
   // Redirect all other routes to coming soon page
-  console.log('🚧 Redirecting to coming soon page');
+  console.log('🔴 No bypass, redirecting to coming soon page');
   return NextResponse.redirect(new URL('/coming-soon', request.url))
 }
 

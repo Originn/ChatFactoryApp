@@ -21,32 +21,39 @@ import {
 import { auth, googleProvider } from '@/lib/firebase/config';
 import { UserProfile, SignupData, LoginData, UpdateUserProfileData } from '@/types/user';
 import { UserService } from '@/services/userService';
+import { shouldUserBypassComingSoon } from '@/lib/bypass';
 
 interface AuthContextProps {
   // User state
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  
+
+  // Bypass state
+  canBypassComingSoon: boolean;
+
   // Authentication methods
   signInWithEmail: (data: LoginData) => Promise<User>;
   signInWithGoogle: () => Promise<User>;
   signUpWithEmail: (data: SignupData) => Promise<User>;
   signOut: () => Promise<void>;
-  
+
   // Password management
   resetPassword: (email: string) => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  
+
   // Profile management
   updateProfile: (data: UpdateUserProfileData) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
-  
+
   // Email verification
   sendVerificationEmail: () => Promise<void>;
-  
+
   // Utility functions
   refreshUserProfile: () => Promise<void>;
+
+  // Bypass management
+  checkBypassStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -55,11 +62,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [canBypassComingSoon, setCanBypassComingSoon] = useState(false);
 
   // Simple mobile detection
   const isMobileDevice = () => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            window.innerWidth <= 768;
+  };
+
+  // Check bypass status
+  const checkBypassStatus = async () => {
+    try {
+      // Check user-based bypass first
+      if (user?.email && shouldUserBypassComingSoon(user.email)) {
+        // User is whitelisted, set bypass token
+        await fetch('/api/bypass-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user.email,
+            action: 'check-user'
+          })
+        });
+        setCanBypassComingSoon(true);
+        console.log('🟢 User bypass granted for:', user.email);
+        return;
+      }
+
+      // Check IP-based bypass
+      const response = await fetch('/api/bypass-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'check-ip' })
+      });
+
+      const result = await response.json();
+      setCanBypassComingSoon(result.bypass || false);
+
+      if (result.bypass) {
+        console.log('🟢 IP bypass granted:', result.reason);
+      } else {
+        console.log('🔴 No bypass available:', result.reason);
+      }
+    } catch (error) {
+      console.error('❌ Bypass check failed:', error);
+      setCanBypassComingSoon(false);
+    }
   };
 
   // Load user profile when user changes
@@ -68,18 +116,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await UserService.getUserProfile(user.uid);
         setUserProfile(profile);
-        
+
         // Update login metadata
         if (profile) {
           await UserService.updateLoginMetadata(user.uid);
         }
+
+        // Check bypass status for authenticated user
+        await checkBypassStatus();
       } catch (error) {
         console.warn('Could not load user profile from Firestore:', error);
         // Set userProfile to null but don't break authentication
         setUserProfile(null);
+        // Still check bypass status even if profile load fails
+        await checkBypassStatus();
       }
     } else {
       setUserProfile(null);
+      // Check IP-based bypass even when not authenticated
+      await checkBypassStatus();
     }
   };
 
@@ -261,6 +316,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     userProfile,
     loading,
+    canBypassComingSoon,
     signInWithEmail,
     signInWithGoogle,
     signUpWithEmail,
@@ -270,7 +326,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateProfile: updateUserProfile,
     deleteAccount,
     sendVerificationEmail,
-    refreshUserProfile
+    refreshUserProfile,
+    checkBypassStatus
   };
 
   return (

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { sendEmailVerification } from 'firebase/auth';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, canBypassComingSoon } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -19,11 +19,15 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     // Don't redirect if we're still loading authentication state
     if (loading) return;
     
-    // Skip all authentication checks if in coming soon mode
+    // Skip all authentication checks if in coming soon mode (unless user has bypass)
     const isComingSoon = process.env.NEXT_PUBLIC_COMING_SOON === 'true';
-    if (isComingSoon) {
+    if (isComingSoon && !canBypassComingSoon) {
       console.log('🚧 ProtectedRoute: Coming soon mode active, skipping auth checks');
       return;
+    }
+
+    if (isComingSoon && canBypassComingSoon) {
+      console.log('🟢 ProtectedRoute: Coming soon bypass active, continuing with normal auth checks');
     }
     
     // Don't redirect if we're already on a public page
@@ -68,11 +72,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
      (localStorage.getItem('devEmailVerified') === 'true' || 
       (user && localStorage.getItem(`user_${user.uid}_verified`) === 'true')));
 
-  // Skip email verification check if in coming soon mode
+  // Skip email verification check if in coming soon mode (unless user has bypass)
   const isComingSoon = process.env.NEXT_PUBLIC_COMING_SOON === 'true';
-  
-  // Require email verification (but not in coming soon mode)
-  if (!isComingSoon && user && !user.emailVerified && !devEmailVerified && pathname !== '/email-verification') {
+
+  // Require email verification (but not in coming soon mode unless user has bypass)
+  if ((!isComingSoon || canBypassComingSoon) && user && !user.emailVerified && !devEmailVerified && pathname !== '/email-verification') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-md">
