@@ -17,6 +17,7 @@ import { uploadFavicon } from "@/lib/utils/faviconUpload";
 import { Info, Brain, Bot, Palette } from "lucide-react";
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import { FaviconUploader } from '@/components/FaviconUploader';
+import { Neo4jAuraService } from '@/services/neo4jAuraService';
 
 export default function NewChatbotPage() {
   const router = useRouter();
@@ -520,15 +521,46 @@ export default function NewChatbotPage() {
           queries: 0,
           successRate: 0,
           lastUpdated: serverTimestamp(),
-        },
-        // Neo4j configuration for GraphRAG processing
-        neo4j: {
-          uri: 'neo4j+s://caff65b9.databases.neo4j.io',
-          username: 'neo4j',
-          password: '5Q1vlOyp_pO2gpekLf-1YUFatyg8yniGevdF8uXvfLo',
-          database: 'neo4j'
         }
       };
+
+      // Create Neo4j AuraDB instance for GraphRAG processing
+      console.log('🏗️ Creating Neo4j AuraDB instance for chatbot...');
+      try {
+        const neo4jResult = await Neo4jAuraService.createInstance(
+          newChatbotRef.id,
+          formData.name.trim(),
+          {
+            region: 'us-central1',
+            cloudProvider: 'gcp'
+          }
+        );
+
+        if (neo4jResult.success && neo4jResult.instance) {
+          console.log('✅ Neo4j instance created successfully:', neo4jResult.instance.id);
+          chatbotData.neo4j = {
+            uri: neo4jResult.instance.connection_url,
+            username: neo4jResult.instance.username,
+            password: neo4jResult.instance.password,
+            database: neo4jResult.instance.tenant_id || 'neo4j',
+            instanceId: neo4jResult.instance.id,
+            instanceName: neo4jResult.instance.name,
+            status: neo4jResult.instance.status,
+            cloudProvider: neo4jResult.instance.cloud_provider || 'gcp',
+            region: neo4jResult.instance.region || 'us-central1',
+            memory: neo4jResult.instance.memory || '1GB',
+            createdAt: serverTimestamp()
+          };
+        } else {
+          console.error('❌ Failed to create Neo4j instance:', neo4jResult.error);
+          // Continue without Neo4j - chatbot can still function without GraphRAG
+          console.log('⚠️ Continuing chatbot creation without Neo4j GraphRAG capabilities');
+        }
+      } catch (neo4jError) {
+        console.error('❌ Neo4j instance creation error:', neo4jError);
+        // Continue without Neo4j - chatbot can still function without GraphRAG
+        console.log('⚠️ Continuing chatbot creation without Neo4j GraphRAG capabilities');
+      }
 
       // Only add authConfig if authentication is required
       if (formData.requireAuth) {
