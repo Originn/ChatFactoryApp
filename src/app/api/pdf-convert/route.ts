@@ -47,6 +47,32 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
+    const webhookBaseCandidates: Array<string | undefined | null> = [
+      chatbotData?.deployment?.customDomain,
+      chatbotData?.deployment?.deploymentUrl,
+      chatbotData?.deployment?.previewUrl
+    ];
+
+    const chatbotWebhookBaseUrl = webhookBaseCandidates
+      .map(candidate => {
+        if (!candidate) {
+          return null;
+        }
+        const trimmed = String(candidate).trim();
+        if (!trimmed) {
+          return null;
+        }
+        const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+        return withProtocol.replace(/\/+$/, '');
+      })
+      .find(Boolean) || null;
+
+    if (!chatbotWebhookBaseUrl) {
+      console.warn(`⚠️ No deployment URL found for chatbot ${chatbotId}; schema webhook will be skipped.`);
+    } else {
+      console.log(`🔗 Chatbot webhook base URL: ${chatbotWebhookBaseUrl}`);
+    }
+
     // Get vectorstore configuration
     const vectorstore = chatbotData?.vectorstore;
     if (!vectorstore || !vectorstore.indexName) {
@@ -151,7 +177,8 @@ export async function POST(request: NextRequest) {
       neo4jUri: neo4jConfig?.uri,
       neo4jUsername: neo4jConfig?.username,
       neo4jPassword: neo4jConfig?.password,
-      neo4jDatabase: neo4jConfig?.database
+      neo4jDatabase: neo4jConfig?.database,
+      chatbotWebhookUrl: chatbotWebhookBaseUrl || undefined
     });
 
     if (result.success) {

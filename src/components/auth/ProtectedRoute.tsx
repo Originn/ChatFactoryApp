@@ -18,28 +18,29 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Don't redirect if we're still loading authentication state
     if (loading) return;
-    
-    // Skip all authentication checks if in coming soon mode (unless user has bypass)
+
+    // Check if coming soon mode is active
     const isComingSoon = process.env.NEXT_PUBLIC_COMING_SOON === 'true';
     if (isComingSoon && !canBypassComingSoon) {
-      console.log('🚧 ProtectedRoute: Coming soon mode active, skipping auth checks');
+      console.log('🚧 ProtectedRoute: Coming soon mode active without bypass, redirecting to coming soon page');
+      router.push('/coming-soon');
       return;
     }
 
     if (isComingSoon && canBypassComingSoon) {
       console.log('🟢 ProtectedRoute: Coming soon bypass active, continuing with normal auth checks');
     }
-    
+
     // Don't redirect if we're already on a public page
     if (pathname === '/login' || pathname === '/signup' || pathname.startsWith('/auth/') || pathname === '/email-verification') {
       return;
     }
-    
+
     // Redirect unauthenticated users to login
     if (!user) {
       router.push('/login');
     }
-  }, [user, loading, router, pathname]);
+  }, [user, loading, router, pathname, canBypassComingSoon]);
 
   const handleResendVerification = async () => {
     if (!user) return;

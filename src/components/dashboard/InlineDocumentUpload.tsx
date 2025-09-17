@@ -52,6 +52,13 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const getPrivacyButtonClasses = (isPublic: boolean) => {
+    const base = 'text-xs px-2 py-1 rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-700';
+    if (isPublic) {
+      return `${base} bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/40 dark:hover:bg-emerald-500/25`;
+    }
+    return `${base} bg-gray-100 text-gray-700 border-transparent hover:bg-gray-200 dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500/60 dark:hover:bg-gray-500`;
+  };
   
   // YouTube-related state
   const [isYouTubeConnected, setIsYouTubeConnected] = useState(false);
@@ -1014,7 +1021,7 @@ export default function InlineDocumentUpload({ chatbotId, onUploadComplete }: In
                   </Badge>
                   <button
                     onClick={() => toggleFilePrivacy(file.id)}
-                    className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                    className={getPrivacyButtonClasses(file.isPublic)}
                     disabled={file.status !== 'pending'}
                   >
                     {file.isPublic ? '🌐 Public' : '🔒 Private'}

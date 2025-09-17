@@ -25,6 +25,8 @@ interface PDFProcessingRequest {
   imageStorageBucket?: string;
   // PDF source URL for metadata
   pdfSourceUrl?: string;
+  // Chatbot schema webhook base URL (for GraphRAG schema sync)
+  chatbotWebhookUrl?: string;
   // Neo4j configuration for GraphRAG processing
   neo4jUri?: string;
   neo4jUsername?: string;
@@ -139,6 +141,10 @@ export class PDFService {
       // Add PDF source URL for metadata
       if (request.pdfSourceUrl) {
         formData.append('pdf_source', request.pdfSourceUrl);
+      }
+
+      if (request.chatbotWebhookUrl) {
+        formData.append('chatbot_webhook_url', request.chatbotWebhookUrl);
       }
 
       // 🔒 SECURITY: Pass privacy flag to cloud converter
