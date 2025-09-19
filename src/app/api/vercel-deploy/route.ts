@@ -710,13 +710,39 @@ export async function POST(request: NextRequest) {
     console.log('PINECONE_INDEX_NAME:', filteredDynamicEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
     console.log('PINECONE_NAMESPACE:', filteredDynamicEnvVars.PINECONE_NAMESPACE ? 'SET ✅' : 'MISSING ❌');
 
+    // Re-fetch chatbot data to get the latest Neo4j configuration
+    console.log('🔄 Re-fetching chatbot data to get latest Neo4j configuration...');
+    try {
+      const updatedChatbotSnap = await adminDb.collection("chatbots").doc(chatbotId).get();
+      if (updatedChatbotSnap.exists) {
+        const updatedChatbotData = updatedChatbotSnap.data();
+
+        // Update Neo4j environment variables with fresh data
+        if (updatedChatbotData?.neo4j) {
+          console.log('✅ Found Neo4j configuration in updated chatbot data');
+          filteredDynamicEnvVars.NEO4J_URI = updatedChatbotData.neo4j.uri || '';
+          filteredDynamicEnvVars.NEO4J_USERNAME = updatedChatbotData.neo4j.username || '';
+          filteredDynamicEnvVars.NEO4J_PASSWORD = updatedChatbotData.neo4j.password || '';
+          filteredDynamicEnvVars.NEO4J_DATABASE = updatedChatbotData.neo4j.database || 'neo4j';
+
+          // Update chatbotData reference for consistency
+          chatbotData = updatedChatbotData;
+        } else {
+          console.log('⚠️ No Neo4j configuration found in updated chatbot data');
+        }
+      }
+    } catch (refetchError) {
+      console.error('❌ Error re-fetching chatbot data:', refetchError);
+      console.log('⚠️ Continuing with original chatbot data');
+    }
+
     // Debug: Log Neo4j configuration specifically
-    console.log('🔍 Neo4j Configuration Check:');
+    console.log('🔍 Neo4j Configuration Check (after re-fetch):');
     console.log('NEO4J_URI:', filteredDynamicEnvVars.NEO4J_URI ? 'SET ✅' : 'MISSING ❌');
     console.log('NEO4J_USERNAME:', filteredDynamicEnvVars.NEO4J_USERNAME ? 'SET ✅' : 'MISSING ❌');
     console.log('NEO4J_PASSWORD:', filteredDynamicEnvVars.NEO4J_PASSWORD ? 'SET ✅' : 'MISSING ❌');
     console.log('NEO4J_DATABASE:', filteredDynamicEnvVars.NEO4J_DATABASE ? 'SET ✅' : 'MISSING ❌');
-    console.log('Neo4j Source Data:', {
+    console.log('Neo4j Source Data (after re-fetch):', {
       hasNeo4jConfig: !!chatbotData?.neo4j,
       uri: chatbotData?.neo4j?.uri ? 'Present' : 'Missing',
       username: chatbotData?.neo4j?.username ? 'Present' : 'Missing',

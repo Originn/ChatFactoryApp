@@ -26,7 +26,9 @@
       "WebFetch(domain:neo4j-aura.canny.io)",
       "Read(//c/Users/ori.somekh/code_projects/langextract_project/**)",
       "Bash(gcloud logging read:*)",
-      "WebFetch(domain:community.neo4j.com)"
+      "WebFetch(domain:community.neo4j.com)",
+      "WebFetch(domain:openai.com)",
+      "WebFetch(domain:platform.openai.com)"
     ],
     "deny": []
   }

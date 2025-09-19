@@ -248,16 +248,77 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
   };
 
   // Get status badge color
+  const getFileExtension = (filename: string) => {
+    const parts = filename?.split('.');
+    if (!parts || parts.length < 2) {
+      return '';
+    }
+    return parts.pop()?.toLowerCase() || '';
+  };
+
+  const getDocumentOriginBadge = (pdf: UserPDFMetadata) => {
+    const originalExt = getFileExtension(pdf.originalFileName);
+    const outputExt = getFileExtension(pdf.pdfFileName);
+
+    if (originalExt && outputExt && originalExt !== outputExt) {
+      return (
+        <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100">
+          Converted from {originalExt.toUpperCase()}
+        </Badge>
+      );
+    }
+
+    const ext = originalExt || outputExt;
+
+    if (!ext) {
+      return (
+        <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+          Uploaded Document
+        </Badge>
+      );
+    }
+
+    if (ext === 'pdf') {
+      return (
+        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+          Uploaded PDF
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+        Uploaded {ext.toUpperCase()}
+      </Badge>
+    );
+  };
+
   const getStatusBadge = (status: UserPDFMetadata['status']) => {
     switch (status) {
       case 'completed':
-        return <Badge className="bg-green-100 text-green-800">Completed</Badge>;
+        return (
+          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+            Completed
+          </Badge>
+        );
       case 'converting':
-        return <Badge className="bg-yellow-100 text-yellow-800">Converting</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">
+            Converting
+          </Badge>
+        );
       case 'failed':
-        return <Badge className="bg-red-100 text-red-800">Failed</Badge>;
+        return (
+          <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">
+            Failed
+          </Badge>
+        );
       default:
-        return <Badge className="bg-gray-100 text-gray-800">Unknown</Badge>;
+        return (
+          <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+            Unknown
+          </Badge>
+        );
     }
   };
 
@@ -271,7 +332,7 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="text-center text-gray-500">Loading your PDFs...</div>
+          <div className="text-center text-gray-500 dark:text-gray-400">Loading your PDFs...</div>
         </CardContent>
       </Card>
     );
@@ -280,15 +341,12 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          Your CHM PDFs {chatbotId && '(This Chatbot)'}
-          {pdfs.length > 0 && <span className="text-sm font-normal ml-2">({pdfs.length} files)</span>}
-        </CardTitle>
+        <CardTitle>Your Uploads</CardTitle>
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-red-600 text-sm">{error}</p>
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 dark:bg-red-950/40 dark:border-red-800 rounded-md">
+            <p className="text-red-600 dark:text-red-300 text-sm">{error}</p>
             <Button
               variant="outline"
               size="sm"
@@ -301,21 +359,21 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
         )}
 
         {pdfs.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            <p>No CHM PDFs uploaded yet.</p>
-            <p className="text-sm mt-1">Upload CHM files to see them here.</p>
+          <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+            <p>No uploads yet.</p>
+            <p className="text-sm mt-1">Upload documents to see them here.</p>
           </div>
         ) : (
           <>
             {/* Bulk actions header */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800">
               <div className="flex items-center space-x-3">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={selectedPdfs.size === pdfs.length && pdfs.length > 0}
                     onChange={toggleSelectAll}
-                    className="rounded border-gray-300"
+                    className="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-900"
                   />
                   <span className="text-sm font-medium">
                     Select All ({selectedPdfs.size} of {pdfs.length} selected)
@@ -348,8 +406,10 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
               {pdfs.map((pdf) => (
                 <div
                   key={pdf.id}
-                  className={`border rounded-lg p-4 transition-colors ${
-                    selectedPdfs.has(pdf.id) ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'
+                  className={`border rounded-lg p-4 transition-colors bg-white dark:bg-gray-900/40 border-gray-200 dark:border-gray-800 ${
+                    selectedPdfs.has(pdf.id)
+                      ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/40 dark:border-blue-700'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-900/60'
                   }`}
                 >
                   <div className="flex items-start justify-between">
@@ -359,15 +419,16 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
                         type="checkbox"
                         checked={selectedPdfs.has(pdf.id)}
                         onChange={() => togglePDFSelection(pdf.id)}
-                        className="mt-1 rounded border-gray-300"
+                        className="mt-1 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-900"
                       />
                       
                       <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="font-medium text-gray-900">
+                        <div className="flex items-center flex-wrap gap-2 mb-2">
+                          <h3 className="font-medium text-gray-900 dark:text-gray-100">
                             {pdf.pdfFileName}
                           </h3>
                           {getStatusBadge(pdf.status)}
+                          {getDocumentOriginBadge(pdf)}
                           <Tooltip
                             content={pdf.isPublic 
                               ? "Public: Long-term access URL (1 year expiration)"
@@ -380,7 +441,7 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
                           </Tooltip>
                         </div>
                         
-                        <div className="text-sm text-gray-500 space-y-1">
+                        <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
                           <p>Original: {pdf.originalFileName}</p>
                           <p>Size: {formatFileSize(pdf.fileSize)}</p>
                           <p>Uploaded: {format(new Date(pdf.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}</p>
@@ -388,7 +449,7 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
                             <p>Vectors: {pdf.vectorCount.toLocaleString()}</p>
                           )}
                           {pdf.error && (
-                            <p className="text-red-600">Error: {pdf.error}</p>
+                            <p className="text-red-600 dark:text-red-300">Error: {pdf.error}</p>
                           )}
                         </div>
                       </div>
@@ -432,7 +493,7 @@ export default function UserPDFManager({ chatbotId, showChatbotFilter = false }:
         )}
 
         {pdfs.length > 0 && (
-          <div className="mt-4 pt-4 border-t">
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
             <Button
               variant="outline"
               size="sm"

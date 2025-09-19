@@ -88,7 +88,7 @@ export default function ComingSoonPage() {
             <img src="/logo.svg" alt="WizeChat" className="h-24 w-24 mx-auto mb-6" />
           </div>
           
-          <h1 className="text-5xl md:text-7xl font-bold mb-6 text-gradient leading-tight">
+          <h1 className="text-5xl md:text-7xl font-bold mb-6 pb-1 text-gradient leading-snug md:leading-[1.15]">
             Something Amazing<br />is Coming Soon
           </h1>
           
