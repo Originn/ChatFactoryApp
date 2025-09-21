@@ -197,6 +197,9 @@ if [ "$SKIP_PROJECT_CREATION" = "false" ]; then
         secretmanager.googleapis.com \
         --project="$PROJECT_ID"
 
+    print_info "Waiting for APIs to fully activate..."
+    sleep 10
+
     print_info "Adding Firebase to project..."
     if firebase projects:addfirebase "$PROJECT_ID"; then
         print_status "Firebase added to project successfully"
@@ -204,6 +207,9 @@ if [ "$SKIP_PROJECT_CREATION" = "false" ]; then
         print_error "Failed to add Firebase to project"
         exit 1
     fi
+
+    print_info "Waiting for Firebase services to initialize..."
+    sleep 15
 
     print_info "Creating Firestore database..."
     gcloud firestore databases create --location=us-central1 --project="$PROJECT_ID"
@@ -344,6 +350,9 @@ print_status "Firebase configuration saved to ./keys/$PROJECT_ID-firebase-config
 # Step 7: Initialize and enable authentication providers
 print_step "7" "Initializing Firebase Authentication"
 
+print_info "Waiting for Firebase project to be fully ready for auth initialization..."
+sleep 20
+
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -n1)
 
@@ -354,15 +363,40 @@ curl -s -X POST "https://serviceusage.googleapis.com/v1/projects/$PROJECT_ID/ser
     -d '{"serviceIds":["identitytoolkit.googleapis.com"]}' > /dev/null
 
 print_info "Initializing Firebase Authentication..."
-curl -s -X POST "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT_ID/identityPlatform:initializeAuth" \
+# Try the initialization with better error handling and proper headers
+INIT_RESPONSE=$(curl -s -X POST "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT_ID/identityPlatform:initializeAuth" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d '{}' > /dev/null
+    -H "X-Goog-User-Project: $PROJECT_ID" \
+    -d '{}' 2>&1)
+
+if echo "$INIT_RESPONSE" | grep -q "error"; then
+    print_warning "Firebase Auth initialization may need more time. Response: $INIT_RESPONSE"
+    print_info "Waiting additional 30 seconds and retrying..."
+    sleep 30
+
+    # Retry once more with proper headers
+    INIT_RESPONSE=$(curl -s -X POST "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT_ID/identityPlatform:initializeAuth" \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -H "X-Goog-User-Project: $PROJECT_ID" \
+        -d '{}' 2>&1)
+
+    if echo "$INIT_RESPONSE" | grep -q "error"; then
+        print_warning "Firebase Auth initialization still showing issues. Manual setup may be needed."
+        print_warning "Response: $INIT_RESPONSE"
+    else
+        print_status "Firebase Auth initialized successfully on retry"
+    fi
+else
+    print_status "Firebase Auth initialized successfully"
+fi
 
 print_info "Enabling Email/Password authentication..."
 curl -s -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
+    -H "X-Goog-User-Project: $PROJECT_ID" \
     -d '{"signIn":{"email":{"enabled":true,"passwordRequired":true}}}' > /dev/null
 
 print_info "Setting up OAuth consent screen (brand)..."
@@ -398,6 +432,7 @@ print_info "Enabling Google OAuth provider..."
 curl -s -X POST "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs?idpId=google.com" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
+    -H "X-Goog-User-Project: $PROJECT_ID" \
     -d '{"enabled":true}' > /dev/null
 
 if [ -n "$BRAND_ID" ]; then
