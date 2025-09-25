@@ -406,6 +406,9 @@ print_info "Enabling Identity-Aware Proxy API..."
 if gcloud services enable iap.googleapis.com --project="$PROJECT_ID"; then
     print_status "IAP API enabled successfully"
 
+    print_info "Waiting for IAP API to fully activate..."
+    sleep 30
+
     # Create OAuth consent screen brand
     print_info "Creating OAuth consent screen..."
     BRAND_RESULT=$(gcloud alpha iap oauth-brands create \
@@ -415,25 +418,85 @@ if gcloud services enable iap.googleapis.com --project="$PROJECT_ID"; then
 
     if echo "$BRAND_RESULT" | grep -q "already exists"; then
         print_status "OAuth consent screen already exists"
-        BRAND_ID=$(gcloud alpha iap oauth-brands list --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | head -n1 | cut -d'/' -f4)
+        BRAND_NAME=$(gcloud alpha iap oauth-brands list --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | head -n1)
+        BRAND_ID=$(echo "$BRAND_NAME" | cut -d'/' -f4)
     elif echo "$BRAND_RESULT" | grep -q "name:"; then
         print_status "OAuth consent screen created successfully"
-        BRAND_ID=$(echo "$BRAND_RESULT" | grep "name:" | cut -d'/' -f4 | head -n1)
+        BRAND_NAME=$(echo "$BRAND_RESULT" | grep "name:" | head -n1 | cut -d' ' -f2)
+        BRAND_ID=$(echo "$BRAND_NAME" | cut -d'/' -f4)
     else
         print_warning "Could not create OAuth consent screen"
         BRAND_ID=""
+        BRAND_NAME=""
     fi
 else
     print_warning "Could not enable IAP API"
     BRAND_ID=""
 fi
 
-print_info "Enabling Google OAuth provider..."
-curl -s -X POST "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs?idpId=google.com" \
+print_info "Creating OAuth client for Firebase Authentication..."
+if [ -n "$BRAND_NAME" ]; then
+    # Get project number (required for OAuth client creation)
+    PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
+
+    print_info "Creating OAuth client using gcloud CLI..."
+    OAUTH_CLIENT_RESULT=$(gcloud iap oauth-clients create "$BRAND_NAME" \
+        --display_name="Firebase Auth Client" \
+        --project="$PROJECT_ID" 2>&1 || echo "error")
+
+    if echo "$OAUTH_CLIENT_RESULT" | grep -q "error"; then
+        print_warning "OAuth client creation failed: $OAUTH_CLIENT_RESULT"
+        print_info "Falling back to API-based Google provider enablement..."
+    else
+        print_status "OAuth client created successfully"
+        # Extract client ID and secret from the result
+        OAUTH_CLIENT_ID=$(echo "$OAUTH_CLIENT_RESULT" | grep -o '[0-9]\+-[a-zA-Z0-9_]\+\.apps\.googleusercontent\.com' | head -n1)
+        OAUTH_CLIENT_SECRET=$(echo "$OAUTH_CLIENT_RESULT" | grep "secret:" | cut -d' ' -f2)
+        print_info "OAuth Client ID: $OAUTH_CLIENT_ID"
+        print_info "OAuth Client Secret: $OAUTH_CLIENT_SECRET"
+    fi
+fi
+
+print_info "Enabling Google OAuth provider in Firebase..."
+# Use OAuth client credentials if we have them, otherwise just enable
+if [ -n "$OAUTH_CLIENT_ID" ] && [ -n "$OAUTH_CLIENT_SECRET" ]; then
+    print_info "Configuring Google provider with OAuth client credentials..."
+    GOOGLE_PROVIDER_DATA=$(cat << EOF
+{
+  "enabled": true,
+  "clientId": "$OAUTH_CLIENT_ID",
+  "clientSecret": "$OAUTH_CLIENT_SECRET"
+}
+EOF
+)
+else
+    print_info "Enabling Google provider without client credentials..."
+    GOOGLE_PROVIDER_DATA='{"enabled":true}'
+fi
+
+GOOGLE_PROVIDER_RESPONSE=$(curl -s -X POST "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs?idpId=google.com" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
     -H "X-Goog-User-Project: $PROJECT_ID" \
-    -d '{"enabled":true}' > /dev/null
+    -d "$GOOGLE_PROVIDER_DATA" 2>&1)
+
+if echo "$GOOGLE_PROVIDER_RESPONSE" | grep -q "error"; then
+    # Provider might already exist, try to update instead
+    print_info "Provider may already exist, attempting to update..."
+    GOOGLE_PROVIDER_RESPONSE=$(curl -s -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs/google.com" \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -H "X-Goog-User-Project: $PROJECT_ID" \
+        -d "$GOOGLE_PROVIDER_DATA" 2>&1)
+
+    if echo "$GOOGLE_PROVIDER_RESPONSE" | grep -q "error"; then
+        print_warning "Google provider configuration response: $GOOGLE_PROVIDER_RESPONSE"
+    else
+        print_status "Google provider updated successfully"
+    fi
+else
+    print_status "Google provider enabled successfully"
+fi
 
 if [ -n "$BRAND_ID" ]; then
     print_status "OAuth consent screen configured. Brand ID: $BRAND_ID"

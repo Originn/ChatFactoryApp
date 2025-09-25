@@ -1,213 +1,98 @@
-# ChatFactory Pool Management Scripts
+# ChatFactory Pool Management
 
-Automated deployment and management scripts for ChatFactory pool projects.
+Streamlined automated deployment system for creating Firebase projects that serve as infrastructure for ChatFactory chatbot deployments.
 
 ## 🚀 Quick Start
 
-### 1. Run the Master Script (Recommended)
+### 1. First Time Setup (Run once)
 ```bash
-./scripts/chatfactory-manager.sh
+./scripts/pool-management/setup-prerequisites.sh
 ```
 
-This interactive menu provides access to all operations with guidance.
+Sets up authentication, validates tools (gcloud, firebase-cli, jq), and configures billing accounts.
 
-### 2. Or Run Individual Scripts
+### 2. Deploy New Pool Projects
 
-#### First Time Setup
+Deploy any pool number you want:
+
 ```bash
-./scripts/setup-prerequisites.sh
+# Deploy specific pools
+./scripts/pool-management/deploy-chatfactory-pool.sh 009
+./scripts/pool-management/deploy-chatfactory-pool.sh 010
+./scripts/pool-management/deploy-chatfactory-pool.sh 025
+
+# Deploy with custom project name
+./scripts/pool-management/deploy-chatfactory-pool.sh 011 "Custom Pool Name"
 ```
 
-#### Deploy chatfactory-pool-002 (Test)
-```bash
-./scripts/deploy-chatfactory-pool-002.sh
-```
+## 🎯 What Gets Created
 
-#### Validate Deployment
-```bash
-./scripts/validate-deployment.sh chatfactory-pool-002 [vercel-url]
-```
+Each pool deployment automatically creates:
 
-#### Check Project Status
-```bash
-./scripts/check-project-status.sh chatfactory-pool-002
-./scripts/check-project-status.sh --all
-```
+- ✅ **Google Cloud Project** with billing linked
+- ✅ **Firebase Project** with authentication enabled
+- ✅ **OAuth Consent Screen** configured
+- ✅ **OAuth Client** for Google Sign-in
+- ✅ **Google Authentication Provider** fully configured
+- ✅ **Firestore Database** ready for use
+- ✅ **Service Account** for chatbot backend operations
+- ✅ **Project Tracking** in central management system
 
-#### Cleanup for Re-testing
-```bash
-./scripts/cleanup-pool-002.sh
-```
+## 📋 Requirements
 
-## 📋 Script Overview
+- Google Cloud CLI (`gcloud`) with Editor permissions
+- Firebase CLI (`firebase`) authenticated
+- `jq` command-line JSON processor
+- Personal account: `ori.somekh@wizechat.ai` with project access
 
-### Core Scripts
+## 🔧 Configuration
 
-| Script | Purpose | Usage |
-|--------|---------|-------|
-| `chatfactory-manager.sh` | Interactive master script | `./scripts/chatfactory-manager.sh` |
-| `setup-prerequisites.sh` | One-time environment setup | `./scripts/setup-prerequisites.sh` |
-| `deploy-chatfactory-pool-002.sh` | Deploy pool-002 test project | `./scripts/deploy-chatfactory-pool-002.sh` |
-| `validate-deployment.sh` | Test deployment health | `./scripts/validate-deployment.sh <project-id>` |
-| `check-project-status.sh` | Check project status | `./scripts/check-project-status.sh <project-id>` |
-| `cleanup-pool-002.sh` | Reset pool-002 for testing | `./scripts/cleanup-pool-002.sh` |
+Pool projects are configured with:
+- **Billing Account**: `011C35-0F1A1B-49FBEC`
+- **Main Project**: `docsai-chatbot-app` (for central tracking)
+- **Authentication**: Personal account throughout (no service account switching)
+- **Naming**: `chatfactory-pool-XXX` format
 
-### Features
+## ⚡ Features
 
-#### 🔐 Security
-- **Individual service accounts** per project for complete isolation
-- **Minimal permissions** following principle of least privilege
-- **Secure key management** with local storage in `./keys/`
+- **Generic Deployment**: Single script handles any pool number
+- **Automatic OAuth Setup**: Creates and configures OAuth client automatically
+- **Timing Optimized**: Proper delays for Google Cloud service propagation
+- **Error Recovery**: Retry logic and comprehensive error handling
+- **No Manual Steps**: Fully automated from start to finish
 
-#### 📊 Project Tracking
-- **Dual tracking system**: Google Secret Manager + Firestore
-- **Real-time status**: available, in-use, maintenance, deprecated
-- **Central visibility**: Track all projects from one location
-
-#### 🔄 Smart Reuse
-- **Project discovery**: Automatically finds available projects
-- **Resource optimization**: Reuses existing infrastructure
-- **Cost efficiency**: Minimizes new project creation
-
-#### 🧪 Testing Framework
-- **Complete validation**: OAuth, Firebase, Vercel integration
-- **Easy cleanup**: Reset projects for iterative testing
-- **Health monitoring**: System-wide status checks
-
-## 🗂️ File Structure
+## 📁 Project Structure
 
 ```
-scripts/
-├── chatfactory-manager.sh          # Master interactive script
-├── setup-prerequisites.sh          # Environment validation & setup
-├── deploy-chatfactory-pool-002.sh  # Test deployment script
-├── validate-deployment.sh          # Deployment validation
-├── check-project-status.sh         # Project status checker
-├── cleanup-pool-002.sh            # Pool-002 cleanup
-└── README.md                       # This file
-
-keys/                               # Service account keys (auto-created)
-├── docsai-chatbot-app-main-key.json
-├── chatfactory-pool-002-service-key.json
-└── ...
-
-.env.local.backup                   # Environment backup (auto-created)
+scripts/pool-management/
+├── deploy-chatfactory-pool.sh    # Main deployment script
+├── setup-prerequisites.sh        # One-time setup script
+└── README.md                     # This documentation
 ```
 
-## 🎯 Testing Workflow
+## 🎉 Result
 
-### Initial Setup
-1. Run `./scripts/setup-prerequisites.sh`
-2. Verify all prerequisites pass
+After successful deployment, you'll have a fully configured Firebase project ready for ChatFactory chatbot deployment with:
 
-### Test Deployment
-1. Run `./scripts/deploy-chatfactory-pool-002.sh`
-2. Complete OAuth setup manually (as instructed)
-3. Run `./scripts/validate-deployment.sh chatfactory-pool-002`
+- Google Authentication working out of the box
+- All necessary APIs enabled
+- Proper OAuth client configured
+- Firebase console accessible at: `https://console.firebase.google.com/project/chatfactory-pool-XXX`
 
-### Iterative Testing
-1. Run `./scripts/cleanup-pool-002.sh`
-2. Make code changes
-3. Re-run deployment script
-4. Validate again
+The pool project can then be used as infrastructure for deploying ChatFactory chatbots via the ChatFactoryTemplate.
 
-### Production Preparation
-1. Test with pool-002 until perfect
-2. Use the validated process for 50-project automation
-3. Scale the scripts for bulk deployment
+## 🚨 Important Notes
 
-## 🔧 Troubleshooting
+- Pool projects are for **infrastructure setup**, not chatbot deployment
+- Service accounts are created but credentials are managed via environment variables
+- All timing delays are optimized for Google Cloud service propagation
+- OAuth clients are automatically configured - no manual setup required
 
-### Common Issues
+## 🔄 Workflow
 
-#### "Service account key not found"
-```bash
-# Run prerequisites setup
-./scripts/setup-prerequisites.sh
-```
+1. **Run prerequisites** (first time only)
+2. **Deploy pool** with desired number
+3. **Pool ready** for chatbot deployment
+4. **Repeat** for additional pools as needed
 
-#### "Project already in use"
-```bash
-# Check status first
-./scripts/check-project-status.sh chatfactory-pool-002
-
-# If needed, cleanup
-./scripts/cleanup-pool-002.sh
-```
-
-#### "Firebase authentication failed"
-```bash
-# Re-authenticate
-firebase login
-gcloud auth login
-```
-
-#### "OAuth redirect URI mismatch"
-- Complete the manual OAuth setup as shown in deployment output
-- Wait 5-15 minutes for propagation
-- Verify URLs match exactly
-
-### Debug Mode
-Add `-x` to any script for verbose debugging:
-```bash
-bash -x ./scripts/deploy-chatfactory-pool-002.sh
-```
-
-## 📊 Project Status Codes
-
-| Status | Symbol | Description |
-|--------|--------|-------------|
-| `available` | 🟢 | Ready for new deployment |
-| `in-use` | 🔴 | Currently hosting a chatbot |
-| `maintenance` | 🟡 | Temporarily unavailable |
-| `deprecated` | ⚫ | Should not be used |
-
-## 🔐 Security Notes
-
-### Service Account Isolation
-- Each project has its own service account
-- Permissions limited to specific project only
-- Keys stored locally, never committed to git
-
-### Central Tracking Access
-- Main service account only for central Firestore
-- Read/write access to project tracking collection
-- Separate from individual project access
-
-### Best Practices
-- Keep service account keys secure
-- Rotate keys periodically
-- Use principle of least privilege
-- Monitor access logs
-
-## 🚀 Scaling to 50 Projects
-
-This testing framework is designed to validate the process before scaling to 50 projects:
-
-1. **Perfect the process** with pool-002
-2. **Adapt deployment script** for dynamic project IDs
-3. **Create bulk deployment** wrapper
-4. **Implement monitoring** for all projects
-5. **Add cleanup procedures** for production
-
-The core architecture (service account isolation, dual tracking, smart reuse) is already designed for large-scale deployment.
-
-## 📞 Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Run `./scripts/chatfactory-manager.sh` and use option 8 (System health check)
-3. Review logs in the deployment output
-4. Validate each step with the validation script
-
-## 🎉 Success Criteria
-
-A successful pool-002 deployment should show:
-- ✅ Project created and tracked
-- ✅ Firebase services enabled
-- ✅ Authentication providers configured
-- ✅ Vercel deployment accessible
-- ✅ OAuth flow working (after manual setup)
-- ✅ Project marked as in-use in both tracking systems
-
-Once this works reliably, the process is ready for 50-project automation!
+Simple, automated, and reliable! 🚀
