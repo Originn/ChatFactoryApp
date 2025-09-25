@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { GoogleOAuthClientManager } from './googleOAuthClientManager';
 import { google } from 'googleapis';
 import { getAuthClient } from '@/lib/gcp-auth';
+import { ProjectMappingService } from './projectMappingService';
 // DEBUG: Temporarily commenting out ResourceManagerClient to fix build
 // import { ResourceManagerClient } from '@google-cloud/resource-manager';
 
@@ -47,30 +48,39 @@ export class ReusableFirebaseProjectService {
         bucketCleanup: false,
       };
 
+      // Get the project this chatbot is using from the mapping service
+      const allProjects = await ProjectMappingService.getAllProjects();
+      const chatbotProject = allProjects.find(p => p.chatbotId === chatbotId);
+      const targetProjectId = chatbotProject?.projectId;
+
+      if (!targetProjectId) {
+        console.warn(`⚠️ No project mapping found for chatbot ${chatbotId} - limited cleanup possible`);
+      }
+
       // 1. Clean up OAuth clients (fixes accumulation issue)
       try {
-        const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
-        if (projectId) {
-          await this.cleanupOAuthClients(projectId);
+        if (targetProjectId) {
+          await this.cleanupOAuthClients(targetProjectId);
           cleanupResults.oauthClients = true;
           console.log('✅ OAuth clients cleanup completed');
         } else {
-          console.warn('⚠️ REUSABLE_FIREBASE_PROJECT_ID not set - skipping OAuth cleanup');
+          console.warn('⚠️ No target project ID - skipping OAuth cleanup');
+          cleanupResults.oauthClients = false;
         }
       } catch (error) {
         console.error('❌ OAuth clients cleanup failed:', error);
-        // Don't throw - continue with other cleanup tasks
-        // But store the error for reporting
         cleanupResults.oauthClients = false;
       }
 
       // 2. Clean up duplicate web apps
       try {
-        const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
-        if (projectId) {
-          await this.wipeSpecificWebApps(projectId, 'TestBot Chatbot (Reusable) App');
+        if (targetProjectId) {
+          await this.wipeSpecificWebApps(targetProjectId, 'TestBot Chatbot (Reusable) App');
           cleanupResults.webApps = true;
           console.log('✅ Duplicate web apps cleanup completed');
+        } else {
+          console.warn('⚠️ No target project ID - skipping web apps cleanup');
+          cleanupResults.webApps = false;
         }
       } catch (error) {
         console.error('❌ Web apps cleanup failed:', error);
@@ -87,9 +97,13 @@ export class ReusableFirebaseProjectService {
       
       // 4. Clean up Storage files
       try {
-        await this.cleanupStorageData(chatbotId, userId, enableAggressiveCleanup);
-        cleanupResults.storage = true;
-        console.log('✅ Storage cleanup completed');
+        if (targetProjectId) {
+          await this.cleanupStorageData(chatbotId, userId, enableAggressiveCleanup, targetProjectId);
+          cleanupResults.storage = true;
+          console.log('✅ Storage cleanup completed');
+        } else {
+          console.warn('⚠️ No target project ID - skipping storage cleanup');
+        }
       } catch (error) {
         console.error('❌ Storage cleanup failed:', error);
       }
@@ -105,7 +119,7 @@ export class ReusableFirebaseProjectService {
       
       // 6. Complete Identity Platform cleanup
       try {
-        const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
+        const projectId = targetProjectId;
         if (projectId) {
           await this.cleanupIdentityPlatform(projectId);
           cleanupResults.identityPlatform = true;
@@ -115,30 +129,38 @@ export class ReusableFirebaseProjectService {
         console.error('❌ Identity Platform cleanup failed:', error);
       }
 
-      // 7. Delete chatbot's service account completely
-      try {
-        const projectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
-        if (projectId) {
-          const authClient = await getAuthClient();
-          
-          // For dedicated chatbot projects, delete the chatbot-specific service account
-          // Service account naming pattern: {projectId-no-hyphens}-admin@{projectId}.iam.gserviceaccount.com
-          const serviceAccountId = `${projectId.replace(/-/g, '')}-admin`.substring(0, 30);
-          const serviceAccountEmail = `${serviceAccountId}@${projectId}.iam.gserviceaccount.com`;
-          
-          console.log(`🗑️ Deleting chatbot service account: ${serviceAccountEmail}`);
-          await this.deleteServiceAccount(projectId, serviceAccountEmail, authClient);
-          cleanupResults.serviceAccountDeletion = true;
-          console.log('✅ Service account deletion completed');
-        }
-      } catch (error) {
-        console.error('❌ Service account deletion failed:', error);
-        // Continue with cleanup even if service account deletion fails
-      }
+      // 7. Skip service account deletion for pool projects
+      // Pool projects share service accounts across multiple chatbots, so we should NOT delete them
+      console.log('⏭️ Skipping service account deletion for pool project (service account is shared)');
+      cleanupResults.serviceAccountDeletion = true; // Mark as successful since no action needed
       
       const successCount = Object.values(cleanupResults).filter(Boolean).length;
       const totalCount = Object.keys(cleanupResults).length;
-      
+
+      // Release the project back to the available pool after successful cleanup
+      if (successCount > 0) {
+        console.log('🔄 Releasing project back to available pool...');
+
+        try {
+          // Get the project from mapping service to find which project this chatbot was using
+          const allProjects = await ProjectMappingService.getAllProjects();
+          const chatbotProject = allProjects.find(p => p.chatbotId === chatbotId);
+
+          if (chatbotProject) {
+            const releaseResult = await ProjectMappingService.releaseProject(chatbotProject.projectId, chatbotId);
+            if (releaseResult.success) {
+              console.log(`✅ Project ${chatbotProject.projectId} successfully released and available for reuse`);
+            } else {
+              console.warn('⚠️ Failed to release project in mapping service:', releaseResult.message);
+            }
+          } else {
+            console.warn(`⚠️ No project mapping found for chatbot ${chatbotId} - may have been cleaned up already`);
+          }
+        } catch (releaseError: any) {
+          console.error('❌ Error releasing project:', releaseError);
+        }
+      }
+
       return {
         success: successCount > 0,
         message: `Cleanup completed: ${successCount}/${totalCount} services cleaned successfully`,
@@ -231,20 +253,18 @@ export class ReusableFirebaseProjectService {
   }
 
   /**
-   * COMPLETE FACTORY RESET - Wipe everything from the reusable Firebase project
+   * COMPLETE FACTORY RESET - Wipe everything from a pool Firebase project
    * This makes the project like a brand new Firebase project
-   * @param projectId - The project ID to reset (optional, uses REUSABLE_FIREBASE_PROJECT_ID if not provided)
+   * @param projectId - The project ID to reset (required)
    * @returns Promise<{ success: boolean; message: string; details?: any }>
    */
-  static async factoryResetProject(projectId?: string): Promise<{ success: boolean; message: string; details?: any }> {
+  static async factoryResetProject(projectId: string): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      const targetProjectId = projectId || process.env.REUSABLE_FIREBASE_PROJECT_ID;
-      
-      if (!targetProjectId) {
-        throw new Error('No project ID provided and REUSABLE_FIREBASE_PROJECT_ID not set');
+      if (!projectId) {
+        throw new Error('Project ID is required for factory reset');
       }
 
-      console.log(`🏭 Starting COMPLETE FACTORY RESET of project: ${targetProjectId}`);
+      console.log(`🏭 Starting COMPLETE FACTORY RESET of project: ${projectId}`);
       console.log('⚠️  This will delete ALL data, users, and credentials in the project!');
       
       const resetResults = {
@@ -712,12 +732,14 @@ export class ReusableFirebaseProjectService {
     // Collections that might contain chatbot-specific data
     const collectionsToCheck = [
       'messages',
-      'conversations', 
+      'conversations',
       'documents',
       'analytics',
       'user_sessions',
       'chatbot_users',
-      'user_pdfs' // ✅ Added this - contains CHM and PDF document metadata
+      'user_pdfs', // Contains CHM and PDF document metadata
+      'chatbot_verification_tokens', // Contains email verification tokens
+      'processed_youtube_videos' // Contains YouTube video processing data
     ];
     
     for (const collectionName of collectionsToCheck) {
@@ -815,18 +837,24 @@ export class ReusableFirebaseProjectService {
    * Clean up Firebase Storage files related to a specific chatbot
    * Now with comprehensive scanning and bucket cleanup
    */
-  private static async cleanupStorageData(chatbotId: string, userId: string, aggressiveCleanup: boolean = false): Promise<void> {
+  private static async cleanupStorageData(chatbotId: string, userId: string, aggressiveCleanup: boolean = false, projectId?: string): Promise<void> {
     console.log(`🧹 Starting comprehensive storage cleanup for chatbot: ${chatbotId}, user: ${userId}`);
     console.log(`🔥 Aggressive cleanup mode: ${aggressiveCleanup ? 'ENABLED' : 'DISABLED'}`);
-    
-    // Get the reusable Firebase project ID
-    const reusableProjectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
-    
+
+    // Use provided project ID or try to get it from mapping service
+    let reusableProjectId = projectId;
+
     if (!reusableProjectId) {
-      console.error('❌ REUSABLE_FIREBASE_PROJECT_ID not set - cannot perform storage cleanup');
+      const allProjects = await ProjectMappingService.getAllProjects();
+      const chatbotProject = allProjects.find(p => p.chatbotId === chatbotId);
+      reusableProjectId = chatbotProject?.projectId;
+    }
+
+    if (!reusableProjectId) {
+      console.error(`❌ No project ID found for chatbot ${chatbotId} - cannot perform storage cleanup`);
       return;
     }
-    
+
     console.log(`🎯 Target Firebase project: ${reusableProjectId}`);
     
     // Initialize project-specific storage client

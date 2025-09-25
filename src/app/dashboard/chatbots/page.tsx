@@ -272,36 +272,7 @@ export default function ChatbotsPage() {
         }
       }
       
-      // Delete from Vercel if we have project info
-      if (vercelProjectId || vercelProjectName) {
-        try {
-          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
-          const vercelDeleteResponse = await fetch('/api/vercel-delete', {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              projectId: vercelProjectId,
-              projectName: vercelProjectName,
-            }),
-          });
-          
-          const vercelResult = await vercelDeleteResponse.json();
-          
-          if (vercelResult.success) {
-            console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
-          } else {
-            console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
-            // Continue with Firestore deletion even if Vercel deletion fails
-          }
-        } catch (vercelError) {
-          console.error('❌ Error deleting from Vercel:', vercelError);
-          // Continue with Firestore deletion even if Vercel deletion fails
-        }
-      } else {
-        console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
-      }
+      // Note: Vercel deletion is now handled by the comprehensive chatbot deletion endpoint
       
       // Delete entire chatbot folder from Firebase Storage (includes logos and any other files)
       // Only delete storage if user chose to delete the vector store as well
@@ -326,20 +297,32 @@ export default function ChatbotsPage() {
         const useReusableFirebase = process.env.NEXT_PUBLIC_USE_REUSABLE_FIREBASE_PROJECT === 'true';
         
         if (useReusableFirebase) {
-          console.log('🧹 Cleaning up reusable Firebase project data for chatbot:', id);
-          
-          // Call the cleanup API route instead of importing the service directly
+          console.log('🧹 Using integrated cleanup for reusable Firebase project:', id);
+
+          // Use the integrated chatbots DELETE endpoint (handles cleanup automatically)
           try {
-            const cleanupResponse = await fetch('/api/cleanup-reusable-firebase', {
-              method: 'POST',
+            if (!user) {
+              throw new Error('No authenticated user for cleanup');
+            }
+
+            const token = await user.getIdToken();
+            const cleanupResponse = await fetch('/api/chatbot-deletion', {
+              method: 'DELETE',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({
                 chatbotId: id,
-                userId: chatbotUserId || user.uid
+                userId: chatbotUserId || user.uid,
+                deleteVectorstore: deleteVectorstore,
+                deleteAuraDB: false // Keep false for now to avoid deleting Neo4j instances
               }),
             });
+
+            if (!cleanupResponse.ok) {
+              throw new Error(`Cleanup API returned ${cleanupResponse.status}`);
+            }
 
             const cleanupResult = await cleanupResponse.json();
             

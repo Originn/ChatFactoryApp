@@ -4,18 +4,19 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseAPIService } from '@/services/firebaseAPIService';
+import { FirebaseProjectService } from '@/services/firebaseProjectService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
 import { getEmbeddingDimensions, getEmbeddingProvider } from '@/lib/embeddingModels';
 import { generateFaviconEnvVars } from '@/lib/utils/faviconUpload';
+import { SecretManagerService } from '@/services/secretManagerService';
+import { ProjectMappingService } from '@/services/projectMappingService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
 const REPO_NAME = 'ChatFactoryTemplate';  // Your chatbot template repository
 const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 
-// REUSABLE FIREBASE PROJECT CONFIGURATION
-const USE_REUSABLE_FIREBASE_PROJECT = process.env.USE_REUSABLE_FIREBASE_PROJECT === 'true';
-const REUSABLE_FIREBASE_PROJECT_ID = process.env.REUSABLE_FIREBASE_PROJECT_ID || '';
+// Firebase project will be automatically allocated (pool-first with dedicated fallback)
 
 // SIMPLIFIED: Always deploy from main branch to production
 // No staging/preview workflow needed - direct to production deployment
@@ -467,81 +468,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle authentication setup for Firebase projects
-    console.log('🔄 Reusable Firebase project mode:', USE_REUSABLE_FIREBASE_PROJECT ? 'ENABLED' : 'DISABLED');
-    if (USE_REUSABLE_FIREBASE_PROJECT) {
-      console.log('🔥 Using reusable Firebase project:', REUSABLE_FIREBASE_PROJECT_ID);
-    }
-    
+    // Handle Firebase project allocation (pool-first with dedicated fallback)
+    console.log('🔄 Using intelligent project allocation (pool-first with dedicated fallback)');
+
     let dedicatedFirebaseProject = null;
-    
-    if (USE_REUSABLE_FIREBASE_PROJECT) {
-      console.log('🔧 Setting up reusable Firebase project for chatbot...');
-      
-      // Validate required configuration
-      if (!REUSABLE_FIREBASE_PROJECT_ID) {
-        throw new Error('REUSABLE_FIREBASE_PROJECT_ID is required when USE_REUSABLE_FIREBASE_PROJECT=true');
+
+    try {
+      console.log('🚀 Requesting Firebase project allocation...');
+
+      // Use the new unified project allocation system
+      const firebaseResult = await FirebaseProjectService.createProjectForChatbot({
+        chatbotId,
+        chatbotName: chatbotConfig.name,
+        creatorUserId: userId || chatbotData?.userId || 'unknown'
+      });
+
+      if (!firebaseResult.success) {
+        console.error('❌ Failed to allocate Firebase project:', firebaseResult.error);
+        throw new Error(`Failed to allocate Firebase project: ${firebaseResult.error}`);
       }
-      
-      try {
-        // Use the existing Firebase setup logic but target the existing project
-        const firebaseResult = await FirebaseAPIService.setupExistingProjectForChatbot({
-          projectId: REUSABLE_FIREBASE_PROJECT_ID,
-          chatbotId,
-          chatbotName: chatbotConfig.name,
-          creatorUserId: userId || chatbotData?.userId || 'unknown'
-        });
 
-        if (!firebaseResult.success) {
-          console.error('❌ Failed to set up existing Firebase project:', firebaseResult.error);
-          throw new Error(`Failed to set up existing Firebase project: ${firebaseResult.error}`);
-        }
-
-        if (!firebaseResult.project) {
-          console.error('❌ Firebase project setup succeeded but no project returned');
-          throw new Error('Firebase project setup succeeded but no project data returned');
-        }
-
-        dedicatedFirebaseProject = firebaseResult.project;
-        console.log('✅ Existing Firebase project configured for chatbot:', dedicatedFirebaseProject.projectId);
-        
-        console.log('ℹ️ Note: GCS bucket configuration skipped (service removed)');
-        console.log('💡 For public image access, manually configure bucket in GCP Console if needed');
-        
-        
-      } catch (firebaseError) {
-        console.error('❌ Firebase project setup failed:', firebaseError);
-        throw new Error(`Firebase project setup failed: ${firebaseError.message}`);
+      if (!firebaseResult.project) {
+        console.error('❌ Firebase project allocation succeeded but no project returned');
+        throw new Error('Firebase project allocation succeeded but no project data returned');
       }
-      
-    } else {
-      console.log('🔥 Creating dedicated Firebase project for chatbot...');
-      
-      try {
-        // Create dedicated Firebase project for this chatbot using API
-        const firebaseResult = await FirebaseAPIService.createProjectForChatbot({
-          chatbotId,
-          chatbotName: chatbotConfig.name,
-          creatorUserId: userId || chatbotData?.userId || 'unknown'
-        });
 
-        if (!firebaseResult.success) {
-          console.error('❌ Failed to create Firebase project:', firebaseResult.error);
-          throw new Error(`Failed to create Firebase project: ${firebaseResult.error}`);
-        }
+      dedicatedFirebaseProject = firebaseResult.project;
+      console.log('✅ Firebase project allocated:', dedicatedFirebaseProject.projectId);
 
-        if (!firebaseResult.project) {
-          console.error('❌ Firebase project creation succeeded but no project returned');
-          throw new Error('Firebase project creation succeeded but no project data returned');
-        }
-
-        dedicatedFirebaseProject = firebaseResult.project;
-        console.log('✅ Dedicated Firebase project created:', dedicatedFirebaseProject.projectId);
-        
-      } catch (firebaseError) {
-        console.error('❌ Firebase project creation failed:', firebaseError);
-        throw new Error(`Firebase project creation failed: ${firebaseError.message}`);
-      }
+    } catch (firebaseError) {
+      console.error('❌ Firebase project allocation failed:', firebaseError);
+      throw new Error(`Firebase project allocation failed: ${firebaseError.message}`);
     }
 
     // Setup OAuth 2.0 for Firebase Authentication
@@ -569,15 +526,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if Firebase service account credentials are available
-    const hasValidServiceAccount = dedicatedFirebaseProject?.serviceAccount?.clientEmail && 
-                                   dedicatedFirebaseProject?.serviceAccount?.privateKey;
-    
+    // Support both camelCase and snake_case field names
+    const serviceAccount = dedicatedFirebaseProject?.serviceAccount;
+    const clientEmail = serviceAccount?.client_email || serviceAccount?.clientEmail;
+    const privateKey = serviceAccount?.private_key || serviceAccount?.privateKey;
+    const hasValidServiceAccount = clientEmail && privateKey;
+
     console.log('🔍 Firebase service account validation:', {
       hasFirebaseProject: !!dedicatedFirebaseProject,
       hasConfig: !!dedicatedFirebaseProject?.config,
-      hasServiceAccount: !!dedicatedFirebaseProject?.serviceAccount,
-      hasClientEmail: !!dedicatedFirebaseProject?.serviceAccount?.clientEmail,
-      hasPrivateKey: !!dedicatedFirebaseProject?.serviceAccount?.privateKey,
+      hasServiceAccount: !!serviceAccount,
+      hasClientEmail: !!clientEmail,
+      hasPrivateKey: !!privateKey,
       isServiceAccountValid: hasValidServiceAccount,
       projectId: dedicatedFirebaseProject?.config?.projectId || 'MISSING'
     });
@@ -585,22 +545,22 @@ export async function POST(request: NextRequest) {
     if (!hasValidServiceAccount) {
       console.error('❌ CRITICAL: Firebase service account credentials are missing or incomplete!');
       console.error('🔧 This will cause authentication failures in the deployed chatbot.');
-      console.error('📋 Expected: clientEmail and privateKey from service account creation');
+      console.error('📋 Expected: client_email and private_key from service account creation');
       console.error('🎯 Actual:', {
-        serviceAccount: dedicatedFirebaseProject?.serviceAccount || 'NULL',
-        clientEmail: dedicatedFirebaseProject?.serviceAccount?.clientEmail || 'MISSING',
-        privateKey: dedicatedFirebaseProject?.serviceAccount?.privateKey ? 'PRESENT' : 'MISSING'
+        serviceAccount: serviceAccount || 'NULL',
+        clientEmail: clientEmail || 'MISSING',
+        privateKey: privateKey ? 'PRESENT' : 'MISSING'
       });
-      
+
       // Fail the deployment if we don't have valid service account credentials
-      return NextResponse.json({ 
-        error: `Firebase service account creation failed. Cannot deploy chatbot without proper authentication credentials. Service account status: ${dedicatedFirebaseProject?.serviceAccount ? 'partial' : 'missing'}`,
+      return NextResponse.json({
+        error: `Firebase service account creation failed. Cannot deploy chatbot without proper authentication credentials. Service account status: ${serviceAccount ? 'partial' : 'missing'}`,
         details: {
           hasProject: !!dedicatedFirebaseProject,
-          hasServiceAccount: !!dedicatedFirebaseProject?.serviceAccount,
+          hasServiceAccount: !!serviceAccount,
           missingFields: [
-            ...(!dedicatedFirebaseProject?.serviceAccount?.clientEmail ? ['clientEmail'] : []),
-            ...(!dedicatedFirebaseProject?.serviceAccount?.privateKey ? ['privateKey'] : [])
+            ...(!clientEmail ? ['client_email'] : []),
+            ...(!privateKey ? ['private_key'] : [])
           ]
         }
       }, { status: 500 });
@@ -634,11 +594,38 @@ export async function POST(request: NextRequest) {
     
     // PHASE 2: SET DYNAMIC ENVIRONMENT VARIABLES (Firebase + Pinecone configs)
     console.log('🔧 PHASE 2: Setting dynamic environment variables after service setup...');
-    
+
+    // Check if this is a pool project to determine which Firebase API key to use
+    let firebaseApiKey = dedicatedFirebaseProject.config.apiKey;
+    let isPoolProject = false;
+
+    try {
+      // Check if this chatbot is assigned to a pool project
+      const assignedProject = await ProjectMappingService.findProjectByChatbot(chatbotId);
+      if (assignedProject && assignedProject.projectType === 'pool') {
+        console.log('🏊 Pool project detected - using shared pool Firebase API key');
+        isPoolProject = true;
+
+        // Get the shared pool Firebase API key from Secret Manager
+        const poolApiKey = await SecretManagerService.getPoolFirebaseApiKey();
+        if (poolApiKey) {
+          firebaseApiKey = poolApiKey;
+          console.log('✅ Successfully retrieved pool Firebase API key from Secret Manager');
+        } else {
+          console.warn('⚠️ Failed to retrieve pool Firebase API key, falling back to project-specific key');
+        }
+      } else {
+        console.log('🏢 Dedicated project detected - using project-specific Firebase API key');
+      }
+    } catch (error) {
+      console.error('❌ Error checking project type:', error);
+      console.log('⚠️ Falling back to project-specific Firebase API key');
+    }
+
     const dynamicEnvVars = {
       // Chatbot-specific configuration (with complete data)
       CHATBOT_CONFIG: JSON.stringify(chatbotConfig),
-      
+
       // Updated public environment variables (with complete chatbot data)
       NEXT_PUBLIC_CHATBOT_DESCRIPTION: chatbotConfig.description,
       NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotConfig.logoUrl,
@@ -646,14 +633,14 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
       NEXT_PUBLIC_CUSTOM_DOMAIN: customDomain || '',
-      
+
       // Generate favicon environment variables if favicon is configured
-      ...(chatbotConfig.appearance?.favicon?.enabled ? 
-        generateFaviconEnvVars(chatbotConfig.appearance.favicon, chatbotConfig.name) : 
+      ...(chatbotConfig.appearance?.favicon?.enabled ?
+        generateFaviconEnvVars(chatbotConfig.appearance.favicon, chatbotConfig.name) :
         {}),
-      
-      // Dedicated Firebase client configuration (public) - AVAILABLE AFTER FIREBASE SETUP
-      NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject.config.apiKey,
+
+      // Firebase client configuration (public) - Use pool or dedicated API key as appropriate
+      NEXT_PUBLIC_FIREBASE_API_KEY: firebaseApiKey,
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dedicatedFirebaseProject.config.authDomain,
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dedicatedFirebaseProject.config.storageBucket,
@@ -661,10 +648,10 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_FIREBASE_APP_ID: dedicatedFirebaseProject.config.appId,
       NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
       
-      // Dedicated Firebase Admin SDK (Server-side, secure) - AVAILABLE AFTER FIREBASE SETUP  
+      // Dedicated Firebase Admin SDK (Server-side, secure) - AVAILABLE AFTER FIREBASE SETUP
       FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
-      FIREBASE_CLIENT_EMAIL: dedicatedFirebaseProject.serviceAccount.clientEmail,
-      FIREBASE_PRIVATE_KEY: dedicatedFirebaseProject.serviceAccount.privateKey,
+      FIREBASE_CLIENT_EMAIL: clientEmail,
+      FIREBASE_PRIVATE_KEY: privateKey,
       
       // Pinecone configuration - AVAILABLE AFTER PINECONE SETUP
       PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
@@ -700,7 +687,11 @@ export async function POST(request: NextRequest) {
     
     // Debug: Log critical Firebase configuration
     console.log('🔍 Critical Firebase Configuration Check:');
+    console.log('PROJECT_TYPE:', isPoolProject ? 'POOL 🏊' : 'DEDICATED 🏢');
+    console.log('FIREBASE_API_KEY_SOURCE:', isPoolProject ? 'SECRET_MANAGER' : 'PROJECT_CONFIG');
     console.log('NEXT_PUBLIC_FIREBASE_API_KEY:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY ? 'SET ✅' : 'MISSING ❌');
+    console.log('API_KEY_PREVIEW:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY ?
+      `${filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 20)}...` : 'N/A');
     console.log('NEXT_PUBLIC_FIREBASE_PROJECT_ID:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'SET ✅' : 'MISSING ❌');
     console.log('FIREBASE_CLIENT_EMAIL:', filteredDynamicEnvVars.FIREBASE_CLIENT_EMAIL ? 'SET ✅' : 'MISSING ❌');
     console.log('FIREBASE_PRIVATE_KEY:', filteredDynamicEnvVars.FIREBASE_PRIVATE_KEY ? 'SET ✅' : 'MISSING ❌');
