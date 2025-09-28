@@ -174,66 +174,10 @@ check_authentication() {
         fi
     fi
 
-    # Test Firebase API access with timeout
-    print_info "🔍 Testing Firebase API connectivity (with timeout)..."
-
-    if command -v timeout >/dev/null 2>&1; then
-        FIREBASE_API_TEST=$(timeout 20s firebase projects:list --format=json 2>&1)
-        FIREBASE_API_EXIT_CODE=$?
-    elif command -v gtimeout >/dev/null 2>&1; then
-        FIREBASE_API_TEST=$(gtimeout 20s firebase projects:list --format=json 2>&1)
-        FIREBASE_API_EXIT_CODE=$?
-    else
-        # Windows/Git Bash fallback with manual timeout
-        print_info "Using manual timeout for Firebase API test..."
-
-        # Create a temporary file for output
-        TEMP_FILE="/tmp/firebase_auth_test_$$.txt"
-
-        # Run firebase command in background
-        firebase projects:list --format=json > "$TEMP_FILE" 2>&1 &
-        FIREBASE_PID=$!
-
-        # Wait for up to 20 seconds
-        local count=0
-        while [ $count -lt 20 ] && kill -0 $FIREBASE_PID 2>/dev/null; do
-            sleep 1
-            ((count++))
-            if [ $((count % 5)) -eq 0 ]; then
-                echo -n "."  # Progress indicator every 5 seconds
-            fi
-        done
-        echo ""  # New line after dots
-
-        if kill -0 $FIREBASE_PID 2>/dev/null; then
-            print_info "Firebase API test timed out, killing process..."
-            kill -9 $FIREBASE_PID 2>/dev/null
-            FIREBASE_API_EXIT_CODE=124  # Timeout exit code
-            FIREBASE_API_TEST="Firebase API connectivity test timed out after 20 seconds"
-        else
-            wait $FIREBASE_PID
-            FIREBASE_API_EXIT_CODE=$?
-            FIREBASE_API_TEST=$(cat "$TEMP_FILE" 2>/dev/null || echo "Failed to read output")
-        fi
-
-        # Clean up temp file
-        rm -f "$TEMP_FILE"
-    fi
-
-    if [ $FIREBASE_API_EXIT_CODE -eq 124 ]; then
-        print_warning "Firebase API connectivity test timed out"
-        print_info "This may be due to network issues, but Firebase authentication is verified"
-        print_info "Continuing with deployment... (API connectivity will be tested later)"
-    elif [ $FIREBASE_API_EXIT_CODE -ne 0 ]; then
-        print_warning "Firebase API connectivity test failed"
-        echo "Error details: $FIREBASE_API_TEST"
-        print_info "This may be due to network issues, but Firebase authentication is verified"
-        print_info "Continuing with deployment... (API connectivity will be tested later)"
-    else
-        # Count accessible projects
-        FIREBASE_PROJECT_COUNT=$(echo "$FIREBASE_API_TEST" | jq length 2>/dev/null || echo "0")
-        print_status "Firebase API access working (accessible projects: $FIREBASE_PROJECT_COUNT)"
-    fi
+    # Skip Firebase API connectivity test during authentication check
+    # (We'll test it properly when we actually need to create Firebase resources)
+    print_info "🔍 Skipping Firebase API connectivity test (will be tested during deployment)"
+    print_status "Firebase authentication verified - API connectivity will be tested when needed"
 
     # Check required permissions for billing account
     print_info "🔍 Checking billing account access..."
