@@ -16,8 +16,7 @@ export async function GET(request: NextRequest) {
     console.log(`🔐 Secret path: ${secretName}`);
 
     const response = await secretManager.projects.secrets.versions.access({
-      name: secretName,
-      auth: authClient
+      name: secretName
     });
 
     const rawData = response.data.payload?.data || '';

@@ -64,8 +64,8 @@ export async function POST() {
 
     const stats = {
       total: projects.length,
-      available: projects.filter(p => p.status === 'available').length,
-      inUse: projects.filter(p => p.status === 'in-use').length
+      available: projects.filter((p: any) => p.status === 'available').length,
+      inUse: projects.filter((p: any) => p.status === 'in-use').length
     };
 
     return NextResponse.json({

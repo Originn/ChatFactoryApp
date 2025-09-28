@@ -30,7 +30,6 @@ export async function POST() {
         // Download the service account key from the pool project
         const keyResponse = await iam.projects.serviceAccounts.keys.create({
           name: `projects/${poolProjectId}/serviceAccounts/${serviceAccountEmail}`,
-          auth: authClient,
           requestBody: {
             keyAlgorithm: 'KEY_ALG_RSA_2048',
             privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE'
