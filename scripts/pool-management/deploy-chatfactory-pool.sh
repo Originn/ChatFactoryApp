@@ -83,6 +83,156 @@ print_step() {
     echo -e "${BLUE}📋 Step $1: $2${NC}"
 }
 
+# Function to check authentication prerequisites
+check_authentication() {
+    print_step "0" "Checking Authentication Prerequisites"
+
+    local auth_errors=0
+
+    # Check if gcloud is installed
+    print_info "🔍 Checking gcloud CLI installation..."
+    if ! command -v gcloud >/dev/null 2>&1; then
+        print_error "gcloud CLI is not installed or not in PATH"
+        print_info "Install: https://cloud.google.com/sdk/docs/install"
+        ((auth_errors++))
+    else
+        print_status "gcloud CLI is installed: $(gcloud version --format='value(Google Cloud SDK)' 2>/dev/null)"
+    fi
+
+    # Check if firebase CLI is installed
+    print_info "🔍 Checking Firebase CLI installation..."
+    if ! command -v firebase >/dev/null 2>&1; then
+        print_error "Firebase CLI is not installed or not in PATH"
+        print_info "Install: npm install -g firebase-tools"
+        ((auth_errors++))
+    else
+        print_status "Firebase CLI is installed: $(firebase --version | head -n1)"
+    fi
+
+    # Check gcloud application-default login
+    print_info "🔍 Checking gcloud application-default credentials..."
+    GCLOUD_ADC_CHECK=$(gcloud auth application-default print-access-token 2>&1)
+    GCLOUD_ADC_EXIT_CODE=$?
+
+    if [ $GCLOUD_ADC_EXIT_CODE -ne 0 ]; then
+        print_error "gcloud application-default credentials not configured"
+        echo "Error details: $GCLOUD_ADC_CHECK"
+        print_info "🔧 Fix: Run 'gcloud auth application-default login'"
+        ((auth_errors++))
+    else
+        print_status "gcloud application-default credentials are valid"
+
+        # Get current user info
+        CURRENT_USER=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | head -n1)
+        if [ -n "$CURRENT_USER" ]; then
+            print_info "   Authenticated as: $CURRENT_USER"
+        fi
+    fi
+
+    # Check gcloud regular login
+    print_info "🔍 Checking gcloud user authentication..."
+    GCLOUD_USER_CHECK=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1)
+
+    if [ -z "$GCLOUD_USER_CHECK" ]; then
+        print_error "No active gcloud user authentication found"
+        print_info "🔧 Fix: Run 'gcloud auth login'"
+        ((auth_errors++))
+    else
+        print_status "gcloud user authentication is valid"
+        print_info "   Active account: $GCLOUD_USER_CHECK"
+    fi
+
+    # Check Firebase authentication
+    print_info "🔍 Checking Firebase CLI authentication..."
+
+    # First check if any users are logged in
+    FIREBASE_USERS=$(firebase login:list 2>&1)
+    FIREBASE_LIST_EXIT_CODE=$?
+
+    if [ $FIREBASE_LIST_EXIT_CODE -ne 0 ]; then
+        print_error "Failed to check Firebase authentication status"
+        echo "Error: $FIREBASE_USERS"
+        ((auth_errors++))
+    else
+        # Check if we have any authenticated users
+        FIREBASE_ACTIVE_USER=$(echo "$FIREBASE_USERS" | grep "Currently logged in as" | cut -d' ' -f5- 2>/dev/null)
+
+        if [ -z "$FIREBASE_ACTIVE_USER" ]; then
+            print_error "No active Firebase authentication found"
+            echo "Firebase login status:"
+            echo "$FIREBASE_USERS"
+            print_info "🔧 Fix: Run 'firebase login' (for interactive) or 'firebase login:ci' (for CI/token)"
+            ((auth_errors++))
+        else
+            print_status "Firebase CLI authentication is valid"
+            print_info "   Logged in as: $FIREBASE_ACTIVE_USER"
+        fi
+    fi
+
+    # Test Firebase API access
+    print_info "🔍 Testing Firebase API connectivity..."
+    FIREBASE_API_TEST=$(firebase projects:list --format=json 2>&1)
+    FIREBASE_API_EXIT_CODE=$?
+
+    if [ $FIREBASE_API_EXIT_CODE -ne 0 ]; then
+        print_error "Firebase API access test failed"
+        echo "Error details: $FIREBASE_API_TEST"
+        print_info "🔧 This usually means authentication issues or network problems"
+        ((auth_errors++))
+    else
+        # Count accessible projects
+        FIREBASE_PROJECT_COUNT=$(echo "$FIREBASE_API_TEST" | jq length 2>/dev/null || echo "0")
+        print_status "Firebase API access working (accessible projects: $FIREBASE_PROJECT_COUNT)"
+    fi
+
+    # Check required permissions for billing account
+    print_info "🔍 Checking billing account access..."
+    BILLING_CHECK=$(gcloud billing accounts list --filter="name:$BILLING_ACCOUNT_ID" --format="value(displayName)" 2>&1)
+    BILLING_EXIT_CODE=$?
+
+    if [ $BILLING_EXIT_CODE -ne 0 ] || [ -z "$BILLING_CHECK" ]; then
+        print_error "Cannot access billing account: $BILLING_ACCOUNT_ID"
+        print_info "Available billing accounts:"
+        gcloud billing accounts list --format="table(name,displayName)" 2>/dev/null || echo "None accessible"
+        print_info "🔧 You may need billing account permissions from an administrator"
+        ((auth_errors++))
+    else
+        print_status "Billing account access confirmed: $BILLING_CHECK"
+    fi
+
+    # Check main project access
+    print_info "🔍 Checking main project access ($MAIN_PROJECT)..."
+    MAIN_PROJECT_CHECK=$(gcloud projects describe "$MAIN_PROJECT" --format="value(name)" 2>&1)
+    MAIN_PROJECT_EXIT_CODE=$?
+
+    if [ $MAIN_PROJECT_EXIT_CODE -ne 0 ]; then
+        print_error "Cannot access main project: $MAIN_PROJECT"
+        echo "Error: $MAIN_PROJECT_CHECK"
+        print_info "🔧 You may need project permissions from an administrator"
+        ((auth_errors++))
+    else
+        print_status "Main project access confirmed"
+    fi
+
+    # Summary
+    echo ""
+    if [ $auth_errors -eq 0 ]; then
+        print_status "🎉 All authentication prerequisites are satisfied!"
+        print_info "Ready to proceed with pool deployment"
+    else
+        print_error "❌ Found $auth_errors authentication issue(s)"
+        print_error "Please fix the above issues before running the deployment script"
+        echo ""
+        print_info "Quick fix commands:"
+        print_info "  gcloud auth login"
+        print_info "  gcloud auth application-default login"
+        print_info "  firebase login"
+        echo ""
+        exit 1
+    fi
+    echo ""
+}
+
 # Function to check if project exists
 project_exists() {
     gcloud projects describe "$1" >/dev/null 2>&1
@@ -132,6 +282,9 @@ if [ ! -f "$TEMPLATE_DIR/.env.local" ]; then
 fi
 
 print_status "Prerequisites check passed"
+
+# Check authentication before proceeding
+check_authentication
 
 # Step 1: Setting up authentication
 print_step "1" "Setting up authentication"
@@ -428,23 +581,103 @@ fi
 # Step 5: Create Firebase web app
 print_step "5" "Creating Firebase web app"
 
-# Check if app already exists
-EXISTING_APPS=$(firebase apps:list --project="$PROJECT_ID" 2>/dev/null | grep -c "Pool Project Auth Setup" 2>/dev/null || echo "0")
+# Debug current authentication status
+print_info "🔍 Checking Firebase authentication status..."
+firebase login:list 2>&1 | head -5
+echo ""
+
+# Debug current project context
+print_info "🔍 Current gcloud project: $(gcloud config get-value project)"
+print_info "🔍 Current Firebase project: $PROJECT_ID"
+print_info "🔍 Firebase CLI version: $(firebase --version)"
+echo ""
+
+# Test Firebase access with detailed logging
+print_info "🔍 Testing Firebase API access..."
+FIREBASE_TEST_OUTPUT=$(firebase projects:list 2>&1)
+FIREBASE_TEST_EXIT_CODE=$?
+if [ $FIREBASE_TEST_EXIT_CODE -ne 0 ]; then
+    print_error "Firebase authentication test failed:"
+    echo "$FIREBASE_TEST_OUTPUT"
+    print_info "This suggests a Firebase login issue. Try running: firebase login"
+    exit 1
+else
+    print_status "Firebase authentication test passed"
+fi
+
+# Check if app already exists with detailed logging
+print_info "🔍 Checking for existing Firebase apps..."
+APPS_LIST_OUTPUT=$(firebase apps:list --project="$PROJECT_ID" 2>&1)
+APPS_LIST_EXIT_CODE=$?
+
+if [ $APPS_LIST_EXIT_CODE -ne 0 ]; then
+    print_error "Failed to list Firebase apps:"
+    echo "$APPS_LIST_OUTPUT"
+    print_info "Project: $PROJECT_ID"
+    exit 1
+fi
+
+echo "Firebase apps list output:"
+echo "$APPS_LIST_OUTPUT"
+echo ""
+
+EXISTING_APPS=$(echo "$APPS_LIST_OUTPUT" | grep -c "Pool Project Auth Setup" 2>/dev/null || echo "0")
 EXISTING_APPS=$(echo "$EXISTING_APPS" | head -n1 | tr -d '\n')
+
+print_info "Found $EXISTING_APPS existing apps with 'Pool Project Auth Setup' in the name"
 
 if [ "$EXISTING_APPS" -gt "0" ]; then
     print_warning "Firebase app already exists, getting existing configuration..."
     # Get existing app ID
-    APP_ID=$(firebase apps:list --project="$PROJECT_ID" --json | jq -r '.result[] | select(.displayName | contains("Pool Project Auth Setup")) | .appId' | head -n1)
+    print_info "Getting existing app configuration in JSON format..."
+    APPS_JSON_OUTPUT=$(firebase apps:list --project="$PROJECT_ID" --json 2>&1)
+    APPS_JSON_EXIT_CODE=$?
+
+    if [ $APPS_JSON_EXIT_CODE -ne 0 ]; then
+        print_error "Failed to get apps list in JSON format:"
+        echo "$APPS_JSON_OUTPUT"
+        exit 1
+    fi
+
+    APP_ID=$(echo "$APPS_JSON_OUTPUT" | jq -r '.result[] | select(.displayName | contains("Pool Project Auth Setup")) | .appId' | head -n1)
+    print_info "Found existing app ID: $APP_ID"
 else
     print_info "Creating new Firebase web app..."
-    APP_CREATE_OUTPUT=$(firebase apps:create web "Pool Project Auth Setup Chatbot (Reusable) App" --project="$PROJECT_ID")
+    print_info "Command: firebase apps:create web \"Pool Project Auth Setup Chatbot (Reusable) App\" --project=\"$PROJECT_ID\""
+
+    # Capture both stdout and stderr
+    APP_CREATE_OUTPUT=$(firebase apps:create web "Pool Project Auth Setup Chatbot (Reusable) App" --project="$PROJECT_ID" 2>&1)
+    APP_CREATE_EXIT_CODE=$?
+
+    print_info "App creation exit code: $APP_CREATE_EXIT_CODE"
+    print_info "App creation output:"
+    echo "$APP_CREATE_OUTPUT"
+    echo ""
+
+    if [ $APP_CREATE_EXIT_CODE -ne 0 ]; then
+        print_error "Firebase app creation failed with exit code $APP_CREATE_EXIT_CODE"
+        print_error "Error details:"
+        echo "$APP_CREATE_OUTPUT"
+
+        # Additional debugging
+        print_info "🔍 Additional debugging information:"
+        print_info "Firebase projects you have access to:"
+        firebase projects:list 2>&1 | head -10
+
+        exit 1
+    fi
+
     APP_ID=$(echo "$APP_CREATE_OUTPUT" | grep -o '1:[0-9]*:web:[a-z0-9]*' | head -n1)
+    print_info "Extracted app ID from output: $APP_ID"
 fi
 
 if [ -z "$APP_ID" ]; then
     print_error "Failed to get Firebase app ID"
+    print_error "Full app creation/retrieval output was:"
+    echo "$APP_CREATE_OUTPUT"
     exit 1
+else
+    print_status "Firebase app ID obtained: $APP_ID"
 fi
 
 print_info "Getting Firebase configuration..."
