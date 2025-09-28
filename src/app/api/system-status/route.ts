@@ -32,19 +32,19 @@ export async function GET(request: NextRequest) {
     // Analyze current state
     const analysis = {
       totalChatbots: chatbots.length,
-      activeChatbots: chatbots.filter(c => c.status === 'active' || c.deployment?.deploymentUrl).length,
+      activeChatbots: chatbots.filter((c: any) => c.status === 'active' || c.deployment?.deploymentUrl).length,
       totalFirebaseProjects: firebaseProjects.length,
       totalProjectMappings: projectMappings.length,
-      availablePoolProjects: projectMappings.filter(p => p.status === 'available' && p.projectType === 'pool').length,
-      inUseProjects: projectMappings.filter(p => p.status === 'in-use').length,
-      dedicatedProjects: projectMappings.filter(p => p.projectType === 'dedicated').length,
-      poolProjects: projectMappings.filter(p => p.projectType === 'pool').length
+      availablePoolProjects: projectMappings.filter((p: any) => p.status === 'available' && p.projectType === 'pool').length,
+      inUseProjects: projectMappings.filter((p: any) => p.status === 'in-use').length,
+      dedicatedProjects: projectMappings.filter((p: any) => p.projectType === 'dedicated').length,
+      poolProjects: projectMappings.filter((p: any) => p.projectType === 'pool').length
     };
 
     // Find orphaned chatbots (chatbots without project mappings)
-    const orphanedChatbots = chatbots.filter(chatbot => {
-      const hasMapping = projectMappings.some(p => p.chatbotId === chatbot.id);
-      const hasOldProject = firebaseProjects.some(p => p.chatbotId === chatbot.id);
+    const orphanedChatbots = chatbots.filter((chatbot: any) => {
+      const hasMapping = projectMappings.some((p: any) => p.chatbotId === chatbot.id);
+      const hasOldProject = firebaseProjects.some((p: any) => p.chatbotId === chatbot.id);
       return !hasMapping && !hasOldProject && (chatbot.status === 'active' || chatbot.deployment?.deploymentUrl);
     });
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       success: true,
       timestamp: new Date().toISOString(),
       analysis,
-      chatbots: chatbots.map(c => ({
+      chatbots: chatbots.map((c: any) => ({
         id: c.id,
         name: c.name,
         status: c.status,
@@ -61,14 +61,14 @@ export async function GET(request: NextRequest) {
         createdAt: c.createdAt,
         userId: c.userId
       })),
-      firebaseProjects: firebaseProjects.map(p => ({
+      firebaseProjects: firebaseProjects.map((p: any) => ({
         id: p.id,
         projectId: p.projectId,
         chatbotId: p.chatbotId,
         status: p.status,
         createdAt: p.createdAt
       })),
-      projectMappings: projectMappings.map(p => ({
+      projectMappings: projectMappings.map((p: any) => ({
         projectId: p.projectId,
         chatbotId: p.chatbotId,
         userId: p.userId,
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
         lastUsedAt: p.lastUsedAt,
         vercelUrl: p.vercelUrl
       })),
-      orphanedChatbots: orphanedChatbots.map(c => ({
+      orphanedChatbots: orphanedChatbots.map((c: any) => ({
         id: c.id,
         name: c.name,
         status: c.status,

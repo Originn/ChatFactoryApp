@@ -100,7 +100,11 @@ export async function POST(
           console.log('🏭 FACTORY RESET requested - wiping entire project!');
           
           try {
-            const resetResult = await ReusableFirebaseProjectService.factoryResetProject();
+            const reusableProjectId = process.env.REUSABLE_FIREBASE_PROJECT_ID;
+            if (!reusableProjectId) {
+              throw new Error('REUSABLE_FIREBASE_PROJECT_ID environment variable not set');
+            }
+            const resetResult = await ReusableFirebaseProjectService.factoryResetProject(reusableProjectId);
             
             if (resetResult.success) {
               return NextResponse.json({

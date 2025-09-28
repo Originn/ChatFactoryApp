@@ -71,7 +71,7 @@ export class ProjectMappingService {
           // Update Firestore to reflect actual status
           transaction.update(projectDoc.ref, {
             status: 'in-use',
-            lastUsedAt: FieldValue.serverTimestamp()
+            lastUsedAt: FieldValue.serverTimestamp() as any
           });
           throw new Error(`Project ${projectId} is actually in use, updated status`);
         }
@@ -81,9 +81,9 @@ export class ProjectMappingService {
           chatbotId: request.chatbotId,
           userId: request.userId,
           status: 'in-use',
-          deployedAt: FieldValue.serverTimestamp(),
+          deployedAt: FieldValue.serverTimestamp() as any,
           vercelUrl: request.vercelUrl || null,
-          lastUsedAt: FieldValue.serverTimestamp()
+          lastUsedAt: FieldValue.serverTimestamp() as any
         };
 
         transaction.update(projectDoc.ref, updatedMapping);
@@ -165,9 +165,9 @@ export class ProjectMappingService {
           chatbotId: null,
           userId: null,
           status: 'available',
-          recycledAt: FieldValue.serverTimestamp(),
+          recycledAt: FieldValue.serverTimestamp() as any,
           vercelUrl: null,
-          lastUsedAt: FieldValue.serverTimestamp()
+          lastUsedAt: FieldValue.serverTimestamp() as any
         };
 
         transaction.update(projectRef, releasedMapping);
@@ -224,9 +224,9 @@ export class ProjectMappingService {
             chatbotId,
             userId,
             status: 'in-use',
-            createdAt: FieldValue.serverTimestamp(),
-            lastUsedAt: FieldValue.serverTimestamp(),
-            deployedAt: FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp() as any,
+            lastUsedAt: FieldValue.serverTimestamp() as any,
+            deployedAt: FieldValue.serverTimestamp() as any,
             recycledAt: null,
             vercelUrl: vercelUrl || null,
             projectType: 'dedicated', // Assume dedicated if not in pool
@@ -250,9 +250,9 @@ export class ProjectMappingService {
             chatbotId,
             userId,
             status: 'in-use',
-            deployedAt: FieldValue.serverTimestamp(),
+            deployedAt: FieldValue.serverTimestamp() as any,
             vercelUrl: vercelUrl || null,
-            lastUsedAt: FieldValue.serverTimestamp()
+            lastUsedAt: FieldValue.serverTimestamp() as any
           };
 
           transaction.update(projectRef, updatedMapping);
@@ -313,8 +313,8 @@ export class ProjectMappingService {
         chatbotId: null,
         userId: null,
         status: 'available',
-        createdAt: FieldValue.serverTimestamp(),
-        lastUsedAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp() as any,
+        lastUsedAt: FieldValue.serverTimestamp() as any,
         deployedAt: null,
         recycledAt: null,
         vercelUrl: null,
@@ -356,7 +356,7 @@ export class ProjectMappingService {
       const db = adminDb;
       const projectsRef = db.collection(this.COLLECTION_NAME);
 
-      let query = projectsRef;
+      let query: any = projectsRef;
       if (projectId) {
         query = projectsRef.where('projectId', '==', projectId);
       }
@@ -383,7 +383,7 @@ export class ProjectMappingService {
 
             await doc.ref.update({
               status: updatedStatus,
-              lastUsedAt: FieldValue.serverTimestamp()
+              lastUsedAt: FieldValue.serverTimestamp() as any
             });
 
             syncedCount++;
@@ -431,7 +431,7 @@ export class ProjectMappingService {
   static async getAllProjects(status?: ProjectStatus): Promise<ProjectMapping[]> {
     try {
       const db = adminDb;
-      let query = db.collection(this.COLLECTION_NAME);
+      let query: any = db.collection(this.COLLECTION_NAME);
 
       if (status) {
         query = query.where('status', '==', status);
@@ -478,8 +478,7 @@ export class ProjectMappingService {
       const secretName = `projects/${projectId}/secrets/${this.SECRET_NAME}/versions/latest`;
 
       const response = await secretManager.projects.secrets.versions.access({
-        name: secretName,
-        auth: authClient
+        name: secretName
       });
 
       const rawData = response.data.payload?.data || '';
@@ -522,7 +521,6 @@ export class ProjectMappingService {
       // Create new secret version
       await secretManager.projects.secrets.addVersion({
         parent: secretName,
-        auth: authClient,
         requestBody: {
           payload: {
             data: Buffer.from(value).toString('base64')

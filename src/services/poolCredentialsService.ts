@@ -49,12 +49,10 @@ export class PoolCredentialsService {
       // Retrieve both secrets in parallel
       const [clientEmailResponse, privateKeyResponse] = await Promise.all([
         secretManager.projects.secrets.versions.access({
-          name: clientEmailSecret,
-          auth: authClient
+          name: clientEmailSecret
         }),
         secretManager.projects.secrets.versions.access({
-          name: privateKeySecret,
-          auth: authClient
+          name: privateKeySecret
         })
       ]);
 

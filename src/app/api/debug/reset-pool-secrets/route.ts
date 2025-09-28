@@ -21,7 +21,6 @@ export async function POST() {
 
         await secretManager.projects.secrets.addVersion({
           parent: secretName,
-          auth: authClient,
           requestBody: {
             payload: {
               data: Buffer.from('false').toString('base64')
