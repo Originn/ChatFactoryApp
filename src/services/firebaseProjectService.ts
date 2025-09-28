@@ -4,6 +4,8 @@ import { execSync } from 'child_process';
 import { Storage } from '@google-cloud/storage';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { GoogleAuth } from 'google-auth-library';
+import { ProjectMappingService } from './projectMappingService';
+import { PoolCredentialsService } from './poolCredentialsService';
 
 export interface CreateFirebaseProjectRequest {
   chatbotId: string;
@@ -366,9 +368,126 @@ export class FirebaseProjectService {
   }
 
   /**
-   * Create a real Firebase project using Firebase CLI
+   * Create or assign a Firebase project for a chatbot
+   * First tries to find an available project from the pool, then creates a new one if needed
    */
   static async createProjectForChatbot(
+    request: CreateFirebaseProjectRequest
+  ): Promise<{ success: boolean; project?: FirebaseProject; error?: string }> {
+    const { chatbotId, chatbotName, creatorUserId } = request;
+
+    console.log('🔥 Creating/assigning Firebase project for chatbot:', chatbotId);
+    console.log('📋 Deployment Strategy: Pool-first with dedicated fallback');
+
+    // Step 1: Try to find and reserve an available project from the pool
+    console.log('🔍 Checking for available projects in the pool...');
+    const reservationResult = await ProjectMappingService.findAndReserveProject({
+      chatbotId,
+      userId: creatorUserId
+    });
+
+    if (reservationResult.success && reservationResult.project) {
+      console.log(`✅ POOL PROJECT RESERVED: ${reservationResult.project.projectId}`);
+      console.log(`📊 Project Type: ${reservationResult.project.projectType}`);
+      console.log(`♻️  Recycled Project: Configuration will be reused`);
+
+      // For reused projects, we need to get the Firebase config from Firestore
+      const existingProject = await this.getExistingProjectConfig(reservationResult.project.projectId);
+
+      if (existingProject) {
+        console.log('🔄 Successfully loaded recycled project configuration');
+        console.log(`🎯 Using Project: ${existingProject.projectId}`);
+
+        // Update chatbot with existing project reference
+        await adminDb.collection('chatbots').doc(chatbotId).update({
+          firebaseProjectId: existingProject.projectId,
+          firebaseConfig: existingProject.config,
+          updatedAt: Timestamp.now()
+        });
+
+        return { success: true, project: existingProject };
+      } else {
+        console.warn('⚠️ Reserved project missing configuration, falling back to dedicated creation');
+        console.log('🔄 Releasing incomplete project back to pool...');
+        // Fall through to create new project
+      }
+    } else {
+      console.log('ℹ️ No available projects in pool');
+      console.log('❌ ERROR: All pool projects are in use');
+      return {
+        success: false,
+        error: 'No available projects in pool. All pool projects are currently in use. Please wait for a project to become available or reset stuck projects.'
+      };
+    }
+
+    // If we get here, it means the pool project was missing configuration
+    // Release it back to pool and return error
+    if (reservationResult.project?.projectId) {
+      console.log('🔄 Releasing incomplete project back to available pool...');
+      await ProjectMappingService.releaseProject(reservationResult.project.projectId, chatbotId);
+    }
+
+    return {
+      success: false,
+      error: 'Reserved project was missing configuration. Project has been released back to pool. Please try again.'
+    };
+  }
+
+  /**
+   * Get existing project configuration from Firestore
+   */
+  private static async getExistingProjectConfig(projectId: string): Promise<FirebaseProject | null> {
+    try {
+      const projectDoc = await adminDb.collection(this.FIREBASE_PROJECTS_COLLECTION).doc(projectId).get();
+
+      if (projectDoc.exists) {
+        const data = projectDoc.data();
+        // For pool projects, status is 'available'/'in-use' (pool status)
+        // For dedicated projects, status is 'active'/'creating'/'failed' (Firebase status)
+        const isValidPoolProject = data.projectType === 'pool' && data.config;
+        const isValidDedicatedProject = data.status === 'active' && data.config;
+
+        if (data && (isValidPoolProject || isValidDedicatedProject)) {
+          const project = data as FirebaseProject;
+
+          // For pool projects, retrieve service account from Secret Manager
+          if (data.projectType === 'pool') {
+            try {
+              console.log(`🔐 Retrieving pool credentials for ${projectId}...`);
+              const poolCredentials = await PoolCredentialsService.getPoolServiceAccount(projectId);
+
+              // Add service account to project data
+              (project as any).serviceAccount = {
+                type: 'service_account',
+                project_id: projectId,
+                client_email: poolCredentials.clientEmail,
+                private_key: poolCredentials.privateKey
+              };
+
+              console.log(`✅ Pool credentials loaded: ${poolCredentials.clientEmail}`);
+            } catch (error: any) {
+              console.error(`❌ Failed to load pool credentials for ${projectId}:`, error.message);
+              console.warn(`⚠️ Pool project ${projectId} missing service account credentials`);
+              // Continue without service account - deployment will show warning
+            }
+          }
+
+          return project;
+        }
+      }
+
+      console.warn(`⚠️ Project ${projectId} not found or incomplete in Firestore`);
+      return null;
+    } catch (error) {
+      console.error(`❌ Error getting existing project config for ${projectId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a new Firebase project using Firebase CLI (original implementation)
+   */
+  private static async createNewFirebaseProject(
     request: CreateFirebaseProjectRequest
   ): Promise<{ success: boolean; project?: FirebaseProject; error?: string }> {
     try {
@@ -634,8 +753,22 @@ export class FirebaseProjectService {
 
         await adminDb.collection('chatbots').doc(chatbotId).update(chatbotUpdateData);
 
+        // Step 9: Register the new project in the mapping service
+        console.log('📋 Registering new project in mapping service...');
+        const mappingResult = await ProjectMappingService.markProjectInUse(
+          projectId,
+          chatbotId,
+          creatorUserId
+        );
+
+        if (mappingResult.success) {
+          console.log('✅ Project registered in mapping service');
+        } else {
+          console.warn('⚠️ Failed to register project in mapping service:', mappingResult.message);
+        }
+
         console.log('🎉 Firebase project setup completed successfully:', projectId);
-        
+
         return { success: true, project: completeProject };
 
       } catch (cliError: any) {
@@ -910,8 +1043,18 @@ export class FirebaseProjectService {
           updatedAt: Timestamp.now()
         });
 
+        // Remove project from mapping service (dedicated projects are completely deleted)
+        console.log('📋 Removing project from mapping service...');
+        try {
+          // For dedicated projects, we remove them from the mapping entirely
+          await adminDb.collection('firebaseProjectMappings').doc(project.projectId).delete();
+          console.log('✅ Project removed from mapping service');
+        } catch (mappingError) {
+          console.warn('⚠️ Failed to remove project from mapping service:', mappingError);
+        }
+
         console.log(`🎉 Successfully deleted GCP project: ${project.projectId}`);
-        
+
         return {
           success: true,
           automated: true
@@ -935,6 +1078,15 @@ export class FirebaseProjectService {
             deletionNote: 'Project not found - likely already deleted',
             updatedAt: Timestamp.now()
           });
+
+          // Remove from mapping service since project doesn't exist
+          try {
+            await adminDb.collection('firebaseProjectMappings').doc(project.projectId).delete();
+            console.log('✅ Removed non-existent project from mapping service');
+          } catch (mappingError) {
+            console.warn('⚠️ Failed to remove project from mapping service:', mappingError);
+          }
+
           return { success: true, automated: true };
         } else if (deletionError.code === 9 || deletionError.message?.includes('FAILED_PRECONDITION')) {
           console.error('⚠️ Failed precondition - project may have active billing or resources');

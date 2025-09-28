@@ -3,16 +3,21 @@ import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
 import { FirebaseProjectService } from '@/services/firebaseProjectService';
 import { ReusableFirebaseProjectService } from '@/services/reusableFirebaseProjectService';
+import { ProjectMappingService } from '@/services/projectMappingService';
 
 const USE_REUSABLE_FIREBASE_PROJECT = process.env.USE_REUSABLE_FIREBASE_PROJECT === 'true';
 
 export async function DELETE(request: NextRequest) {
   try {
+    console.log('🗑️ Starting chatbot deletion via legacy API...');
     const { chatbotId, userId, deleteVectorstore = false, deleteFirebaseProject = true } = await request.json();
 
     if (!chatbotId) {
+      console.error('❌ Missing chatbotId in request');
       return NextResponse.json({ error: 'Missing chatbotId' }, { status: 400 });
     }
+
+    console.log(`📋 Deletion request: chatbotId=${chatbotId}, userId=${userId}, deleteVectorstore=${deleteVectorstore}, deleteFirebaseProject=${deleteFirebaseProject}`);
 
     const results = { 
       vectorstoreDeleted: false, 
@@ -32,27 +37,72 @@ export async function DELETE(request: NextRequest) {
 
     // Delete or clean up Firebase project if requested (default: true)
     if (deleteFirebaseProject) {
-      if (USE_REUSABLE_FIREBASE_PROJECT) {
-        console.log('🧹 Cleaning up reusable Firebase project data...');
-        const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(
-          chatbotId,
-          userId || ''
-        );
-        results.firebaseProjectDeleted = cleanupResult.success;
-        if (!cleanupResult.success) {
-          results.errors.push(`Reusable Firebase cleanup: ${cleanupResult.message}`);
+      try {
+        // Check project mapping to determine the best deletion strategy
+        console.log('🔍 Determining project deletion strategy...');
+
+        // Get all projects to find the one for this chatbot
+        console.log('📊 Fetching all project mappings...');
+        const allProjects = await ProjectMappingService.getAllProjects();
+        console.log(`📊 Found ${allProjects.length} project mappings`);
+
+        const chatbotProject = allProjects.find(p => p.chatbotId === chatbotId);
+        console.log(`🎯 Chatbot project mapping: ${chatbotProject ? `${chatbotProject.projectId} (${chatbotProject.projectType})` : 'not found'}`);
+
+      if (chatbotProject) {
+        console.log(`📋 Found project mapping: ${chatbotProject.projectId} (type: ${chatbotProject.projectType})`);
+
+        if (chatbotProject.projectType === 'pool') {
+          console.log('♻️ Using reusable project cleanup for pool project...');
+          const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(
+            chatbotId,
+            userId || ''
+          );
+          results.firebaseProjectDeleted = cleanupResult.success;
+          if (!cleanupResult.success) {
+            results.errors.push(`Reusable Firebase cleanup: ${cleanupResult.message}`);
+          }
+        } else {
+          console.log('🗑️ Using dedicated project deletion for dedicated project...');
+          const result = await FirebaseProjectService.deleteProject(chatbotId);
+          results.firebaseProjectDeleted = result.success;
+          results.firebaseProjectAutomated = result.automated || false;
+          if (!result.success) {
+            results.errors.push(`Firebase Project: ${result.error}`);
+          } else if (!result.automated) {
+            results.errors.push(`Firebase Project: ${result.error || 'Manual deletion required'}`);
+          }
         }
       } else {
-        console.log('🗑️ Deleting GCP/Firebase project...');
-        const result = await FirebaseProjectService.deleteProject(chatbotId);
-        results.firebaseProjectDeleted = result.success;
-        results.firebaseProjectAutomated = result.automated || false;
-        if (!result.success) {
-          results.errors.push(`Firebase Project: ${result.error}`);
-        } else if (!result.automated) {
-          // If deletion succeeded but wasn't automated, add as warning
-          results.errors.push(`Firebase Project: ${result.error || 'Manual deletion required'}`);
+        // Fallback to environment variable logic if no project mapping found
+        console.log('⚠️ No project mapping found, using environment variable logic');
+
+        if (USE_REUSABLE_FIREBASE_PROJECT) {
+          console.log('🧹 Cleaning up reusable Firebase project data...');
+          const cleanupResult = await ReusableFirebaseProjectService.cleanupChatbotData(
+            chatbotId,
+            userId || ''
+          );
+          results.firebaseProjectDeleted = cleanupResult.success;
+          if (!cleanupResult.success) {
+            results.errors.push(`Reusable Firebase cleanup: ${cleanupResult.message}`);
+          }
+        } else {
+          console.log('🗑️ Deleting GCP/Firebase project...');
+          const result = await FirebaseProjectService.deleteProject(chatbotId);
+          results.firebaseProjectDeleted = result.success;
+          results.firebaseProjectAutomated = result.automated || false;
+          if (!result.success) {
+            results.errors.push(`Firebase Project: ${result.error}`);
+          } else if (!result.automated) {
+            results.errors.push(`Firebase Project: ${result.error || 'Manual deletion required'}`);
+          }
         }
+        }
+      } catch (firebaseError: any) {
+        console.error('Error in Firebase project deletion strategy:', firebaseError);
+        results.errors.push(`Firebase deletion error: ${firebaseError.message}`);
+        results.firebaseProjectDeleted = false;
       }
     }
 
