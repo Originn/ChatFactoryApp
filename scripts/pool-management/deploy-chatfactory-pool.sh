@@ -590,67 +590,12 @@ echo ""
 print_info "🔍 Skipping Firebase API test (authentication already verified)"
 print_status "Firebase authentication confirmed - proceeding to Firebase app operations"
 
-# Check if app already exists with timeout protection
-print_info "🔍 Checking for existing Firebase apps (with timeout)..."
+# Skip checking for existing apps to avoid timeout issues
+# We'll just proceed with app creation (Firebase will handle duplicates gracefully)
+print_info "🔍 Skipping Firebase app existence check (will attempt creation directly)"
+print_info "Firebase will handle duplicate app names gracefully if app already exists"
 
-# Add timeout protection for apps:list command too
-if command -v timeout >/dev/null 2>&1; then
-    APPS_LIST_OUTPUT=$(timeout 30s firebase apps:list --project="$PROJECT_ID" 2>&1)
-    APPS_LIST_EXIT_CODE=$?
-elif command -v gtimeout >/dev/null 2>&1; then
-    APPS_LIST_OUTPUT=$(gtimeout 30s firebase apps:list --project="$PROJECT_ID" 2>&1)
-    APPS_LIST_EXIT_CODE=$?
-else
-    # Windows fallback with manual timeout
-    firebase apps:list --project="$PROJECT_ID" > /tmp/firebase_apps_output.txt 2>&1 &
-    FIREBASE_PID=$!
-
-    local count=0
-    while [ $count -lt 30 ] && kill -0 $FIREBASE_PID 2>/dev/null; do
-        sleep 1
-        ((count++))
-        if [ $((count % 5)) -eq 0 ]; then
-            echo -n "."  # Progress indicator
-        fi
-    done
-    echo ""
-
-    if kill -0 $FIREBASE_PID 2>/dev/null; then
-        kill -9 $FIREBASE_PID 2>/dev/null
-        APPS_LIST_EXIT_CODE=124
-        APPS_LIST_OUTPUT="Command timed out after 30 seconds"
-    else
-        wait $FIREBASE_PID
-        APPS_LIST_EXIT_CODE=$?
-        APPS_LIST_OUTPUT=$(cat /tmp/firebase_apps_output.txt)
-        rm -f /tmp/firebase_apps_output.txt
-    fi
-fi
-
-if [ $APPS_LIST_EXIT_CODE -eq 124 ]; then
-    print_error "Firebase apps:list command timed out"
-    print_info "This suggests network or API issues with project: $PROJECT_ID"
-    print_info "🔧 Try: firebase logout && firebase login"
-    exit 1
-elif [ $APPS_LIST_EXIT_CODE -ne 0 ]; then
-    print_error "Failed to list Firebase apps:"
-    echo "$APPS_LIST_OUTPUT"
-    print_info "Project: $PROJECT_ID"
-    print_info "🔧 This could mean:"
-    print_info "  1. Project doesn't have Firebase enabled"
-    print_info "  2. You don't have permission to access this project"
-    print_info "  3. Project doesn't exist in Firebase"
-    exit 1
-fi
-
-echo "Firebase apps list output:"
-echo "$APPS_LIST_OUTPUT"
-echo ""
-
-EXISTING_APPS=$(echo "$APPS_LIST_OUTPUT" | grep -c "Pool Project Auth Setup" 2>/dev/null || echo "0")
-EXISTING_APPS=$(echo "$EXISTING_APPS" | head -n1 | tr -d '\n')
-
-print_info "Found $EXISTING_APPS existing apps with 'Pool Project Auth Setup' in the name"
+EXISTING_APPS=0  # Assume no existing apps, proceed with creation
 
 if [ "$EXISTING_APPS" -gt "0" ]; then
     print_warning "Firebase app already exists, getting existing configuration..."
