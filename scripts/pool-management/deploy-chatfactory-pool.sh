@@ -154,8 +154,13 @@ check_authentication() {
         echo "Error: $FIREBASE_USERS"
         ((auth_errors++))
     else
-        # Check if we have any authenticated users
-        FIREBASE_ACTIVE_USER=$(echo "$FIREBASE_USERS" | grep "Currently logged in as" | cut -d' ' -f5- 2>/dev/null)
+        # Check if we have any authenticated users (try different patterns)
+        FIREBASE_ACTIVE_USER=$(echo "$FIREBASE_USERS" | grep -E "(Currently logged in as|Logged in as)" | cut -d' ' -f4- 2>/dev/null | head -n1)
+
+        if [ -z "$FIREBASE_ACTIVE_USER" ]; then
+            # Try alternative parsing method
+            FIREBASE_ACTIVE_USER=$(echo "$FIREBASE_USERS" | grep -E "@" | head -n1 2>/dev/null)
+        fi
 
         if [ -z "$FIREBASE_ACTIVE_USER" ]; then
             print_error "No active Firebase authentication found"
@@ -169,12 +174,26 @@ check_authentication() {
         fi
     fi
 
-    # Test Firebase API access
-    print_info "🔍 Testing Firebase API connectivity..."
-    FIREBASE_API_TEST=$(firebase projects:list --format=json 2>&1)
-    FIREBASE_API_EXIT_CODE=$?
+    # Test Firebase API access with timeout
+    print_info "🔍 Testing Firebase API connectivity (with timeout)..."
 
-    if [ $FIREBASE_API_EXIT_CODE -ne 0 ]; then
+    if command -v timeout >/dev/null 2>&1; then
+        FIREBASE_API_TEST=$(timeout 20s firebase projects:list --format=json 2>&1)
+        FIREBASE_API_EXIT_CODE=$?
+    elif command -v gtimeout >/dev/null 2>&1; then
+        FIREBASE_API_TEST=$(gtimeout 20s firebase projects:list --format=json 2>&1)
+        FIREBASE_API_EXIT_CODE=$?
+    else
+        # Fallback without timeout for quick auth check
+        FIREBASE_API_TEST=$(firebase projects:list --format=json 2>&1)
+        FIREBASE_API_EXIT_CODE=$?
+    fi
+
+    if [ $FIREBASE_API_EXIT_CODE -eq 124 ]; then
+        print_error "Firebase API access test timed out"
+        print_info "🔧 This suggests network connectivity issues"
+        ((auth_errors++))
+    elif [ $FIREBASE_API_EXIT_CODE -ne 0 ]; then
         print_error "Firebase API access test failed"
         echo "Error details: $FIREBASE_API_TEST"
         print_info "🔧 This usually means authentication issues or network problems"
