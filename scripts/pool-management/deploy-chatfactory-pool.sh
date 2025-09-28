@@ -592,28 +592,125 @@ print_info "🔍 Current Firebase project: $PROJECT_ID"
 print_info "🔍 Firebase CLI version: $(firebase --version)"
 echo ""
 
-# Test Firebase access with detailed logging
-print_info "🔍 Testing Firebase API access..."
-FIREBASE_TEST_OUTPUT=$(firebase projects:list 2>&1)
-FIREBASE_TEST_EXIT_CODE=$?
-if [ $FIREBASE_TEST_EXIT_CODE -ne 0 ]; then
+# Test Firebase access with timeout
+print_info "🔍 Testing Firebase API access (with 30s timeout)..."
+
+# Use timeout command to prevent hanging
+if command -v timeout >/dev/null 2>&1; then
+    # Linux/macOS with timeout command
+    FIREBASE_TEST_OUTPUT=$(timeout 30s firebase projects:list 2>&1)
+    FIREBASE_TEST_EXIT_CODE=$?
+elif command -v gtimeout >/dev/null 2>&1; then
+    # macOS with GNU coreutils
+    FIREBASE_TEST_OUTPUT=$(gtimeout 30s firebase projects:list 2>&1)
+    FIREBASE_TEST_EXIT_CODE=$?
+else
+    # Windows or systems without timeout - use background process with kill
+    print_info "No timeout command available, using manual timeout handling..."
+
+    # Run firebase command in background
+    firebase projects:list > /tmp/firebase_test_output.txt 2>&1 &
+    FIREBASE_PID=$!
+
+    # Wait for 30 seconds
+    local count=0
+    while [ $count -lt 30 ] && kill -0 $FIREBASE_PID 2>/dev/null; do
+        sleep 1
+        ((count++))
+        if [ $((count % 5)) -eq 0 ]; then
+            echo -n "."  # Progress indicator every 5 seconds
+        fi
+    done
+    echo ""  # New line after dots
+
+    if kill -0 $FIREBASE_PID 2>/dev/null; then
+        print_error "Firebase API call timed out after 30 seconds"
+        kill -9 $FIREBASE_PID 2>/dev/null
+        FIREBASE_TEST_EXIT_CODE=124  # Timeout exit code
+        FIREBASE_TEST_OUTPUT="Command timed out after 30 seconds"
+    else
+        wait $FIREBASE_PID
+        FIREBASE_TEST_EXIT_CODE=$?
+        FIREBASE_TEST_OUTPUT=$(cat /tmp/firebase_test_output.txt)
+        rm -f /tmp/firebase_test_output.txt
+    fi
+fi
+
+print_info "Firebase API test exit code: $FIREBASE_TEST_EXIT_CODE"
+
+if [ $FIREBASE_TEST_EXIT_CODE -eq 124 ]; then
+    print_error "Firebase API call timed out - this suggests network or authentication issues"
+    print_info "Possible causes:"
+    print_info "  1. Network connectivity issues"
+    print_info "  2. Firebase authentication expired"
+    print_info "  3. Firewall blocking Firebase API"
+    print_info "🔧 Try these fixes:"
+    print_info "  firebase login --reauth"
+    print_info "  firebase logout && firebase login"
+    print_info "  Check your internet connection"
+    exit 1
+elif [ $FIREBASE_TEST_EXIT_CODE -ne 0 ]; then
     print_error "Firebase authentication test failed:"
     echo "$FIREBASE_TEST_OUTPUT"
-    print_info "This suggests a Firebase login issue. Try running: firebase login"
+    print_info "🔧 Try running: firebase login --reauth"
     exit 1
 else
     print_status "Firebase authentication test passed"
+    # Show first few lines of output for debugging
+    print_info "Available projects (first 3 lines):"
+    echo "$FIREBASE_TEST_OUTPUT" | head -3
 fi
 
-# Check if app already exists with detailed logging
-print_info "🔍 Checking for existing Firebase apps..."
-APPS_LIST_OUTPUT=$(firebase apps:list --project="$PROJECT_ID" 2>&1)
-APPS_LIST_EXIT_CODE=$?
+# Check if app already exists with timeout protection
+print_info "🔍 Checking for existing Firebase apps (with timeout)..."
 
-if [ $APPS_LIST_EXIT_CODE -ne 0 ]; then
+# Add timeout protection for apps:list command too
+if command -v timeout >/dev/null 2>&1; then
+    APPS_LIST_OUTPUT=$(timeout 30s firebase apps:list --project="$PROJECT_ID" 2>&1)
+    APPS_LIST_EXIT_CODE=$?
+elif command -v gtimeout >/dev/null 2>&1; then
+    APPS_LIST_OUTPUT=$(gtimeout 30s firebase apps:list --project="$PROJECT_ID" 2>&1)
+    APPS_LIST_EXIT_CODE=$?
+else
+    # Windows fallback with manual timeout
+    firebase apps:list --project="$PROJECT_ID" > /tmp/firebase_apps_output.txt 2>&1 &
+    FIREBASE_PID=$!
+
+    local count=0
+    while [ $count -lt 30 ] && kill -0 $FIREBASE_PID 2>/dev/null; do
+        sleep 1
+        ((count++))
+        if [ $((count % 5)) -eq 0 ]; then
+            echo -n "."  # Progress indicator
+        fi
+    done
+    echo ""
+
+    if kill -0 $FIREBASE_PID 2>/dev/null; then
+        kill -9 $FIREBASE_PID 2>/dev/null
+        APPS_LIST_EXIT_CODE=124
+        APPS_LIST_OUTPUT="Command timed out after 30 seconds"
+    else
+        wait $FIREBASE_PID
+        APPS_LIST_EXIT_CODE=$?
+        APPS_LIST_OUTPUT=$(cat /tmp/firebase_apps_output.txt)
+        rm -f /tmp/firebase_apps_output.txt
+    fi
+fi
+
+if [ $APPS_LIST_EXIT_CODE -eq 124 ]; then
+    print_error "Firebase apps:list command timed out"
+    print_info "This suggests network or API issues with project: $PROJECT_ID"
+    print_info "🔧 Try: firebase logout && firebase login"
+    exit 1
+elif [ $APPS_LIST_EXIT_CODE -ne 0 ]; then
     print_error "Failed to list Firebase apps:"
     echo "$APPS_LIST_OUTPUT"
     print_info "Project: $PROJECT_ID"
+    print_info "🔧 This could mean:"
+    print_info "  1. Project doesn't have Firebase enabled"
+    print_info "  2. You don't have permission to access this project"
+    print_info "  3. Project doesn't exist in Firebase"
     exit 1
 fi
 
@@ -645,24 +742,74 @@ else
     print_info "Creating new Firebase web app..."
     print_info "Command: firebase apps:create web \"Pool Project Auth Setup Chatbot (Reusable) App\" --project=\"$PROJECT_ID\""
 
-    # Capture both stdout and stderr
-    APP_CREATE_OUTPUT=$(firebase apps:create web "Pool Project Auth Setup Chatbot (Reusable) App" --project="$PROJECT_ID" 2>&1)
-    APP_CREATE_EXIT_CODE=$?
+    # Add timeout protection for app creation (this can take a while)
+    if command -v timeout >/dev/null 2>&1; then
+        APP_CREATE_OUTPUT=$(timeout 60s firebase apps:create web "Pool Project Auth Setup Chatbot (Reusable) App" --project="$PROJECT_ID" 2>&1)
+        APP_CREATE_EXIT_CODE=$?
+    elif command -v gtimeout >/dev/null 2>&1; then
+        APP_CREATE_OUTPUT=$(gtimeout 60s firebase apps:create web "Pool Project Auth Setup Chatbot (Reusable) App" --project="$PROJECT_ID" 2>&1)
+        APP_CREATE_EXIT_CODE=$?
+    else
+        # Windows fallback with manual timeout (60 seconds for app creation)
+        print_info "Creating Firebase app (may take up to 60 seconds)..."
+        firebase apps:create web "Pool Project Auth Setup Chatbot (Reusable) App" --project="$PROJECT_ID" > /tmp/firebase_create_output.txt 2>&1 &
+        FIREBASE_PID=$!
+
+        local count=0
+        while [ $count -lt 60 ] && kill -0 $FIREBASE_PID 2>/dev/null; do
+            sleep 1
+            ((count++))
+            if [ $((count % 10)) -eq 0 ]; then
+                echo -n "."  # Progress indicator every 10 seconds
+            fi
+        done
+        echo ""
+
+        if kill -0 $FIREBASE_PID 2>/dev/null; then
+            print_error "Firebase app creation timed out after 60 seconds"
+            kill -9 $FIREBASE_PID 2>/dev/null
+            APP_CREATE_EXIT_CODE=124
+            APP_CREATE_OUTPUT="App creation timed out after 60 seconds"
+        else
+            wait $FIREBASE_PID
+            APP_CREATE_EXIT_CODE=$?
+            APP_CREATE_OUTPUT=$(cat /tmp/firebase_create_output.txt)
+            rm -f /tmp/firebase_create_output.txt
+        fi
+    fi
 
     print_info "App creation exit code: $APP_CREATE_EXIT_CODE"
     print_info "App creation output:"
     echo "$APP_CREATE_OUTPUT"
     echo ""
 
-    if [ $APP_CREATE_EXIT_CODE -ne 0 ]; then
+    if [ $APP_CREATE_EXIT_CODE -eq 124 ]; then
+        print_error "Firebase app creation timed out after 60 seconds"
+        print_info "This suggests:"
+        print_info "  1. Network connectivity issues"
+        print_info "  2. Firebase API is experiencing delays"
+        print_info "  3. Project may have quota issues"
+        print_info "🔧 Try these fixes:"
+        print_info "  1. Check your internet connection"
+        print_info "  2. firebase logout && firebase login"
+        print_info "  3. Try again in a few minutes"
+        print_info "  4. Check Firebase Console for the project"
+        exit 1
+    elif [ $APP_CREATE_EXIT_CODE -ne 0 ]; then
         print_error "Firebase app creation failed with exit code $APP_CREATE_EXIT_CODE"
         print_error "Error details:"
         echo "$APP_CREATE_OUTPUT"
 
         # Additional debugging
         print_info "🔍 Additional debugging information:"
-        print_info "Firebase projects you have access to:"
-        firebase projects:list 2>&1 | head -10
+        print_info "Firebase projects you have access to (with timeout):"
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 20s firebase projects:list 2>&1 | head -10
+        elif command -v gtimeout >/dev/null 2>&1; then
+            gtimeout 20s firebase projects:list 2>&1 | head -10
+        else
+            firebase projects:list 2>&1 | head -10
+        fi
 
         exit 1
     fi
