@@ -294,6 +294,137 @@ else
     print_step "4" "Service account setup (skipped - already exists)"
 fi
 
+# Step 4.5: Store service account credentials in Secret Manager
+print_step "4.5" "Storing service account credentials in Secret Manager"
+
+# Only store if we created a service account (not skipped)
+if [ "$SKIP_SERVICE_ACCOUNT_CREATION" = "false" ]; then
+    print_info "Storing service account credentials in central Secret Manager..."
+
+    # Switch to central project for Secret Manager operations
+    CURRENT_PROJECT=$(gcloud config get-value project)
+    gcloud config set project "$MAIN_PROJECT"
+
+    # Get access token for Secret Manager operations
+    ACCESS_TOKEN_CENTRAL=$(gcloud auth print-access-token)
+
+    # Extract pool number for secret naming
+    POOL_NUMBER_CLEAN=$(echo "$POOL_NUMBER" | sed 's/^0*//')
+    if [ -z "$POOL_NUMBER_CLEAN" ]; then
+        POOL_NUMBER_CLEAN="0"
+    fi
+    SECRET_PREFIX="pool-$(printf "%03d" "$POOL_NUMBER_CLEAN")"
+
+    print_info "Reading service account key file..."
+    if [ -f "./keys/$PROJECT_ID-service-key.json" ]; then
+        # Extract client_email and private_key from the service account key
+        CLIENT_EMAIL=$(jq -r '.client_email' "./keys/$PROJECT_ID-service-key.json")
+        PRIVATE_KEY=$(jq -r '.private_key' "./keys/$PROJECT_ID-service-key.json")
+
+        if [ "$CLIENT_EMAIL" = "null" ] || [ "$PRIVATE_KEY" = "null" ]; then
+            print_error "Failed to extract credentials from service account key"
+            exit 1
+        fi
+
+        print_info "Creating/updating secrets: ${SECRET_PREFIX}-client-email, ${SECRET_PREFIX}-private-key"
+
+        # Function to create or update secret
+        create_or_update_secret() {
+            local secret_name="$1"
+            local secret_value="$2"
+            local max_retries=3
+            local retry_count=0
+
+            # Try to create secret first
+            if ! gcloud secrets describe "$secret_name" --project="$MAIN_PROJECT" >/dev/null 2>&1; then
+                print_info "Creating secret: $secret_name"
+                if ! gcloud secrets create "$secret_name" \
+                    --replication-policy="automatic" \
+                    --project="$MAIN_PROJECT"; then
+                    print_error "Failed to create secret: $secret_name"
+                    return 1
+                fi
+            else
+                print_info "Secret exists: $secret_name"
+            fi
+
+            # Add new version using gcloud (more reliable than curl)
+            while [ $retry_count -lt $max_retries ]; do
+                print_info "Adding version to secret: $secret_name (attempt $((retry_count + 1))/$max_retries)"
+
+                if echo -n "$secret_value" | gcloud secrets versions add "$secret_name" \
+                    --data-file=- \
+                    --project="$MAIN_PROJECT" >/dev/null 2>&1; then
+                    print_status "Successfully stored: $secret_name"
+                    return 0
+                else
+                    retry_count=$((retry_count + 1))
+                    if [ $retry_count -lt $max_retries ]; then
+                        print_warning "Failed to add secret version, retrying in 2 seconds..."
+                        sleep 2
+                    fi
+                fi
+            done
+
+            print_error "Failed to store secret after $max_retries attempts: $secret_name"
+            return 1
+        }
+
+        # Store client email and private key with error handling
+        print_info "Storing client email..."
+        if create_or_update_secret "${SECRET_PREFIX}-client-email" "$CLIENT_EMAIL"; then
+            print_status "Client email secret stored successfully"
+        else
+            print_error "Failed to store client email secret"
+            exit 1
+        fi
+
+        print_info "Storing private key..."
+        if create_or_update_secret "${SECRET_PREFIX}-private-key" "$PRIVATE_KEY"; then
+            print_status "Private key secret stored successfully"
+        else
+            print_error "Failed to store private key secret"
+            exit 1
+        fi
+
+        print_status "Service account credentials stored in Secret Manager"
+        print_info "Secrets created:"
+        print_info "  - ${SECRET_PREFIX}-client-email"
+        print_info "  - ${SECRET_PREFIX}-private-key"
+
+    else
+        print_warning "Service account key file not found, skipping Secret Manager storage"
+    fi
+
+    # Switch back to pool project
+    gcloud config set project "$CURRENT_PROJECT"
+
+else
+    print_info "Service account creation was skipped, checking if secrets exist..."
+
+    # Switch to central project to check secrets
+    CURRENT_PROJECT=$(gcloud config get-value project)
+    gcloud config set project "$MAIN_PROJECT"
+
+    # Extract pool number for secret naming
+    POOL_NUMBER_CLEAN=$(echo "$POOL_NUMBER" | sed 's/^0*//')
+    if [ -z "$POOL_NUMBER_CLEAN" ]; then
+        POOL_NUMBER_CLEAN="0"
+    fi
+    SECRET_PREFIX="pool-$(printf "%03d" "$POOL_NUMBER_CLEAN")"
+
+    if gcloud secrets describe "${SECRET_PREFIX}-client-email" --project="$MAIN_PROJECT" >/dev/null 2>&1 && \
+       gcloud secrets describe "${SECRET_PREFIX}-private-key" --project="$MAIN_PROJECT" >/dev/null 2>&1; then
+        print_status "Service account secrets already exist in Secret Manager"
+    else
+        print_warning "Service account secrets not found in Secret Manager"
+        print_warning "Manual secret setup may be needed for this pool project"
+    fi
+
+    # Switch back to pool project
+    gcloud config set project "$CURRENT_PROJECT"
+fi
+
 # Step 5: Create Firebase web app
 print_step "5" "Creating Firebase web app"
 
@@ -515,9 +646,20 @@ print_step "8" "Setting up project tracking"
 print_info "Creating project availability secret..."
 if gcloud secrets describe "project-in-use" --project="$PROJECT_ID" >/dev/null 2>&1; then
     print_warning "Secret already exists, updating to available state..."
-    echo "false" | gcloud secrets versions add project-in-use --data-file=- --project="$PROJECT_ID"
+    if echo "false" | gcloud secrets versions add project-in-use --data-file=- --project="$PROJECT_ID"; then
+        print_status "Project-in-use secret updated successfully"
+    else
+        print_error "Failed to update project-in-use secret"
+        exit 1
+    fi
 else
-    echo "false" | gcloud secrets create project-in-use --data-file=- --project="$PROJECT_ID"
+    print_info "Creating new project-in-use secret..."
+    if echo "false" | gcloud secrets create project-in-use --data-file=- --project="$PROJECT_ID"; then
+        print_status "Project-in-use secret created successfully"
+    else
+        print_error "Failed to create project-in-use secret"
+        exit 1
+    fi
 fi
 
 print_info "Updating central tracking collection..."
@@ -564,6 +706,44 @@ fi
 
 # Clean up temporary files
 rm -f /tmp/temp_firebase_vars.txt /tmp/firebase-config.json
+
+# Register the project in ChatFactory mapping service
+echo ""
+echo "📋 Registering project in ChatFactory mapping service..."
+if command -v curl >/dev/null 2>&1; then
+    CHATFACTORY_API_URL="${CHATFACTORY_API_URL:-http://localhost:3000}"
+    REGISTER_ENDPOINT="$CHATFACTORY_API_URL/api/pool-management"
+
+    print_status "Calling: $REGISTER_ENDPOINT"
+
+    REGISTER_RESPONSE=$(curl -s --max-time 30 --retry 3 --retry-delay 2 -X POST "$REGISTER_ENDPOINT" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"action\": \"register\",
+            \"projectId\": \"$PROJECT_ID\",
+            \"projectName\": \"$PROJECT_NAME\",
+            \"region\": \"us-central1\",
+            \"billingAccountId\": \"$BILLING_ACCOUNT_ID\"
+        }" 2>/dev/null || echo '{"success": false, "error": "API call failed or timed out"}')
+
+    if echo "$REGISTER_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
+        SUCCESS=$(echo "$REGISTER_RESPONSE" | jq -r '.success')
+        if [ "$SUCCESS" = "true" ]; then
+            print_success "Project registered in ChatFactory mapping service!"
+            print_status "Project is now available for automatic chatbot deployment"
+        else
+            print_warning "Project registration failed:"
+            echo "$REGISTER_RESPONSE" | jq -r '.message // .error'
+            print_status "You can register manually via API call or ChatFactoryApp admin panel"
+        fi
+    else
+        print_warning "Could not register project (API may be unavailable)"
+        print_status "Register manually when ChatFactoryApp is running via admin panel or API"
+    fi
+else
+    print_warning "curl not available - skipping mapping service registration"
+    print_status "Register manually via ChatFactoryApp admin panel or API when available"
+fi
 
 echo ""
 echo "✅ PROJECT SETUP COMPLETE!"
