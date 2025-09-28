@@ -79,6 +79,10 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
 print_step() {
     echo -e "${BLUE}📋 Step $1: $2${NC}"
 }
@@ -416,6 +420,9 @@ if [ "$SKIP_SERVICE_ACCOUNT_CREATION" = "false" ]; then
         gcloud iam service-accounts create chatbot-service-account \
             --project="$PROJECT_ID" \
             --display-name="Chatbot Service Account"
+
+        print_info "Waiting for service account to propagate (10 seconds)..."
+        sleep 10
 
         print_info "Granting permissions..."
         gcloud projects add-iam-policy-binding "$PROJECT_ID" \
@@ -945,59 +952,235 @@ print_status "Project tracking configured"
 # Step 9: Get OAuth client information for future reference
 print_step "9" "Getting OAuth client information"
 
-ACCESS_TOKEN=$(gcloud auth print-access-token)
-OAUTH_CONFIG=$(curl -s -X GET "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs/google.com" \
-    -H "Authorization: Bearer $ACCESS_TOKEN")
+# Wait for OAuth configuration to propagate (OAuth client creation can take time to reflect in API)
+print_info "⏳ Waiting for OAuth configuration to propagate (60 seconds)..."
+for i in {1..60}; do
+    printf "\r⏳ Waiting: %02d/60 seconds" $i
+    sleep 1
+done
+printf "\n"
+print_status "Wait complete - checking OAuth configuration"
 
-OAUTH_CLIENT_ID=$(echo "$OAUTH_CONFIG" | jq -r '.clientId')
+ACCESS_TOKEN=$(gcloud auth print-access-token)
+
+# Method 1: Try Identity Toolkit API with proper quota project header
+print_info "Attempting OAuth client ID retrieval via Identity Toolkit API..."
+OAUTH_CONFIG=$(curl -s -X GET "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs/google.com" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "X-Goog-User-Project: $PROJECT_ID")
+
+OAUTH_CLIENT_ID=$(echo "$OAUTH_CONFIG" | jq -r '.clientId' 2>/dev/null)
 
 if [ "$OAUTH_CLIENT_ID" = "null" ] || [ -z "$OAUTH_CLIENT_ID" ]; then
-    print_warning "OAuth client ID not found. OAuth provider may need manual setup."
-    OAUTH_CLIENT_ID="NOT_FOUND"
+    print_info "Identity Toolkit API didn't return client ID, trying gcloud IAP method..."
+
+    # Method 2: Try gcloud IAP oauth-clients list
+    BRAND_NAME=$(gcloud alpha iap oauth-brands list --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | head -n1)
+
+    if [ -n "$BRAND_NAME" ]; then
+        print_info "Found OAuth brand: $BRAND_NAME"
+
+        # List OAuth clients for this brand
+        OAUTH_CLIENT_INFO=$(gcloud iap oauth-clients list "$BRAND_NAME" --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | head -n1)
+
+        if [ -n "$OAUTH_CLIENT_INFO" ]; then
+            # Extract client ID from the full name (projects/.../brands/.../identityAwareProxyClients/CLIENT_ID)
+            OAUTH_CLIENT_ID=$(echo "$OAUTH_CLIENT_INFO" | sed 's/.*identityAwareProxyClients\///')
+            print_status "OAuth client ID retrieved via gcloud IAP: $OAUTH_CLIENT_ID"
+        else
+            print_warning "No OAuth clients found for brand: $BRAND_NAME"
+            OAUTH_CLIENT_ID="NOT_FOUND"
+        fi
+    else
+        print_warning "No OAuth brand found for project: $PROJECT_ID"
+        OAUTH_CLIENT_ID="NOT_FOUND"
+    fi
 else
-    print_status "OAuth client ID retrieved: $OAUTH_CLIENT_ID"
+    print_status "OAuth client ID retrieved via Identity Toolkit API: $OAUTH_CLIENT_ID"
+fi
+
+# If still not found, provide helpful information
+if [ "$OAUTH_CLIENT_ID" = "NOT_FOUND" ] || [ -z "$OAUTH_CLIENT_ID" ]; then
+    print_warning "OAuth client ID could not be retrieved automatically"
+    print_info "You can find it manually at:"
+    print_info "  https://console.cloud.google.com/apis/credentials?project=$PROJECT_ID"
+    OAUTH_CLIENT_ID="MANUAL_SETUP_REQUIRED"
+else
+    print_success "✅ OAuth client ID successfully retrieved!"
 fi
 
 # Clean up temporary files
 rm -f /tmp/temp_firebase_vars.txt /tmp/firebase-config.json
 
-# Register the project in ChatFactory mapping service
+# Register the project in ChatFactory mapping service directly via Firestore
 echo ""
-echo "📋 Registering project in ChatFactory mapping service..."
-if command -v curl >/dev/null 2>&1; then
-    CHATFACTORY_API_URL="${CHATFACTORY_API_URL:-http://localhost:3000}"
-    REGISTER_ENDPOINT="$CHATFACTORY_API_URL/api/pool-management"
+echo "📋 Registering project in ChatFactory Firestore database..."
+print_info "Using direct Firestore registration (no localhost required)"
 
-    print_status "Calling: $REGISTER_ENDPOINT"
+# Get the central ChatFactory project ID for Firestore registration
+CENTRAL_PROJECT_ID="${FIREBASE_PROJECT_ID:-docsai-chatbot-app}"
+print_info "Registering in Firestore database: $CENTRAL_PROJECT_ID"
 
-    REGISTER_RESPONSE=$(curl -s --max-time 30 --retry 3 --retry-delay 2 -X POST "$REGISTER_ENDPOINT" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"action\": \"register\",
-            \"projectId\": \"$PROJECT_ID\",
-            \"projectName\": \"$PROJECT_NAME\",
-            \"region\": \"us-central1\",
-            \"billingAccountId\": \"$BILLING_ACCOUNT_ID\"
-        }" 2>/dev/null || echo '{"success": false, "error": "API call failed or timed out"}')
+# Create the project mapping document structure matching ProjectMappingService
+CURRENT_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-    if echo "$REGISTER_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
-        SUCCESS=$(echo "$REGISTER_RESPONSE" | jq -r '.success')
-        if [ "$SUCCESS" = "true" ]; then
-            print_success "Project registered in ChatFactory mapping service!"
-            print_status "Project is now available for automatic chatbot deployment"
-        else
-            print_warning "Project registration failed:"
-            echo "$REGISTER_RESPONSE" | jq -r '.message // .error'
-            print_status "You can register manually via API call or ChatFactoryApp admin panel"
-        fi
+# Create temporary file for Firestore data
+cat > /tmp/project-mapping.json << EOF
+{
+  "projectId": "$PROJECT_ID",
+  "chatbotId": null,
+  "userId": null,
+  "status": "available",
+  "createdAt": "$CURRENT_TIMESTAMP",
+  "lastUsedAt": "$CURRENT_TIMESTAMP",
+  "deployedAt": null,
+  "recycledAt": null,
+  "vercelUrl": null,
+  "projectType": "pool",
+  "metadata": {
+    "projectName": "$PROJECT_NAME",
+    "region": "us-central1",
+    "billingAccountId": "$BILLING_ACCOUNT_ID"
+  }
+}
+EOF
+
+print_info "Writing project mapping to Firestore collection: firebaseProjects/$PROJECT_ID"
+
+# Use Firestore REST API for direct registration (more reliable than Firebase CLI)
+print_info "Getting access token for Firestore API..."
+ACCESS_TOKEN=$(gcloud auth print-access-token --project="$CENTRAL_PROJECT_ID")
+
+if [ -n "$ACCESS_TOKEN" ]; then
+    print_info "Writing to Firestore via REST API..."
+
+    # First check if document already exists
+    EXISTING_DOC_CHECK=$(curl -s -X GET \
+        "https://firestore.googleapis.com/v1/projects/$CENTRAL_PROJECT_ID/databases/(default)/documents/firebaseProjects/$PROJECT_ID" \
+        -H "Authorization: Bearer $ACCESS_TOKEN")
+
+    if echo "$EXISTING_DOC_CHECK" | grep -q '"name":'; then
+        print_info "Document already exists - updating instead of creating..."
+
+        # Create JSON payload file for update
+        cat > /tmp/firestore-payload.json << EOF
+{
+    "fields": {
+        "projectId": {"stringValue": "$PROJECT_ID"},
+        "chatbotId": {"nullValue": null},
+        "userId": {"nullValue": null},
+        "status": {"stringValue": "available"},
+        "createdAt": {"timestampValue": "$CURRENT_TIMESTAMP"},
+        "lastUsedAt": {"timestampValue": "$CURRENT_TIMESTAMP"},
+        "deployedAt": {"nullValue": null},
+        "recycledAt": {"nullValue": null},
+        "vercelUrl": {"nullValue": null},
+        "projectType": {"stringValue": "pool"},
+        "metadata": {
+            "mapValue": {
+                "fields": {
+                    "projectName": {"stringValue": "$PROJECT_NAME"},
+                    "region": {"stringValue": "us-central1"},
+                    "billingAccountId": {"stringValue": "$BILLING_ACCOUNT_ID"}
+                }
+            }
+        }
+    }
+}
+EOF
+
+        FIRESTORE_RESPONSE=$(curl -s -X PATCH \
+            "https://firestore.googleapis.com/v1/projects/$CENTRAL_PROJECT_ID/databases/(default)/documents/firebaseProjects/$PROJECT_ID" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/firestore-payload.json 2>&1)
+
+        # Clean up payload file
+        rm -f /tmp/firestore-payload.json
     else
-        print_warning "Could not register project (API may be unavailable)"
-        print_status "Register manually when ChatFactoryApp is running via admin panel or API"
+        print_info "Creating new document..."
+
+        # Create JSON payload file to avoid shell escaping issues
+        cat > /tmp/firestore-payload.json << EOF
+{
+    "fields": {
+        "projectId": {"stringValue": "$PROJECT_ID"},
+        "chatbotId": {"nullValue": null},
+        "userId": {"nullValue": null},
+        "status": {"stringValue": "available"},
+        "createdAt": {"timestampValue": "$CURRENT_TIMESTAMP"},
+        "lastUsedAt": {"timestampValue": "$CURRENT_TIMESTAMP"},
+        "deployedAt": {"nullValue": null},
+        "recycledAt": {"nullValue": null},
+        "vercelUrl": {"nullValue": null},
+        "projectType": {"stringValue": "pool"},
+        "metadata": {
+            "mapValue": {
+                "fields": {
+                    "projectName": {"stringValue": "$PROJECT_NAME"},
+                    "region": {"stringValue": "us-central1"},
+                    "billingAccountId": {"stringValue": "$BILLING_ACCOUNT_ID"}
+                }
+            }
+        }
+    }
+}
+EOF
+
+        FIRESTORE_RESPONSE=$(curl -s -X POST \
+            "https://firestore.googleapis.com/v1/projects/$CENTRAL_PROJECT_ID/databases/(default)/documents/firebaseProjects?documentId=$PROJECT_ID" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/firestore-payload.json 2>&1)
+
+        # Clean up payload file
+        rm -f /tmp/firestore-payload.json
+    fi
+
+    # Debug: Show response for troubleshooting
+    print_info "Firestore API response received (length: ${#FIRESTORE_RESPONSE})"
+
+    # Show first 300 characters of response for debugging
+    print_info "Response preview: ${FIRESTORE_RESPONSE:0:300}"
+
+    if echo "$FIRESTORE_RESPONSE" | grep -q '"name":'; then
+        print_success "Project successfully registered in ChatFactory database!"
+        print_status "Project is now available for automatic chatbot deployment"
+        print_info "Document created at: $(echo "$FIRESTORE_RESPONSE" | jq -r '.name' 2>/dev/null || echo "Unknown")"
+
+        # Also create the secret for project tracking
+        print_info "Setting project-in-use secret to 'false'..."
+
+        # Create temp file for secret value (process substitution doesn't work reliably on Windows)
+        echo "false" > /tmp/secret-value.txt
+
+        if gcloud secrets versions add "project-in-use-$PROJECT_ID" --data-file=/tmp/secret-value.txt --project="$CENTRAL_PROJECT_ID" 2>/dev/null; then
+            print_status "Project secret initialized"
+        else
+            # Secret might not exist, try creating it first
+            if gcloud secrets create "project-in-use-$PROJECT_ID" --data-file=/tmp/secret-value.txt --project="$CENTRAL_PROJECT_ID" 2>/dev/null; then
+                print_status "Project secret created and initialized"
+            else
+                print_warning "Could not initialize project secret (may need manual setup)"
+                print_info "You can create it manually:"
+                print_info "  gcloud secrets create project-in-use-$PROJECT_ID --data-file=<(echo false) --project=$CENTRAL_PROJECT_ID"
+            fi
+        fi
+
+        # Clean up temp file
+        rm -f /tmp/secret-value.txt
+    else
+        print_warning "❌ Failed to register project in Firestore via REST API"
+        print_info "Response preview: $(echo "$FIRESTORE_RESPONSE" | head -c 200)..."
+        print_info "The pool project is still functional - you can register manually later"
     fi
 else
-    print_warning "curl not available - skipping mapping service registration"
-    print_status "Register manually via ChatFactoryApp admin panel or API when available"
+    print_warning "❌ Failed to get access token for Firestore registration"
+    print_info "The pool project is still functional - you can register manually later"
 fi
+
+# Clean up temporary file
+rm -f /tmp/project-mapping.json
 
 echo ""
 echo "✅ PROJECT SETUP COMPLETE!"
