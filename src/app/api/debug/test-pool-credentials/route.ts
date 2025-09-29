@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PoolCredentialsService } from '@/services/poolCredentialsService';
+import { FirestoreSecretService } from '@/services/firestoreSecretService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`🧪 Testing pool credentials for: ${projectId}`);
 
-    const credentials = await PoolCredentialsService.getPoolServiceAccount(projectId);
+    const credentials = await FirestoreSecretService.getPoolServiceAccount(projectId);
 
     return NextResponse.json({
       projectId,

@@ -3,7 +3,7 @@ import { adminDb, adminStorage } from '@/lib/firebase/admin/index';
 import { Timestamp } from 'firebase-admin/firestore';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
-import { FirebaseAPIService } from '@/services/firebaseAPIService';
+import { FirestoreSecretService } from '@/services/firestoreSecretService';
 import { FirebaseProjectService } from '@/services/firebaseProjectService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
 import { getEmbeddingDimensions, getEmbeddingProvider } from '@/lib/embeddingModels';
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
       
       // API Keys (available from process.env)
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+      OPENAI_API_KEY: await FirestoreSecretService.getOpenAIApiKey() || '',
       MISTRAL_API_KEY: process.env.MISTRAL_API_KEY || '',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       COHERE_API_KEY: process.env.COHERE_API_KEY || '',

@@ -2,6 +2,7 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import OpenAI from 'openai';
+import { FirestoreSecretService } from './firestoreSecretService';
 
 interface DocumentMetadata {
   chatbotId: string;
@@ -37,9 +38,13 @@ class PineconeService {
     return this.pinecone;
   }
 
-  private static getOpenAIClient(): OpenAI {
+  private static async getOpenAIClient(): Promise<OpenAI> {
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+      const apiKey = await FirestoreSecretService.getOpenAIApiKey();
+      if (!apiKey) {
+        throw new Error('OpenAI API key not found in Firestore secrets');
+      }
+      this.openai = new OpenAI({ apiKey });
     }
     return this.openai;
   }
@@ -341,7 +346,7 @@ class PineconeService {
   }
 
   static async generateEmbeddings(textChunks: string[]): Promise<number[][]> {
-    const openai = this.getOpenAIClient();
+    const openai = await this.getOpenAIClient();
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-small',
       input: textChunks,

@@ -3,6 +3,7 @@ export interface ProjectMapping {
   chatbotId: string | null;
   userId: string | null;
   status: ProjectStatus;
+  projectInUse?: boolean;
   createdAt: Date;
   lastUsedAt: Date;
   deployedAt: Date | null;
@@ -46,6 +47,7 @@ export interface ProjectMappingDocument {
   chatbotId: string | null;
   userId: string | null;
   status: ProjectStatus;
+  projectInUse?: boolean;
   createdAt: FirebaseFirestore.Timestamp;
   lastUsedAt: FirebaseFirestore.Timestamp;
   deployedAt: FirebaseFirestore.Timestamp | null;

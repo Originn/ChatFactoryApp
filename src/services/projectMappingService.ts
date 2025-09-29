@@ -1,7 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin/index';
 import { FieldValue } from 'firebase-admin/firestore';
-import { getAuthClient } from '@/lib/gcp-auth';
-import { google } from 'googleapis';
 import {
   ProjectMapping,
   ProjectMappingDocument,
@@ -18,7 +16,6 @@ import {
  */
 export class ProjectMappingService {
   private static readonly COLLECTION_NAME = 'firebaseProjects';
-  private static readonly SECRET_NAME = 'project-in-use';
 
   /**
    * Find and atomically reserve an available project for a chatbot
@@ -62,11 +59,11 @@ export class ProjectMappingService {
         console.log(`🎯 Found candidate project: ${projectId} (type: ${projectData.projectType})`);
         console.log(`📅 Last used: ${projectData.lastUsedAt ? projectData.lastUsedAt.toDate().toLocaleString() : 'never'}`);
 
-        // Double-check project-in-use secret before reserving (for both pool and dedicated)
-        console.log(`🔐 Verifying project availability via secret...`);
-        const isActuallyInUse = await this.checkProjectSecret(projectId);
+        // Double-check projectInUse field before reserving (Firestore-based verification)
+        console.log(`🔐 Verifying project availability via projectInUse field...`);
+        const isActuallyInUse = projectData.projectInUse === true;
         if (isActuallyInUse) {
-          console.warn(`⚠️ Project ${projectId} marked available in Firestore but secret says in-use`);
+          console.warn(`⚠️ Project ${projectId} marked available but projectInUse is true`);
           console.log(`🔄 Correcting status and continuing search...`);
           // Update Firestore to reflect actual status
           transaction.update(projectDoc.ref, {
@@ -81,6 +78,7 @@ export class ProjectMappingService {
           chatbotId: request.chatbotId,
           userId: request.userId,
           status: 'in-use',
+          projectInUse: true,
           deployedAt: FieldValue.serverTimestamp() as any,
           vercelUrl: request.vercelUrl || null,
           lastUsedAt: FieldValue.serverTimestamp() as any
@@ -106,9 +104,7 @@ export class ProjectMappingService {
         return reservedProject;
       });
 
-      // Update the project-in-use secret (for both pool and dedicated projects)
-      await this.updateProjectSecret(result.projectId, 'true');
-      console.log(`🔐 Project-in-use secret: Updated to 'true' for ${result.projectType} project`);
+      console.log(`🔐 Project-in-use status: Updated to true in Firestore for ${result.projectType} project`);
 
       console.log(`✅ PROJECT RESERVATION SUCCESSFUL!`);
       console.log(`🎯 Reserved Project: ${result.projectId}`);
@@ -165,6 +161,7 @@ export class ProjectMappingService {
           chatbotId: null,
           userId: null,
           status: 'available',
+          projectInUse: false,
           recycledAt: FieldValue.serverTimestamp() as any,
           vercelUrl: null,
           lastUsedAt: FieldValue.serverTimestamp() as any
@@ -173,9 +170,7 @@ export class ProjectMappingService {
         transaction.update(projectRef, releasedMapping);
       });
 
-      // Update the project-in-use secret (for both pool and dedicated projects)
-      await this.updateProjectSecret(projectId, 'false');
-      console.log(`🔐 Project-in-use secret: Updated to 'false' for ${projectType} project`);
+      console.log(`🔐 Project-in-use status: Updated to false in Firestore for ${projectType} project`);
 
       console.log(`✅ Successfully released project ${projectId} back to available pool`);
 
@@ -224,6 +219,7 @@ export class ProjectMappingService {
             chatbotId,
             userId,
             status: 'in-use',
+            projectInUse: true,
             createdAt: FieldValue.serverTimestamp() as any,
             lastUsedAt: FieldValue.serverTimestamp() as any,
             deployedAt: FieldValue.serverTimestamp() as any,
@@ -250,6 +246,7 @@ export class ProjectMappingService {
             chatbotId,
             userId,
             status: 'in-use',
+            projectInUse: true,
             deployedAt: FieldValue.serverTimestamp() as any,
             vercelUrl: vercelUrl || null,
             lastUsedAt: FieldValue.serverTimestamp() as any
@@ -259,8 +256,7 @@ export class ProjectMappingService {
         }
       });
 
-      // Update the project-in-use secret
-      await this.updateProjectSecret(projectId, 'true');
+      // Project-in-use status already updated in Firestore transaction above
 
       console.log(`✅ Successfully marked project ${projectId} as in use`);
 
@@ -313,6 +309,7 @@ export class ProjectMappingService {
         chatbotId: null,
         userId: null,
         status: 'available',
+        projectInUse: false,
         createdAt: FieldValue.serverTimestamp() as any,
         lastUsedAt: FieldValue.serverTimestamp() as any,
         deployedAt: null,
@@ -324,8 +321,7 @@ export class ProjectMappingService {
 
       await projectRef.set(newMapping);
 
-      // Ensure project-in-use secret is set to false
-      await this.updateProjectSecret(projectId, 'false');
+      // Project-in-use status already set to false in Firestore document above
 
       console.log(`✅ Successfully added project ${projectId} to ${projectType} pool`);
 
@@ -371,15 +367,15 @@ export class ProjectMappingService {
           const projectData = doc.data() as ProjectMappingDocument;
           const pid = projectData.projectId;
 
-          // Check actual secret value
-          const secretInUse = await this.checkProjectSecret(pid);
-          const firestoreInUse = projectData.status === 'in-use';
+          // Check consistency between status and projectInUse fields
+          const statusInUse = projectData.status === 'in-use';
+          const projectInUse = projectData.projectInUse === true;
 
-          if (secretInUse !== firestoreInUse) {
-            console.log(`🔄 Syncing project ${pid}: Secret=${secretInUse}, Firestore=${firestoreInUse}`);
+          if (statusInUse !== projectInUse) {
+            console.log(`🔄 Syncing project ${pid}: status=${projectData.status}, projectInUse=${projectInUse}`);
 
-            // Update Firestore to match secret (secret is source of truth)
-            const updatedStatus: ProjectStatus = secretInUse ? 'in-use' : 'available';
+            // Update both fields to be consistent (projectInUse is more reliable)
+            const updatedStatus: ProjectStatus = projectInUse ? 'in-use' : 'available';
 
             await doc.ref.update({
               status: updatedStatus,
@@ -465,107 +461,6 @@ export class ProjectMappingService {
     }
   }
 
-  /**
-   * Check the actual project-in-use secret value
-   * @param projectId - The project ID to check
-   * @returns Promise<boolean> - true if project is in use
-   */
-  private static async checkProjectSecret(projectId: string): Promise<boolean> {
-    try {
-      const authClient = await getAuthClient();
-      const secretManager = google.secretmanager('v1');
-
-      const secretName = `projects/${projectId}/secrets/${this.SECRET_NAME}/versions/latest`;
-
-      const response = await secretManager.projects.secrets.versions.access({
-        name: secretName
-      });
-
-      const rawData = response.data.payload?.data || '';
-      const secretValue = Buffer.from(rawData, 'base64').toString();
-      const trimmedValue = secretValue.trim();
-      const result = trimmedValue === 'true';
-
-      console.log(`🔍 DEBUG checkProjectSecret for ${projectId}:`);
-      console.log(`   Raw data: "${rawData}"`);
-      console.log(`   Decoded: "${secretValue}"`);
-      console.log(`   Trimmed: "${trimmedValue}"`);
-      console.log(`   Result: ${result}`);
-
-      return result;
-
-    } catch (error: any) {
-      // If secret doesn't exist, assume project is available
-      if (error.code === 404) {
-        console.log(`ℹ️ No secret found for project ${projectId}, assuming available`);
-        return false;
-      }
-      console.error(`⚠️ Error checking secret for project ${projectId}:`, error);
-      return false; // Default to available on error
-    }
-  }
-
-  /**
-   * Update the project-in-use secret
-   * @param projectId - The project ID
-   * @param value - The secret value ('true' or 'false')
-   * @returns Promise<void>
-   */
-  private static async updateProjectSecret(projectId: string, value: 'true' | 'false'): Promise<void> {
-    try {
-      const authClient = await getAuthClient();
-      const secretManager = google.secretmanager('v1');
-
-      const secretName = `projects/${projectId}/secrets/${this.SECRET_NAME}`;
-
-      // Create new secret version
-      await secretManager.projects.secrets.addVersion({
-        parent: secretName,
-        requestBody: {
-          payload: {
-            data: Buffer.from(value).toString('base64')
-          }
-        }
-      });
-
-      console.log(`✅ Updated secret for project ${projectId}: ${value}`);
-
-    } catch (error: any) {
-      // If secret doesn't exist, try to create it
-      if (error.code === 404) {
-        try {
-          console.log(`🔧 Creating new secret for project ${projectId}`);
-          await secretManager.projects.secrets.create({
-            parent: `projects/${projectId}`,
-            secretId: this.SECRET_NAME,
-            auth: authClient,
-            requestBody: {
-              replication: { automatic: {} }
-            }
-          });
-
-          // Add the initial version
-          await secretManager.projects.secrets.versions.add({
-            parent: secretName,
-            auth: authClient,
-            requestBody: {
-              payload: {
-                data: Buffer.from(value).toString('base64')
-              }
-            }
-          });
-
-          console.log(`✅ Created and initialized secret for project ${projectId}: ${value}`);
-        } catch (createError: any) {
-          console.error(`❌ Failed to create secret for project ${projectId}:`, createError);
-          throw createError;
-        }
-      } else {
-        console.error(`❌ Failed to update secret for project ${projectId}:`, error);
-        throw error;
-      }
-    }
-  }
 
   /**
    * Find the project assigned to a specific chatbot

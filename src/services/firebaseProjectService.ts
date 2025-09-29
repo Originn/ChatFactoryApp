@@ -5,7 +5,7 @@ import { Storage } from '@google-cloud/storage';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { GoogleAuth } from 'google-auth-library';
 import { ProjectMappingService } from './projectMappingService';
-import { PoolCredentialsService } from './poolCredentialsService';
+import { FirestoreSecretService } from './firestoreSecretService';
 
 export interface CreateFirebaseProjectRequest {
   chatbotId: string;
@@ -454,7 +454,7 @@ export class FirebaseProjectService {
           if (data.projectType === 'pool') {
             try {
               console.log(`🔐 Retrieving pool credentials for ${projectId}...`);
-              const poolCredentials = await PoolCredentialsService.getPoolServiceAccount(projectId);
+              const poolCredentials = await FirestoreSecretService.getPoolServiceAccount(projectId);
 
               // Add service account to project data
               (project as any).serviceAccount = {
