@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import UserDropdown from "@/components/dashboard/UserDropdown";
 import Header from "@/components/shared/Header";
@@ -82,6 +84,63 @@ export default function NewChatbotPage() {
   // Email management for invited users
   const [newEmail, setNewEmail] = useState('');
   const [emailError, setEmailError] = useState('');
+
+  // Firebase project selection
+  const [availableProjects, setAvailableProjects] = useState<Array<{id: string, name: string, status: string}>>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('auto');
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+
+  // Load available Firebase pool projects
+  useEffect(() => {
+    const loadProjects = async () => {
+      setIsLoadingProjects(true);
+      try {
+        console.log('🔍 Loading Firebase projects...');
+        const response = await fetch('/api/firebase-projects');
+        console.log('📡 Response status:', response.status, response.ok);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📊 All projects:', data.projects?.length || 0);
+          console.log('📋 Raw projects data:', data.projects);
+
+          const poolProjects = data.projects?.filter((p: any) => {
+            const isPool = p.projectType === 'pool';
+            const isAvailableOrInUse = p.status === 'available' || p.status === 'in-use';
+            console.log(`Project ${p.projectId}: type=${p.projectType}, status=${p.status}, isPool=${isPool}, isAvailableOrInUse=${isAvailableOrInUse}`);
+            return isPool && isAvailableOrInUse;
+          }) || [];
+
+          console.log('✅ Filtered pool projects:', poolProjects.length);
+          console.log('📋 Pool projects:', poolProjects);
+
+          const mappedProjects: Array<{id: string, name: string, status: string}> = poolProjects.map((p: any) => ({
+            id: p.projectId,
+            name: p.projectId,
+            status: p.status
+          }));
+
+          // De-duplicate projects by ID to avoid React key warnings
+          const uniqueProjectsMap = new Map<string, {id: string, name: string, status: string}>();
+          mappedProjects.forEach(p => {
+            uniqueProjectsMap.set(p.id, p);
+          });
+          const uniqueProjects = Array.from(uniqueProjectsMap.values());
+
+          console.log('🎯 Final mapped projects:', mappedProjects);
+          console.log('✨ Unique projects after deduplication:', uniqueProjects);
+          setAvailableProjects(uniqueProjects);
+        } else {
+          console.error('❌ Response not OK:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Error loading projects:', error);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
+    loadProjects();
+  }, []);
 
   // Email validation function
   const validateEmail = (email: string) => {
@@ -492,6 +551,7 @@ export default function NewChatbotPage() {
         updatedAt: serverTimestamp(),
         status: 'draft',
         documents: [],
+        preferredProjectId: selectedProjectId !== 'auto' ? selectedProjectId : null, // Store selected Firebase project
         aiConfig: {
           embeddingModel: formData.embeddingModel,
           multimodal: formData.multimodal,
@@ -817,7 +877,34 @@ export default function NewChatbotPage() {
                       Provide details about what kind of questions this chatbot will answer.
                     </p>
                   </div>
-                  
+
+                  {/* Firebase Project Selector */}
+                  <div className="space-y-2">
+                    <Label htmlFor="firebase-project" className="text-sm font-medium text-foreground">
+                      Firebase Project (Deployment)
+                    </Label>
+                    <Select
+                      value={selectedProjectId}
+                      onValueChange={setSelectedProjectId}
+                      disabled={isLoadingProjects}
+                    >
+                      <SelectTrigger id="firebase-project" className="w-full">
+                        <SelectValue placeholder="Select project..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">🤖 Auto-assign (Recommended)</SelectItem>
+                        {availableProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name} {project.status === 'in-use' ? '(In Use)' : '(Available)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Choose a specific Firebase pool project for deployment or let the system auto-assign one. This determines which Firebase instance will host your chatbot.
+                    </p>
+                  </div>
+
                   {/* Custom Domain Info */}
                   <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
                     <div className="flex items-start space-x-2">

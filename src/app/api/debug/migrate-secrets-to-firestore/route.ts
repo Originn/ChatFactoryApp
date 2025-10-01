@@ -17,7 +17,7 @@ export async function POST() {
 
     const listResponse = await secretManager.projects.secrets.list({
       parent: `projects/${centralProjectId}`,
-      auth: authClient
+      auth: authClient as any
     });
 
     const secrets = listResponse.data.secrets || [];
@@ -150,7 +150,7 @@ export async function GET() {
 
     const listResponse = await secretManager.projects.secrets.list({
       parent: `projects/${centralProjectId}`,
-      auth: authClient
+      auth: authClient as any
     });
 
     const secretManagerSecrets = listResponse.data.secrets || [];

@@ -11,6 +11,7 @@ export interface CreateFirebaseProjectRequest {
   chatbotId: string;
   chatbotName: string;
   creatorUserId: string;
+  preferredProjectId?: string;
 }
 
 export interface FirebaseProject {
@@ -374,16 +375,20 @@ export class FirebaseProjectService {
   static async createProjectForChatbot(
     request: CreateFirebaseProjectRequest
   ): Promise<{ success: boolean; project?: FirebaseProject; error?: string }> {
-    const { chatbotId, chatbotName, creatorUserId } = request;
+    const { chatbotId, chatbotName, creatorUserId, preferredProjectId } = request;
 
     console.log('🔥 Creating/assigning Firebase project for chatbot:', chatbotId);
     console.log('📋 Deployment Strategy: Pool-first with dedicated fallback');
+    if (preferredProjectId) {
+      console.log(`🎯 User requested specific project: ${preferredProjectId}`);
+    }
 
     // Step 1: Try to find and reserve an available project from the pool
     console.log('🔍 Checking for available projects in the pool...');
     const reservationResult = await ProjectMappingService.findAndReserveProject({
       chatbotId,
-      userId: creatorUserId
+      userId: creatorUserId,
+      preferredProjectId
     });
 
     if (reservationResult.success && reservationResult.project) {
@@ -444,14 +449,23 @@ export class FirebaseProjectService {
         const data = projectDoc.data();
         // For pool projects, status is 'available'/'in-use' (pool status)
         // For dedicated projects, status is 'active'/'creating'/'failed' (Firebase status)
-        const isValidPoolProject = data.projectType === 'pool' && data.config;
+        const isValidPoolProject = (data.projectType === 'pool' || projectId.includes('pool')) && data.config;
         const isValidDedicatedProject = data.status === 'active' && data.config;
+
+        console.log(`🔍 Project validation for ${projectId}:`, {
+          hasData: !!data,
+          projectType: data?.projectType,
+          hasConfig: !!data?.config,
+          status: data?.status,
+          isValidPoolProject,
+          isValidDedicatedProject
+        });
 
         if (data && (isValidPoolProject || isValidDedicatedProject)) {
           const project = data as FirebaseProject;
 
           // For pool projects, retrieve service account from Secret Manager
-          if (data.projectType === 'pool') {
+          if (data.projectType === 'pool' || projectId.includes('pool')) {
             try {
               console.log(`🔐 Retrieving pool credentials for ${projectId}...`);
               const poolCredentials = await FirestoreSecretService.getPoolServiceAccount(projectId);

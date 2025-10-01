@@ -6,33 +6,22 @@ export async function POST() {
   try {
     console.log('⚙️ Adding Firebase configs to pool projects...');
 
-    // Sample Firebase configs for each pool project
-    const poolConfigs = {
-      'chatfactory-pool-001': {
-        apiKey: "AIzaSyA_pool001_sample_api_key",
-        authDomain: "chatfactory-pool-001.firebaseapp.com",
-        projectId: "chatfactory-pool-001",
-        storageBucket: "chatfactory-pool-001.appspot.com",
-        messagingSenderId: "123456789001",
-        appId: "1:123456789001:web:pool001sample"
-      },
-      'chatfactory-pool-002': {
-        apiKey: "AIzaSyA_pool002_sample_api_key",
-        authDomain: "chatfactory-pool-002.firebaseapp.com",
-        projectId: "chatfactory-pool-002",
-        storageBucket: "chatfactory-pool-002.appspot.com",
-        messagingSenderId: "123456789002",
-        appId: "1:123456789002:web:pool002sample"
-      },
-      'chatfactory-pool-003': {
-        apiKey: "AIzaSyA_pool003_sample_api_key",
-        authDomain: "chatfactory-pool-003.firebaseapp.com",
-        projectId: "chatfactory-pool-003",
-        storageBucket: "chatfactory-pool-003.appspot.com",
-        messagingSenderId: "123456789003",
-        appId: "1:123456789003:web:pool003sample"
-      }
-    };
+    // Generate Firebase configs for all pool projects (001-026)
+    const poolConfigs: Record<string, any> = {};
+
+    for (let i = 1; i <= 26; i++) {
+      const poolNumber = i.toString().padStart(3, '0');
+      const projectId = `chatfactory-pool-${poolNumber}`;
+
+      poolConfigs[projectId] = {
+        apiKey: `AIzaSyA_pool${poolNumber}_sample_api_key`,
+        authDomain: `${projectId}.firebaseapp.com`,
+        projectId: projectId,
+        storageBucket: `${projectId}.appspot.com`,
+        messagingSenderId: `12345678900${i}`,
+        appId: `1:12345678900${i}:web:pool${poolNumber}sample`
+      };
+    }
 
     const batch = adminDb.batch();
     let updatedCount = 0;
@@ -51,7 +40,7 @@ export async function POST() {
           batch.update(projectRef, {
             config,
             displayName: `${projectId} Pool Project`,
-            status: 'active', // Firebase project status
+            status: 'available', // Project mapping status (not Firebase project status)
             buckets: {
               documents: `${projectId}-chatbot_documents`,
               privateImages: `${projectId}-chatbot_private_images`,

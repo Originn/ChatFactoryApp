@@ -44,6 +44,31 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
 
     console.log(`🗑️ Chatbot deletion request: ${chatbotId} (deleteVectorstore: ${deleteVectorstore}, deleteAuraDB: ${deleteAuraDB})`);
 
+    // Read chatbot data FIRST before any deletion to preserve Vercel/Neo4j info
+    let chatbotData: any = null;
+    let vercelProjectId: string | null = null;
+    let vercelProjectName: string | null = null;
+    let neo4jData: any = null;
+
+    try {
+      const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+      if (chatbotDoc.exists) {
+        chatbotData = chatbotDoc.data();
+        vercelProjectId = chatbotData?.vercelProjectId || null;
+        vercelProjectName = chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || null;
+        neo4jData = chatbotData?.neo4j || null;
+        console.log('📋 Chatbot data retrieved for deletion:', {
+          hasVercelProjectId: !!vercelProjectId,
+          hasVercelProjectName: !!vercelProjectName,
+          hasNeo4jData: !!neo4jData
+        });
+      } else {
+        console.warn('⚠️ Chatbot document not found - may have been deleted already');
+      }
+    } catch (error) {
+      console.error('❌ Error reading chatbot data:', error);
+    }
+
     const results = {
       chatbot: false,
       documents: false,
@@ -98,14 +123,8 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
       if (deleteAuraDB) {
         console.log('🗄️ Cleaning up AuraDB instance...');
         try {
-          // Get chatbot configuration to find Neo4j instance
-          const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
-          if (chatbotDoc.exists) {
-            const chatbotData = chatbotDoc.data();
-
-            // Check if chatbot has Neo4j instance data
-            if (chatbotData?.neo4j) {
-              const neo4jData = chatbotData.neo4j;
+          // Use pre-loaded Neo4j data
+          if (neo4jData) {
               console.log('🔍 Found Neo4j data in chatbot:', {
                 hasUri: !!neo4jData.uri,
                 hasDatabase: !!neo4jData.database,
@@ -134,14 +153,6 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
                 const deleted = await Neo4jAuraService.deleteInstance(instanceId);
                 if (deleted) {
                   console.log(`✅ AuraDB instance deleted: ${instanceId}`);
-
-                  // Update chatbot document to mark Neo4j as deleted
-                  await adminDb.collection('chatbots').doc(chatbotId).update({
-                    'neo4j.status': 'deleted',
-                    'neo4j.deletedAt': admin.firestore.Timestamp.now(),
-                    updatedAt: admin.firestore.Timestamp.now()
-                  });
-
                   results.details.services_cleaned.push('neo4j-aura');
                   results.auradb = true;
                 } else {
@@ -152,13 +163,9 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
                 console.log('❌ Could not determine instance ID from Neo4j data');
                 results.errors.push('Could not determine Neo4j instance ID');
               }
-            } else {
-              console.log('📝 No Neo4j instance data found in chatbot document');
-              results.auradb = true; // Consider successful if no instance exists
-            }
           } else {
-            console.log('📝 Chatbot document not found');
-            results.auradb = true; // Consider successful if chatbot not found
+            console.log('📝 No Neo4j instance data found in chatbot');
+            results.auradb = true; // Consider successful if no instance exists
           }
         } catch (auraError) {
           console.error('❌ AuraDB cleanup failed:', auraError);
@@ -233,44 +240,34 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Chatbot
       console.log('🚀 Deleting Vercel project...');
 
       try {
-        // Get chatbot data to find Vercel project info
-        const chatbotDoc = await adminDb.collection('chatbots').doc(chatbotId).get();
+        // Use pre-loaded Vercel project info
+        if (vercelProjectId || vercelProjectName) {
+          const VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
+          if (VERCEL_API_TOKEN) {
+            const vercel = new Vercel({ bearerToken: VERCEL_API_TOKEN });
+            const idOrName = vercelProjectId || vercelProjectName;
 
-        if (chatbotDoc.exists) {
-          const chatbotData = chatbotDoc.data();
-          const vercelProjectId = chatbotData?.vercelProjectId;
-          const vercelProjectName = chatbotData?.name?.toLowerCase().replace(/[^a-z0-9]/g, '');
+            console.log(`🎯 Attempting to delete Vercel project: ${idOrName}`);
 
-          if (vercelProjectId || vercelProjectName) {
-            const VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
-            if (VERCEL_API_TOKEN) {
-              const vercel = new Vercel({ bearerToken: VERCEL_API_TOKEN });
-              const idOrName = vercelProjectId || vercelProjectName;
-
-              console.log(`🎯 Attempting to delete Vercel project: ${idOrName}`);
-
-              try {
-                await vercel.projects.deleteProject({ idOrName });
-                console.log(`✅ Successfully deleted Vercel project: ${idOrName}`);
-                results.details.services_cleaned.push('vercel-project');
-              } catch (vercelError: any) {
-                if (vercelError.status === 404 || vercelError.message?.includes('not found')) {
-                  console.log(`⚠️ Vercel project ${idOrName} not found (may have been already deleted)`);
-                  results.details.services_cleaned.push('vercel-project-not-found');
-                } else {
-                  console.error('❌ Vercel deletion error:', vercelError);
-                  results.errors.push(`Vercel project deletion: ${vercelError.message}`);
-                }
+            try {
+              await vercel.projects.deleteProject({ idOrName });
+              console.log(`✅ Successfully deleted Vercel project: ${idOrName}`);
+              results.details.services_cleaned.push('vercel-project');
+            } catch (vercelError: any) {
+              if (vercelError.status === 404 || vercelError.message?.includes('not found')) {
+                console.log(`⚠️ Vercel project ${idOrName} not found (may have been already deleted)`);
+                results.details.services_cleaned.push('vercel-project-not-found');
+              } else {
+                console.error('❌ Vercel deletion error:', vercelError);
+                results.errors.push(`Vercel project deletion: ${vercelError.message}`);
               }
-            } else {
-              console.warn('⚠️ VERCEL_API_TOKEN not configured - skipping Vercel deletion');
-              results.errors.push('Vercel API token not configured');
             }
           } else {
-            console.log('📭 No Vercel project info found - skipping Vercel deletion');
+            console.warn('⚠️ VERCEL_API_TOKEN not configured - skipping Vercel deletion');
+            results.errors.push('Vercel API token not configured');
           }
         } else {
-          console.log('📭 Chatbot document not found - skipping Vercel deletion');
+          console.log('📭 No Vercel project info found - skipping Vercel deletion');
         }
       } catch (error: any) {
         console.error('❌ Error during Vercel deletion:', error);

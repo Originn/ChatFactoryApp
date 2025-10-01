@@ -25,6 +25,9 @@ export class ProjectMappingService {
   static async findAndReserveProject(request: ProjectReservationRequest): Promise<ProjectReservationResult> {
     try {
       console.log(`🔍 Searching project pool for chatbot: ${request.chatbotId}, user: ${request.userId}`);
+      if (request.preferredProjectId) {
+        console.log(`🎯 User requested specific project: ${request.preferredProjectId}`);
+      }
 
       const db = adminDb;
       const projectsRef = db.collection(this.COLLECTION_NAME);
@@ -40,13 +43,37 @@ export class ProjectMappingService {
 
       // Use Firestore transaction for atomic reservation
       const result = await db.runTransaction(async (transaction) => {
-        // Query for available projects
-        const availableQuery = projectsRef
-          .where('status', '==', 'available')
-          .orderBy('lastUsedAt', 'asc') // Oldest first for fair rotation
-          .limit(1);
+        let snapshot;
 
-        const snapshot = await transaction.get(availableQuery);
+        // If user specified a preferred project, try to reserve it first
+        if (request.preferredProjectId) {
+          console.log(`🔍 Checking if preferred project ${request.preferredProjectId} is available...`);
+
+          const preferredQuery = projectsRef
+            .where('projectId', '==', request.preferredProjectId)
+            .where('status', '==', 'available')
+            .limit(1);
+
+          const preferredSnapshot = await transaction.get(preferredQuery);
+
+          if (!preferredSnapshot.empty) {
+            console.log(`✅ Preferred project ${request.preferredProjectId} is available! Using it.`);
+            snapshot = preferredSnapshot;
+          } else {
+            console.warn(`⚠️ Preferred project ${request.preferredProjectId} is not available. Auto-assigning instead.`);
+            // Fall through to auto-assignment
+          }
+        }
+
+        // If no preferred project or it wasn't available, query for any available project
+        if (!snapshot || snapshot.empty) {
+          const availableQuery = projectsRef
+            .where('status', '==', 'available')
+            .orderBy('lastUsedAt', 'asc') // Oldest first for fair rotation
+            .limit(1);
+
+          snapshot = await transaction.get(availableQuery);
+        }
 
         if (snapshot.empty) {
           throw new Error('No available projects found in the pool');

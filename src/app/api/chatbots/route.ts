@@ -62,6 +62,17 @@ export async function DELETE(request: NextRequest) {
           if (!cleanupResult.success) {
             results.errors.push(`Reusable Firebase cleanup: ${cleanupResult.message}`);
           }
+
+          // Release the pool project back to available status
+          console.log('🔄 Releasing pool project back to available state...');
+          const releaseResult = await ProjectMappingService.releaseProject(chatbotProject.projectId, chatbotId);
+
+          if (releaseResult.success) {
+            console.log(`✅ Successfully released project ${chatbotProject.projectId}`);
+          } else {
+            results.errors.push(`Failed to release project: ${releaseResult.message}`);
+            console.error(`❌ Project release failed: ${releaseResult.message}`);
+          }
         } else {
           console.log('🗑️ Using dedicated project deletion for dedicated project...');
           const result = await FirebaseProjectService.deleteProject(chatbotId);
@@ -86,6 +97,28 @@ export async function DELETE(request: NextRequest) {
           results.firebaseProjectDeleted = cleanupResult.success;
           if (!cleanupResult.success) {
             results.errors.push(`Reusable Firebase cleanup: ${cleanupResult.message}`);
+          }
+
+          // Try to find and release any pool project for this chatbot
+          console.log('🔍 Attempting to find and release pool project for chatbot...');
+          try {
+            const allProjects = await ProjectMappingService.getAllProjects();
+            const chatbotPoolProject = allProjects.find(p => p.chatbotId === chatbotId && p.projectType === 'pool');
+
+            if (chatbotPoolProject) {
+              console.log(`🔄 Found pool project ${chatbotPoolProject.projectId}, releasing...`);
+              const releaseResult = await ProjectMappingService.releaseProject(chatbotPoolProject.projectId, chatbotId);
+
+              if (releaseResult.success) {
+                console.log(`✅ Successfully released project ${chatbotPoolProject.projectId}`);
+              } else {
+                console.error(`❌ Project release failed: ${releaseResult.message}`);
+              }
+            } else {
+              console.log('ℹ️ No pool project found for this chatbot');
+            }
+          } catch (releaseError: any) {
+            console.error('❌ Error finding/releasing pool project:', releaseError);
           }
         } else {
           console.log('🗑️ Deleting GCP/Firebase project...');

@@ -27,6 +27,7 @@ export interface ProjectReservationRequest {
   chatbotId: string;
   userId: string;
   vercelUrl?: string;
+  preferredProjectId?: string;
 }
 
 export interface ProjectReservationResult {

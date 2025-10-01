@@ -137,29 +137,9 @@ export class ReusableFirebaseProjectService {
       const successCount = Object.values(cleanupResults).filter(Boolean).length;
       const totalCount = Object.keys(cleanupResults).length;
 
-      // Release the project back to the available pool after successful cleanup
-      if (successCount > 0) {
-        console.log('🔄 Releasing project back to available pool...');
-
-        try {
-          // Get the project from mapping service to find which project this chatbot was using
-          const allProjects = await ProjectMappingService.getAllProjects();
-          const chatbotProject = allProjects.find(p => p.chatbotId === chatbotId);
-
-          if (chatbotProject) {
-            const releaseResult = await ProjectMappingService.releaseProject(chatbotProject.projectId, chatbotId);
-            if (releaseResult.success) {
-              console.log(`✅ Project ${chatbotProject.projectId} successfully released and available for reuse`);
-            } else {
-              console.warn('⚠️ Failed to release project in mapping service:', releaseResult.message);
-            }
-          } else {
-            console.warn(`⚠️ No project mapping found for chatbot ${chatbotId} - may have been cleaned up already`);
-          }
-        } catch (releaseError: any) {
-          console.error('❌ Error releasing project:', releaseError);
-        }
-      }
+      // Note: Project release is now handled by the caller (chatbot-deletion route)
+      // to avoid duplicate release attempts
+      console.log('ℹ️ Cleanup completed - project release will be handled by caller');
 
       return {
         success: successCount > 0,
@@ -277,7 +257,7 @@ export class ReusableFirebaseProjectService {
 
       // Step 1: Delete ALL credentials (OAuth clients, service accounts, API keys)
       try {
-        await this.wipeAllCredentials(targetProjectId);
+        await this.wipeAllCredentials(projectId);
         resetResults.credentials = true;
         console.log('✅ All credentials wiped');
       } catch (error) {
@@ -313,7 +293,7 @@ export class ReusableFirebaseProjectService {
 
       // Step 5: Delete duplicate Firebase web apps (specific name pattern)
       try {
-        await this.wipeSpecificWebApps(targetProjectId, 'TestBot Chatbot (Reusable) App');
+        await this.wipeSpecificWebApps(projectId, 'TestBot Chatbot (Reusable) App');
         resetResults.webApps = true;
         console.log('✅ Duplicate web apps wiped');
       } catch (error) {

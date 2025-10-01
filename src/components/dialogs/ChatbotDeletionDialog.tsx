@@ -149,15 +149,14 @@ export function ChatbotDeletionDialog({
         </div>
 
         <div className="flex justify-end space-x-3">
-          <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
+          <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
           <Button
             variant="destructive"
             onClick={() => onConfirm(deleteVectorstore, deleteAuraDB)}
-            disabled={isDeleting}
           >
-            {isDeleting ? 'Deleting...' : 'Delete Chatbot'}
+            Delete Chatbot
           </Button>
         </div>
       </div>
