@@ -4,7 +4,7 @@ import { adminDb } from '@/lib/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, chatbotId, email, displayName, userId, role } = await request.json();
+    const { action, chatbotId, email, displayName, userId, role, firebaseUid } = await request.json();
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
@@ -53,7 +53,9 @@ export async function POST(request: NextRequest) {
 
         const removeResult = await ChatbotFirebaseService.removeUser({
           chatbotId,
-          userId
+          userId,
+          firebaseUid,
+          email
         });
 
         if (!removeResult.success) {
@@ -63,6 +65,27 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           message: 'User access revoked successfully'
+        });
+
+      case 'restore':
+        if (!userId) {
+          return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+        }
+
+        const restoreResult = await ChatbotFirebaseService.restoreUser({
+          chatbotId,
+          userId,
+          firebaseUid,
+          email
+        });
+
+        if (!restoreResult.success) {
+          return NextResponse.json({ error: restoreResult.error }, { status: 400 });
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: 'User access restored successfully'
         });
 
       case 'list':
@@ -93,27 +116,123 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const chatbotId = searchParams.get('chatbotId');
+    const includeSignedIn = searchParams.get('includeSignedIn') === 'true';
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
     }
 
-    // Get users for the chatbot from its dedicated Firebase project
-    const usersResult = await ChatbotFirebaseService.getChatbotUsers(chatbotId);
-    
-    if (!usersResult.success) {
-      return NextResponse.json({ error: usersResult.error }, { status: 500 });
+    // Get invited users from main project
+    const invitedUsersResult = await ChatbotFirebaseService.getChatbotUsers(chatbotId);
+
+    if (!invitedUsersResult.success) {
+      return NextResponse.json({ error: invitedUsersResult.error }, { status: 500 });
     }
+
+    const invitedUsers = invitedUsersResult.users || [];
+
+    // If not requesting signed-in users, return just invited users (backwards compatible)
+    if (!includeSignedIn) {
+      return NextResponse.json({
+        success: true,
+        users: invitedUsers
+      });
+    }
+
+    // Get signed-in users from dedicated Firebase Auth
+    const signedInUsersResult = await ChatbotFirebaseService.getSignedInUsers(chatbotId);
+
+    if (!signedInUsersResult.success) {
+      console.warn('Failed to get signed-in users:', signedInUsersResult.error);
+      // Continue with invited users only if signed-in fetch fails
+      return NextResponse.json({
+        success: true,
+        users: invitedUsers,
+        warning: 'Could not fetch signed-in users from Firebase Auth'
+      });
+    }
+
+    const signedInUsers = signedInUsersResult.users || [];
+
+    // Merge and deduplicate users by email
+    const userMap = new Map();
+
+    // Add invited users first
+    invitedUsers.forEach(user => {
+      userMap.set(user.email.toLowerCase(), {
+        ...user,
+        source: 'invited',
+        isInvited: true,
+        hasSignedIn: false,
+        firebaseUid: user.dedicatedProjectUserId
+      });
+    });
+
+    // Merge with signed-in users
+    signedInUsers.forEach(authUser => {
+      const email = authUser.email.toLowerCase();
+      const existingUser = userMap.get(email);
+
+      if (existingUser) {
+        // User exists in both - merge data
+        userMap.set(email, {
+          ...existingUser,
+          source: 'both',
+          hasSignedIn: true,
+          lastSignInAt: authUser.lastSignInAt,
+          emailVerified: authUser.emailVerified,
+          disabled: authUser.disabled,
+          firebaseUid: authUser.id,
+          // Override status based on Firebase Auth data
+          status: authUser.disabled ? 'disabled' :
+                 authUser.emailVerified ? 'active' : 'pending'
+        });
+      } else {
+        // User only exists in Firebase Auth (signed up directly)
+        userMap.set(email, {
+          id: authUser.id,
+          email: authUser.email,
+          displayName: authUser.displayName,
+          chatbotId: chatbotId,
+          role: 'user',
+          status: authUser.disabled ? 'disabled' :
+                  authUser.emailVerified ? 'active' : 'pending',
+          invitedAt: authUser.createdAt,
+          invitedBy: 'self-signup',
+          emailVerified: authUser.emailVerified,
+          lastSignInAt: authUser.lastSignInAt,
+          createdAt: authUser.createdAt,
+          updatedAt: authUser.createdAt,
+          source: 'signed-in',
+          isInvited: false,
+          hasSignedIn: true,
+          firebaseUid: authUser.id
+        });
+      }
+    });
+
+    // Convert map to array and sort by last activity
+    const allUsers = Array.from(userMap.values()).sort((a, b) => {
+      const aTime = a.lastSignInAt || a.invitedAt || a.createdAt;
+      const bTime = b.lastSignInAt || b.invitedAt || b.createdAt;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
 
     return NextResponse.json({
       success: true,
-      users: usersResult.users || []
+      users: allUsers,
+      stats: {
+        total: allUsers.length,
+        invited: invitedUsers.length,
+        signedIn: signedInUsers.length,
+        both: allUsers.filter(u => u.source === 'both').length
+      }
     });
 
   } catch (error: any) {
     console.error('Get chatbot users error:', error);
-    return NextResponse.json({ 
-      error: `Failed to get users: ${error.message}` 
+    return NextResponse.json({
+      error: `Failed to get users: ${error.message}`
     }, { status: 500 });
   }
 }
