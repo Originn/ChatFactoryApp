@@ -677,8 +677,7 @@ export async function POST(request: NextRequest) {
       CHATFACTORY_MAIN_PRIVATE_KEY: formatPrivateKeyForVercel(process.env.FIREBASE_PRIVATE_KEY || ''),
 
       // APP CONFIGURATION
-      // For chatbot deployments, don't set NEXT_PUBLIC_APP_URL - let it use VERCEL_URL at runtime
-      // Only set it if there's a custom domain
+      // Custom domain if provided, otherwise will be set after deployment
       ...(customDomain ? {
         NEXT_PUBLIC_APP_URL: `https://${customDomain}`,
         NEXT_PUBLIC_API_BASE_URL: `https://${customDomain}/api`
@@ -791,7 +790,7 @@ export async function POST(request: NextRequest) {
       console.log(`🎉 OPTIMIZATION SUCCESS: Environment variable verification completed in ${totalWaitTime / 1000}s (vs 30-45s previously)`);
     }
 
-    // Handle custom domain configuration if provided
+    // Handle custom domain configuration if provided (user's own domain)
     let domainResult = null;
     if (customDomain && isValidDomain(customDomain)) {
       console.log(`🌐 Setting up custom domain: ${customDomain}`);
@@ -1050,81 +1049,109 @@ export async function POST(request: NextRequest) {
     // Deployment created - no need to wait for promotion!
     console.log('✅ Deployment created and will be live shortly:', deploymentData.id);
     
-    // Get production domain immediately using correct API endpoint - NO WAITING!
-    console.log('🌐 Getting production domain immediately using correct domains API...');
-    let finalDeploymentUrl = null;
-    
+    // Step 1: Get the Vercel-assigned domain name (with random suffix)
+    console.log('🌐 Getting Vercel-assigned domain name...');
+    let vercelSubdomain = null;
+    let vercelDomainUrl = null;
+
     try {
-      // Use the correct domains endpoint: /v9/projects/{id}/domains
       const domainsResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}/domains`, {
         headers: {
           'Authorization': `Bearer ${VERCEL_API_TOKEN}`
         }
       });
-      
+
       if (domainsResponse.ok) {
         const domainsData = await domainsResponse.json();
         console.log('🔍 Domains API response:', {
           domainsCount: domainsData.domains?.length || 0,
           domains: domainsData.domains?.map((d: any) => d.name) || []
         });
-        
-        // Print ALL domains to see which position we want
+
         if (domainsData.domains && domainsData.domains.length > 0) {
-          console.log('🔍 ALL DOMAINS FOUND:');
-          domainsData.domains.forEach((domain: any, index: number) => {
-            console.log(`  ${index}: ${domain.name} (verified: ${domain.verified})`);
-          });
-          
-          // For now, let's just use the first .vercel.app domain that's not a git branch
-          // We'll adjust the index based on what we see in the logs
+          // Find the clean production Vercel domain (e.g., testbot-one-indol.vercel.app)
           const nonGitDomains = domainsData.domains.filter((domain: any) => {
-            return domain.name && 
-                   domain.name.endsWith('.vercel.app') && 
+            return domain.name &&
+                   domain.name.endsWith('.vercel.app') &&
                    !domain.name.includes('-git-');
           });
-          
-          console.log('🎯 NON-GIT VERCEL DOMAINS:');
-          nonGitDomains.forEach((domain: any, index: number) => {
-            console.log(`  ${index}: ${domain.name}`);
-          });
-          
+
           if (nonGitDomains.length > 0) {
-            // Use index 1 for the clean production domain (like testbot-gray.vercel.app)
-            // Index 0 is usually the deployment-specific domain (like testbot-rdfele.vercel.app)
-            const domainIndex = nonGitDomains.length > 1 ? 1 : 0; // Use index 1 if available, fallback to 0
+            const domainIndex = nonGitDomains.length > 1 ? 1 : 0;
             const selectedDomain = nonGitDomains[domainIndex];
-            finalDeploymentUrl = `https://${selectedDomain.name}`;
-            console.log(`✅ Selected domain at index ${domainIndex}: ${finalDeploymentUrl}`);
-            console.log('🎯 This should be the clean production domain with animal/color name!');
+            vercelDomainUrl = `https://${selectedDomain.name}`;
+            // Extract subdomain (e.g., "testbot-one-indol" from "testbot-one-indol.vercel.app")
+            vercelSubdomain = selectedDomain.name.replace('.vercel.app', '');
+            console.log(`✅ Found Vercel domain: ${vercelDomainUrl}`);
+            console.log(`📝 Extracted subdomain: ${vercelSubdomain}`);
           }
         }
       }
     } catch (error) {
-      console.error('❌ Error getting production domain:', error);
+      console.error('❌ Error getting Vercel domain:', error);
     }
-    
-    // Fallback to default format if domains not found
-    if (!finalDeploymentUrl) {
-      finalDeploymentUrl = deploymentData.url ? 
-        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
-        `https://${projectName}.vercel.app`;
-      console.log(`⚠️ Using fallback URL: ${finalDeploymentUrl}`);
-    }
-    
-    console.log('🎯 Final deployment URL ready immediately:', finalDeploymentUrl);
 
-    // Update NEXT_PUBLIC_APP_URL with actual deployment URL if not using custom domain
+    // Fallback if we couldn't get the domain
+    if (!vercelDomainUrl || !vercelSubdomain) {
+      vercelDomainUrl = deploymentData.url ?
+        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) :
+        `https://${projectName}.vercel.app`;
+      vercelSubdomain = projectName;
+      console.log(`⚠️ Using fallback Vercel URL: ${vercelDomainUrl}`);
+    }
+
+    // Step 2: Create matching wizchat.app subdomain with the same random name
+    const wizchatDomain = `${vercelSubdomain}.wizchat.app`;
+    console.log(`🌐 Creating matching wizchat.app subdomain: ${wizchatDomain}`);
+
+    let wizchatDomainResult = await addCustomDomainToProject(
+      VERCEL_API_TOKEN,
+      projectName,
+      wizchatDomain
+    );
+
+    if (!wizchatDomainResult.success) {
+      console.error(`❌ Failed to set up wizchat.app subdomain: ${wizchatDomainResult.error}`);
+      console.warn('⚠️ Will use Vercel domain as primary');
+    } else {
+      console.log(`✅ wizchat.app subdomain configured: ${wizchatDomain}`);
+    }
+
+    // Step 3: Determine primary deployment URL
+    // Priority 1: User's custom domain (if configured and verified)
+    // Priority 2: wizchat.app subdomain (automatic branding)
+    // Priority 3: Vercel domain (fallback)
+    let finalDeploymentUrl = null;
+
+    if (customDomain && domainResult?.success && domainResult.data?.verified) {
+      finalDeploymentUrl = `https://${customDomain}`;
+      console.log(`🎯 PRIMARY URL: Custom domain - ${finalDeploymentUrl}`);
+    } else if (wizchatDomainResult?.success) {
+      finalDeploymentUrl = `https://${wizchatDomain}`;
+      console.log(`🎯 PRIMARY URL: wizchat.app subdomain - ${finalDeploymentUrl}`);
+    } else {
+      finalDeploymentUrl = vercelDomainUrl;
+      console.log(`🎯 PRIMARY URL: Vercel domain (fallback) - ${finalDeploymentUrl}`);
+    }
+
+    // Update environment variables with the actual deployment URLs
     if (!customDomain && finalDeploymentUrl) {
-      console.log('🔧 Updating NEXT_PUBLIC_APP_URL with actual deployment URL...');
+      console.log('🔧 Updating environment variables with final deployment URLs...');
       try {
-        await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, {
+        const envUpdates: Record<string, string> = {
           NEXT_PUBLIC_APP_URL: finalDeploymentUrl,
           NEXT_PUBLIC_API_BASE_URL: `${finalDeploymentUrl}/api`
-        });
-        console.log('✅ NEXT_PUBLIC_APP_URL updated to:', finalDeploymentUrl);
+        };
+
+        // Also set NEXT_PUBLIC_CUSTOM_DOMAIN to wizchat domain if configured
+        if (wizchatDomainResult?.success) {
+          envUpdates.NEXT_PUBLIC_CUSTOM_DOMAIN = wizchatDomain;
+        }
+
+        await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, envUpdates);
+        console.log('✅ Environment variables updated with final URLs');
       } catch (error) {
-        console.warn('⚠️ Failed to update NEXT_PUBLIC_APP_URL:', error);
+        console.warn('⚠️ Failed to update environment variables:', error);
       }
     }
 
@@ -1140,6 +1167,8 @@ export async function POST(request: NextRequest) {
       status: 'deploying',
       subdomain: projectName,
       deploymentUrl: finalDeploymentUrl,
+      wizchatDomain: wizchatDomain, // Store the assigned wizchat.app subdomain
+      wizchatDomainConfigured: wizchatDomainResult?.success || false,
 
       // Firebase project information
       firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
@@ -1192,6 +1221,8 @@ export async function POST(request: NextRequest) {
       isStaged: false,
       firebaseProjectId: dedicatedFirebaseProject?.projectId,
       firebaseConfig: dedicatedFirebaseProject?.config,
+      wizchatDomain: wizchatDomain,
+      wizchatDomainConfigured: wizchatDomainResult?.success || false,
     };
 
     // Add custom domain information if configured
@@ -1306,9 +1337,15 @@ export async function POST(request: NextRequest) {
       domainsToAuthorize.push(...baseDomains);
       console.log(`📝 Will authorize base domains for OAuth: ${baseDomains.length} domains`);
 
-      // Always add the Vercel deployment domain
+      // Always add the wizchat.app subdomain (automatic branding)
+      if (wizchatDomainResult?.success) {
+        domainsToAuthorize.push(`https://${wizchatDomain}`);
+        console.log(`📝 Will authorize wizchat.app subdomain: https://${wizchatDomain}`);
+      }
+
+      // Always add the primary deployment domain
       domainsToAuthorize.push(deploymentUrl);
-      console.log(`📝 Will authorize Vercel domain: ${deploymentUrl}`);
+      console.log(`📝 Will authorize primary deployment domain: ${deploymentUrl}`);
 
       // Add custom domain if configured and domain setup was successful
       if (customDomain && domainResult?.success) {
