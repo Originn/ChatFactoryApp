@@ -53,9 +53,7 @@ export async function POST(request: NextRequest) {
 
         const removeResult = await ChatbotFirebaseService.removeUser({
           chatbotId,
-          userId,
-          firebaseUid,
-          email
+          userId
         });
 
         if (!removeResult.success) {
