@@ -387,6 +387,65 @@ export class ChatbotFirebaseService {
   }
 
   /**
+   * Get signed-in users from Firebase Auth
+   */
+  static async getSignedInUsers(chatbotId: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
+    try {
+      console.log(`👥 Getting signed-in users for chatbot ${chatbotId} from Firebase Auth`);
+
+      // Get the Firebase admin instance
+      const firebaseInstance = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!firebaseInstance) {
+        return {
+          success: false,
+          error: 'Unable to access Firebase for this chatbot'
+        };
+      }
+
+      const users: any[] = [];
+      let nextPageToken: string | undefined;
+
+      // List users from Firebase Auth in batches
+      do {
+        const listUsersResult = await firebaseInstance.auth.listUsers(1000, nextPageToken);
+
+        if (listUsersResult.users.length === 0) {
+          break;
+        }
+
+        // Map Firebase Auth users to our format
+        const mappedUsers = listUsersResult.users.map(user => ({
+          id: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || user.email || 'Unknown User',
+          emailVerified: user.emailVerified || false,
+          lastSignInAt: user.metadata.lastSignInTime ? new Date(user.metadata.lastSignInTime) : undefined,
+          createdAt: user.metadata.creationTime ? new Date(user.metadata.creationTime) : new Date(),
+          firebaseUid: user.uid
+        }));
+
+        users.push(...mappedUsers);
+        nextPageToken = listUsersResult.pageToken;
+
+      } while (nextPageToken);
+
+      console.log(`✅ Found ${users.length} signed-in users for chatbot ${chatbotId}`);
+
+      return {
+        success: true,
+        users: users
+      };
+
+    } catch (error: any) {
+      console.error('❌ Error getting signed-in users:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get signed-in users'
+      };
+    }
+  }
+
+  /**
    * Get users for a chatbot (from chatbot's dedicated Firebase project)
    */
   static async getChatbotUsers(chatbotId: string): Promise<{ success: boolean; users?: ChatbotUserProfile[]; error?: string }> {
