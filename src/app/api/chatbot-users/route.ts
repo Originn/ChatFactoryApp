@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
         source: 'invited',
         isInvited: true,
         hasSignedIn: false,
-        firebaseUid: user.dedicatedProjectUserId
+        firebaseUid: user.id
       });
     });
 
