@@ -343,6 +343,50 @@ export class ChatbotFirebaseService {
   }
 
   /**
+   * Restore a user's access to a chatbot
+   */
+  static async restoreUser(request: RemoveUserRequest): Promise<ServiceResult> {
+    try {
+      const { userId, chatbotId } = request;
+
+      console.log(`♻️ Restoring user ${userId} access to chatbot ${chatbotId}`);
+
+      // Get the Firebase admin instance (always main project)
+      const firebaseInstance = await this.getChatbotFirebaseAdmin(chatbotId);
+      if (!firebaseInstance) {
+        return {
+          success: false,
+          error: 'Unable to access Firebase for this chatbot'
+        };
+      }
+
+      // SIMPLIFIED: Always update in main project chatbot subcollection
+      await firebaseInstance.firestore
+        .collection('chatbots')
+        .doc(chatbotId)
+        .collection('users')
+        .doc(userId)
+        .update({
+          status: 'active',
+          updatedAt: new Date()
+        });
+
+      console.log(`✅ User ${userId} access restored to chatbot ${chatbotId} in main project`);
+
+      return {
+        success: true
+      };
+
+    } catch (error: any) {
+      console.error('❌ Error restoring user:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to restore user'
+      };
+    }
+  }
+
+  /**
    * Get users for a chatbot (from chatbot's dedicated Firebase project)
    */
   static async getChatbotUsers(chatbotId: string): Promise<{ success: boolean; users?: ChatbotUserProfile[]; error?: string }> {

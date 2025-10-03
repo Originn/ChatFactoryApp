@@ -72,9 +72,7 @@ export async function POST(request: NextRequest) {
 
         const restoreResult = await ChatbotFirebaseService.restoreUser({
           chatbotId,
-          userId,
-          firebaseUid,
-          email
+          userId
         });
 
         if (!restoreResult.success) {
