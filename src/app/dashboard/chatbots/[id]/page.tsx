@@ -334,6 +334,16 @@ export default function ChatbotDetailPage() {
         console.error('Error:', err);
         console.error('Error code:', err.code);
         console.error('Error message:', err.message);
+
+        // Handle permission denied error (chatbot was deleted)
+        if (err.code === 'permission-denied') {
+          console.log('🔒 Permission denied - chatbot may have been deleted');
+          console.log('🔄 Redirecting to chatbots list...');
+          unsubscribe(); // Clean up listener
+          router.push('/dashboard/chatbots');
+          return;
+        }
+
         setError('Failed to load chatbot');
         setIsLoading(false);
       }
