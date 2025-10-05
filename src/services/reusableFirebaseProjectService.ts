@@ -1355,8 +1355,8 @@ export class ReusableFirebaseProjectService {
 
       // Use Identity Toolkit REST API to list and delete users
       do {
-        // List users using REST API
-        const listUrl = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:batchGet`;
+        // List users using accounts:query endpoint (accounts:batchGet returns 404)
+        const listUrl = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:query`;
 
         const listResponse = await fetch(listUrl, {
           method: 'POST',
@@ -1365,19 +1365,20 @@ export class ReusableFirebaseProjectService {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            maxResults: 1000,
-            nextPageToken: nextPageToken
+            returnUserInfo: true,
+            limit: 1000,
+            ...(nextPageToken && { nextPageToken })
           })
         });
 
         if (!listResponse.ok) {
           const error = await listResponse.text();
-          console.error('❌ Failed to list users:', error);
+          console.error('❌ Failed to list users:', error.substring(0, 500));
           break;
         }
 
         const listData = await listResponse.json();
-        const users = listData.users || [];
+        const users = listData.userInfo || [];
 
         if (users.length === 0) {
           console.log('✅ No more users to delete');
