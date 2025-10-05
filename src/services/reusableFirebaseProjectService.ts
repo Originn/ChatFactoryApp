@@ -1347,74 +1347,91 @@ export class ReusableFirebaseProjectService {
    * Delete all Identity Platform users (different from Firebase Auth users)
    */
   private static async deleteAllIdentityPlatformUsers(projectId: string, accessToken: string): Promise<void> {
-    console.log('👤 Deleting all Identity Platform users...');
+    console.log('👤 Deleting all Identity Platform users via REST API...');
 
     try {
-      const appName = `ip-cleanup-${projectId}`;
-      let app: admin.app.App;
-
-      try {
-        app = admin.app(appName);
-      } catch {
-        // Load service account credentials from Firestore
-        console.log(`🔐 Loading service account credentials for ${projectId}...`);
-        const poolCredentials = await FirestoreSecretService.getPoolServiceAccount(projectId);
-
-        app = admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId: poolCredentials.projectId,
-            clientEmail: poolCredentials.clientEmail,
-            privateKey: poolCredentials.privateKey.replace(/\\n/g, '\n')
-          }),
-          projectId
-        }, appName);
-      }
-
-      const auth = app.auth();
-
       let totalDeleted = 0;
       let nextPageToken: string | undefined;
 
+      // Use Identity Toolkit REST API to list and delete users
       do {
-        const listUsersResult = await auth.listUsers(1000, nextPageToken);
+        // List users using REST API
+        const listUrl = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:batchGet`;
 
-        if (listUsersResult.users.length === 0) {
+        const listResponse = await fetch(listUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            maxResults: 1000,
+            nextPageToken: nextPageToken
+          })
+        });
+
+        if (!listResponse.ok) {
+          const error = await listResponse.text();
+          console.error('❌ Failed to list users:', error);
           break;
         }
 
-        console.log(`🔍 Found ${listUsersResult.users.length} users in this batch`);
+        const listData = await listResponse.json();
+        const users = listData.users || [];
 
-        const deletePromises = listUsersResult.users.map(user =>
-          auth.deleteUser(user.uid).catch(error => {
-            console.warn(`⚠️ Could not delete user ${user.uid}:`, error);
-          })
-        );
+        if (users.length === 0) {
+          console.log('✅ No more users to delete');
+          break;
+        }
 
-        await Promise.all(deletePromises);
-        totalDeleted += listUsersResult.users.length;
+        console.log(`🔍 Found ${users.length} users in this batch`);
 
-        console.log(`✅ Deleted ${listUsersResult.users.length} users`);
+        // Delete users in batches using REST API
+        for (const user of users) {
+          try {
+            const deleteUrl = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:delete`;
 
-        nextPageToken = listUsersResult.pageToken;
+            const deleteResponse = await fetch(deleteUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                localId: user.localId
+              })
+            });
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+            if (deleteResponse.ok) {
+              totalDeleted++;
+            } else {
+              const error = await deleteResponse.text();
+              console.warn(`⚠️ Could not delete user ${user.email || user.localId}:`, error);
+            }
+
+            // Small delay to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+          } catch (error) {
+            console.warn(`⚠️ Error deleting user ${user.email || user.localId}:`, error);
+          }
+        }
+
+        console.log(`✅ Deleted ${users.length} users from this batch`);
+
+        nextPageToken = listData.nextPageToken;
+
+        // Delay between batches
+        if (nextPageToken) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
 
       } while (nextPageToken);
 
       console.log(`✅ Total Identity Platform users deleted: ${totalDeleted}`);
 
-      await app.delete();
-
     } catch (error: any) {
       console.error('❌ Failed to delete Identity Platform users:', error);
-
-      // Check if it's a credential error
-      if (error?.code === 'app/invalid-credential' || error?.message?.includes('invalid_grant')) {
-        console.log('⚠️ Service account credentials are invalid or revoked');
-        console.log('💡 To fix: Regenerate service account key for pool project in Firebase Console');
-        console.log(`   https://console.firebase.google.com/project/${projectId}/settings/serviceaccounts/adminsdk`);
-      }
-
       // Don't throw - let cleanup continue
     }
   }
