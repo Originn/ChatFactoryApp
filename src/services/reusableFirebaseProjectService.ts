@@ -1167,11 +1167,12 @@ export class ReusableFirebaseProjectService {
       await this.clearProjectConfiguration(projectId, accessToken.token);
       
       console.log('✅ Complete Identity Platform cleanup finished');
-      
+
     } catch (error: any) {
       console.error('❌ Identity Platform cleanup failed:', error);
       console.log('ℹ️ Manual cleanup may be required via Google Cloud Console');
-      throw error;
+      // Don't throw - allow chatbot deletion to continue even if Identity Platform cleanup fails
+      console.log('⚠️ Continuing with chatbot deletion despite Identity Platform cleanup failure');
     }
   }
 
@@ -1404,8 +1405,17 @@ export class ReusableFirebaseProjectService {
 
       await app.delete();
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to delete Identity Platform users:', error);
+
+      // Check if it's a credential error
+      if (error?.code === 'app/invalid-credential' || error?.message?.includes('invalid_grant')) {
+        console.log('⚠️ Service account credentials are invalid or revoked');
+        console.log('💡 To fix: Regenerate service account key for pool project in Firebase Console');
+        console.log(`   https://console.firebase.google.com/project/${projectId}/settings/serviceaccounts/adminsdk`);
+      }
+
+      // Don't throw - let cleanup continue
     }
   }
 
