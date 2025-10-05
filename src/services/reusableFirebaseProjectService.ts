@@ -5,6 +5,7 @@ import { GoogleOAuthClientManager } from './googleOAuthClientManager';
 import { google } from 'googleapis';
 import { getAuthClient } from '@/lib/gcp-auth';
 import { ProjectMappingService } from './projectMappingService';
+import { FirestoreSecretService } from './firestoreSecretService';
 // DEBUG: Temporarily commenting out ResourceManagerClient to fix build
 // import { ResourceManagerClient } from '@google-cloud/resource-manager';
 
@@ -1354,8 +1355,16 @@ export class ReusableFirebaseProjectService {
       try {
         app = admin.app(appName);
       } catch {
+        // Load service account credentials from Firestore
+        console.log(`🔐 Loading service account credentials for ${projectId}...`);
+        const poolCredentials = await FirestoreSecretService.getPoolServiceAccount(projectId);
+
         app = admin.initializeApp({
-          credential: admin.credential.applicationDefault(),
+          credential: admin.credential.cert({
+            projectId: poolCredentials.projectId,
+            clientEmail: poolCredentials.clientEmail,
+            privateKey: poolCredentials.privateKey.replace(/\\n/g, '\n')
+          }),
           projectId
         }, appName);
       }
