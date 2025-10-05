@@ -305,7 +305,7 @@ export async function POST(request: NextRequest) {
       id: chatbotId,
       name: chatbotName || chatbotData?.name || `Chatbot ${chatbotId}`,
       description: chatbotData?.description || 'AI-powered chatbot',
-      logoUrl: logoUrl,
+      logoUrl: logoUrl || '/wizchat-brain-logo.svg', // Default to wizchat logo if no custom logo
       primaryColor: chatbotData?.appearance?.primaryColor || '#3b82f6',
       bubbleStyle: chatbotData?.appearance?.bubbleStyle || 'rounded',
       requireAuth: chatbotData?.requireAuth || false,
@@ -617,6 +617,7 @@ export async function POST(request: NextRequest) {
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
+      NEXT_PUBLIC_SYSTEM_PROMPT: chatbotConfig.behavior?.systemPrompt || '',
       NEXT_PUBLIC_CUSTOM_DOMAIN: customDomain || '',
 
       // API KEYS
