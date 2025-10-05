@@ -20,6 +20,7 @@ import { Info, Brain, Bot, Palette } from "lucide-react";
 import { VectorStoreNameDialog } from '@/components/dialogs/VectorStoreNameDialog';
 import { FaviconUploader } from '@/components/FaviconUploader';
 import { Neo4jAuraService } from '@/services/neo4jAuraService';
+import SystemPromptWizard from '@/components/chatbot/SystemPromptWizard';
 
 export default function NewChatbotPage() {
   const router = useRouter();
@@ -31,9 +32,9 @@ export default function NewChatbotPage() {
     requireAuth: false, // New: Authentication requirement
     accessMode: 'open' as 'open' | 'managed', // Access control mode
     invitedUsers: [] as string[], // Email addresses to invite
-    
+
     // AI Configuration
-    embeddingModel: 'text-embedding-3-small',
+    embeddingModel: 'embed-v4.0',
     multimodal: false,
     llmModel: 'gpt-4.1',
     temperature: '0.7',
@@ -54,7 +55,7 @@ export default function NewChatbotPage() {
     },
   });
   
-  const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'behavior' | 'appearance'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'ai' | 'behavior' | 'systemPrompt' | 'appearance'>('basic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -822,6 +823,17 @@ export default function NewChatbotPage() {
                 Behavior
               </button>
               <button
+                onClick={() => setActiveTab('systemPrompt')}
+                className={`${
+                  activeTab === 'systemPrompt'
+                    ? 'border-purple-500 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border/50 hover:bg-muted/50'
+                } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm rounded-t-lg transition-all flex items-center`}
+              >
+                <Brain className="w-4 h-4 mr-2" />
+                System Prompt
+              </button>
+              <button
                 onClick={() => setActiveTab('appearance')}
                 className={`${
                   activeTab === 'appearance'
@@ -1119,44 +1131,6 @@ export default function NewChatbotPage() {
               {/* AI Configuration Tab */}
               {activeTab === 'ai' && (
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label htmlFor="embeddingModel" className="text-sm font-medium">Embedding Model *</label>
-                    <select
-                      id="embeddingModel"
-                      name="embeddingModel"
-                      value={formData.embeddingModel}
-                      onChange={handleChange}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <optgroup label="OpenAI Models">
-                        <option value="text-embedding-3-small">text-embedding-3-small (1536 dimensions)</option>
-                        <option value="text-embedding-3-large">text-embedding-3-large (3072 dimensions)</option>
-                        <option value="text-embedding-ada-002">text-embedding-ada-002 (Legacy)</option>
-                      </optgroup>
-                      <optgroup label="Azure OpenAI Models">
-                        <option value="azure-text-embedding-3-small">Azure text-embedding-3-small</option>
-                        <option value="azure-text-embedding-3-large">Azure text-embedding-3-large</option>
-                      </optgroup>
-                      <optgroup label="Cohere Models">
-                        <option value="cohere-embed-english-v3.0">embed-english-v3.0</option>
-                        <option value="cohere-embed-multilingual-v3.0">embed-multilingual-v3.0</option>
-                      </optgroup>
-                      <optgroup label="Hugging Face Models">
-                        <option value="hf-all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
-                        <option value="hf-all-mpnet-base-v2">all-mpnet-base-v2</option>
-                        <option value="hf-bge-large-en-v1.5">bge-large-en-v1.5</option>
-                      </optgroup>
-                      <optgroup label="Jina AI Models">
-                        <option value="jina-embeddings-v4">jina-embeddings-v4 (512 dimensions, multimodal)</option>
-                        <option value="jina-embeddings-v3">jina-embeddings-v3 (1024 dimensions, text-only)</option>
-                        <option value="jina-clip-v2">jina-clip-v2 (1024 dimensions, multimodal)</option>
-                      </optgroup>
-                    </select>
-                    <p className="text-xs text-gray-500">
-                      Choose which embedding model to use for document vectorization.
-                    </p>
-                  </div>
-                  
                   {/* Multimodal Toggle */}
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
@@ -1326,50 +1300,47 @@ export default function NewChatbotPage() {
                       Preferred length of chatbot responses.
                     </p>
                   </div>
-                  
+                </div>
+              )}
+
+              {/* System Prompt Tab */}
+              {activeTab === 'systemPrompt' && (
+                <div className="space-y-6">
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4 mb-4">
+                    <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">About System Prompts</h3>
+                    <p className="text-sm text-gray-700 dark:text-purple-300">
+                      The system prompt defines how your chatbot behaves and responds to users.
+                      You can use our AI wizard to generate a professional prompt, or write your own custom instructions.
+                    </p>
+                  </div>
+
+                  <SystemPromptWizard
+                    currentPrompt={formData.systemPrompt}
+                    productName={formData.name}
+                    onPromptGenerated={(prompt) => {
+                      setFormData(prev => ({ ...prev, systemPrompt: prompt }));
+                    }}
+                  />
+
                   <div className="space-y-2">
-                    <label htmlFor="systemPrompt" className="text-sm font-medium">System Prompt</label>
+                    <label htmlFor="systemPrompt" className="text-sm font-medium">
+                      System Prompt (Manual Edit)
+                    </label>
                     <div className="relative">
                       <textarea
                         id="systemPrompt"
                         name="systemPrompt"
                         value={formData.systemPrompt}
                         onChange={handleChange}
-                        rows={6}
-                        className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        rows={10}
+                        className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         placeholder="Enter custom instructions for your chatbot..."
                       />
                     </div>
-                    <p className="text-xs text-gray-500">
-                      These instructions define how your chatbot will behave. Include details about its role, 
-                      knowledge domain, tone, and any specific behavior guidance.
-                    </p>
-                    <div className="mt-2 p-3 bg-gray-50 rounded-md text-xs border border-gray-200">
-                      <p className="font-medium text-gray-700 mb-1">Tips for effective system prompts:</p>
-                      <ul className="list-disc pl-4 space-y-1 text-gray-600">
-                        <li>Start with a clear role definition (e.g., "You are a documentation assistant...")</li>
-                        <li>Specify the domain of knowledge ("...specializing in our product API")</li>
-                        <li>Define the tone (formal, friendly, technical)</li>
-                        <li>Include guidance on handling uncertain information</li>
-                      </ul>
-                    </div>
-                  </div>
-                  
-                  <div className="p-4 bg-yellow-50 rounded-md">
-                    <h3 className="text-sm font-medium text-yellow-800 mb-2">Advanced Behavior Settings</h3>
-                    <p className="text-xs text-yellow-700 mb-2">
-                      After creating your chatbot, you'll have access to additional behavior settings:
-                    </p>
-                    <ul className="text-xs text-yellow-700 list-disc pl-5 space-y-1">
-                      <li>Knowledge cutoff date configuration</li>
-                      <li>Custom instructions and system prompts</li>
-                      <li>User feedback collection settings</li>
-                      <li>Follow-up question generation</li>
-                    </ul>
                   </div>
                 </div>
               )}
-              
+
               {/* Appearance Tab */}
               {activeTab === 'appearance' && (
                 <div className="space-y-6">

@@ -28,7 +28,8 @@
       "Bash(gcloud logging read:*)",
       "WebFetch(domain:community.neo4j.com)",
       "WebFetch(domain:openai.com)",
-      "WebFetch(domain:platform.openai.com)"
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:docs.cohere.com)"
     ],
     "deny": []
   }

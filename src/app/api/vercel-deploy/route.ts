@@ -413,7 +413,7 @@ export async function POST(request: NextRequest) {
 
           try {
             let pineconeResult;
-            const finalEmbeddingModel = embeddingModel || 'text-embedding-3-small';
+            const finalEmbeddingModel = embeddingModel || 'embed-v4.0';
 
             if (desiredVectorstoreIndexName) {
               console.log('🎯 Pinecone: Using desired index name:', desiredVectorstoreIndexName, 'with embedding model:', finalEmbeddingModel);
@@ -648,9 +648,9 @@ export async function POST(request: NextRequest) {
       PINECONE_NAMESPACE: pineconeNamespace,
 
       // AI MODEL CONFIGURATION
-      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
-      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small'),
-      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small').toString(),
+      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'embed-v4.0',
+      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'embed-v4.0'),
+      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'embed-v4.0').toString(),
       MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-5-chat-latest',
       IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-5-mini',
       TEMPRATURE: chatbotData?.aiConfig?.temperature?.toString() || process.env.DEFAULT_TEMPERATURE || process.env.TEMPRATURE || '0.7',
