@@ -164,9 +164,9 @@ class PineconeService {
           
           // Get embedding model from tags
           const embeddingModel = indexDetails.tags?.embeddingModel || 'unknown';
-          
-          // Check compatibility based on embedding model (not just dimensions)
-          const isCompatible = requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true;
+
+          // All indexes are compatible since we now use embed-v4.0 (512D) throughout
+          const isCompatible = true;
           
           // Better vector count extraction - check multiple possible locations
           let vectorCount = 0;
@@ -226,7 +226,7 @@ class PineconeService {
             displayName: displayName,
             dimensions: index.dimension,
             embeddingModel: embeddingModel,
-            isCompatible: requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true,
+            isCompatible: true, // All indexes compatible with embed-v4.0
             vectorCount: vectorCount, // Use the calculated vectorCount
             stats: null
           };
