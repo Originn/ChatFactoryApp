@@ -987,11 +987,8 @@ export default function ChatbotDetailPage() {
                                 <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
                                   Your chatbot is being deployed...
                                 </p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
                                   This typically takes 3-3.5 minutes. The page will update automatically when ready.
-                                </p>
-                                <p className="text-xs text-gray-500 dark:text-gray-500">
-                                  Deployment URL: {chatbot.deployment.deploymentUrl}
                                 </p>
                               </div>
                             </div>
