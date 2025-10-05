@@ -985,7 +985,7 @@ export default function ChatbotDetailPage() {
                               <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-yellow-500 mt-0.5 flex-shrink-0"></div>
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                                  Your chatbot is being deployed to Vercel...
+                                  Your chatbot is being deployed...
                                 </p>
                                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                                   This typically takes 3-3.5 minutes. The page will update automatically when ready.
