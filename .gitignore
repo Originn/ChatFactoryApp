@@ -34,6 +34,9 @@ docsai-chatbot-app-*.json
 firebase-adminsdk-*.json
 *-firebase-adminsdk-*.json
 
+# Firebase keys and secrets directory
+keys/
+
 # vercel
 .vercel
 

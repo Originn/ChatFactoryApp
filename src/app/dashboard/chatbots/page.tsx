@@ -52,6 +52,11 @@ interface Chatbot {
     indexName: string;
     displayName: string;
   };
+  deployment?: {
+    status: 'deployed' | 'deploying' | string;
+    deploymentUrl?: string;
+    deployedAt?: any;
+  };
   documents?: any[];
   userId?: string;
 }
@@ -61,8 +66,7 @@ export default function ChatbotsPage() {
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  
+
   // State for deletion dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [chatbotToDelete, setChatbotToDelete] = useState<Chatbot | null>(null);
@@ -73,7 +77,12 @@ export default function ChatbotsPage() {
   const [isLoadingVectorCount, setIsLoadingVectorCount] = useState(false);
   const [hasAuraDB, setHasAuraDB] = useState(false);
   const [auraDBInstanceName, setAuraDBInstanceName] = useState<string>('');
-  
+
+  // Background deletion notification
+  const [showDeletionNotification, setShowDeletionNotification] = useState(false);
+  const [deletionProgress, setDeletionProgress] = useState<string>('');
+  const [deletingChatbotId, setDeletingChatbotId] = useState<string | null>(null);
+
   // Function to fetch chatbots
   const fetchChatbots = useCallback(async () => {
     if (!user) {
@@ -217,13 +226,26 @@ export default function ChatbotsPage() {
   // Delete chatbot function (called from dialog)
   const handleDeleteChatbot = async (deleteVectorstore: boolean, deleteAuraDB: boolean) => {
     if (!chatbotToDelete) return;
-    
+
     const id = chatbotToDelete.id;
-    
-    setDeletingId(id);
-    let firebaseDeleteResult: any = null; // Declare at function scope
-    
-    try {
+    const chatbotName = chatbotToDelete.name;
+
+    // Close dialog immediately
+    setShowDeleteDialog(false);
+    setChatbotToDelete(null);
+
+    // Mark this chatbot as being deleted
+    setDeletingChatbotId(id);
+
+    // Show background deletion notification
+    setShowDeletionNotification(true);
+    setDeletionProgress(`Deleting "${chatbotName}"...`);
+
+    // Perform deletion in the background
+    (async () => {
+      let firebaseDeleteResult: any = null;
+
+      try {
       // First, get the chatbot data to retrieve Vercel project info and user info
       const chatbotDoc = await getDocs(query(
         collection(db, "chatbots"), 
@@ -247,239 +269,181 @@ export default function ChatbotsPage() {
         }
       }
       
-      // Delete vectorstore if requested
-      if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
-        console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
-        
-        try {
-          const response = await fetch('/api/vectorstore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'delete',
-              indexName: vectorStoreIndexName,
-              userId: user?.uid
-            }),
-          });
-          
-          if (response.ok) {
-            console.log('✅ Vector store deleted successfully');
-          } else {
-            console.warn('⚠️ Failed to delete vector store, but continuing with chatbot deletion');
-          }
-        } catch (vectorError) {
-          console.warn('⚠️ Error deleting vector store:', vectorError);
-        }
-      }
-      
-      // Delete from Vercel if we have project info
-      if (vercelProjectId || vercelProjectName) {
-        try {
-          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
-          const vercelDeleteResponse = await fetch('/api/vercel-delete', {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              projectId: vercelProjectId,
-              projectName: vercelProjectName,
-            }),
-          });
-          
-          const vercelResult = await vercelDeleteResponse.json();
-          
-          if (vercelResult.success) {
-            console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
-          } else {
-            console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
-            // Continue with Firestore deletion even if Vercel deletion fails
-          }
-        } catch (vercelError) {
-          console.error('❌ Error deleting from Vercel:', vercelError);
-          // Continue with Firestore deletion even if Vercel deletion fails
-        }
-      } else {
-        console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
-      }
-      
-      // Delete entire chatbot folder from Firebase Storage (includes logos and any other files)
-      // Only delete storage if user chose to delete the vector store as well
-      if (deleteVectorstore && chatbotUserId) {
-        try {
-          console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
-          await deleteChatbotFolder(chatbotUserId, id);
-          console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
-        } catch (storageError) {
-          console.error('❌ Error deleting chatbot folder:', storageError);
-          // Continue with deletion even if storage deletion fails
-        }
-      } else if (!deleteVectorstore && chatbotUserId) {
-        console.log('ℹ️ Preserving Firebase Storage data since vector store is being kept');
-      } else {
-        console.log('ℹ️ No user ID found, skipping storage deletion');
-      }
-      
-      // Handle Firebase project deletion or cleanup
-      try {
-        // Check if we're using reusable Firebase project mode
-        const useReusableFirebase = process.env.NEXT_PUBLIC_USE_REUSABLE_FIREBASE_PROJECT === 'true';
-        
-        if (useReusableFirebase) {
-          console.log('🧹 Cleaning up reusable Firebase project data for chatbot:', id);
-          
-          // Call the cleanup API route instead of importing the service directly
+        // Delete vectorstore if requested
+        if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
+          setDeletionProgress('Deleting vector store...');
+          console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
+
           try {
-            const cleanupResponse = await fetch('/api/cleanup-reusable-firebase', {
+            const response = await fetch('/api/vectorstore', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                chatbotId: id,
-                userId: chatbotUserId || user.uid
+                action: 'delete',
+                indexName: vectorStoreIndexName,
+                userId: user?.uid
               }),
             });
 
-            const cleanupResult = await cleanupResponse.json();
-            
-            if (cleanupResult.success) {
-              console.log('✅ Reusable Firebase project cleanup completed:', cleanupResult.message);
-              
-              // Show success notification
-              const successDiv = document.createElement('div');
-              successDiv.style.cssText = `
-                position: fixed; top: 20px; right: 20px; z-index: 9999;
-                background: #10b981; color: white; padding: 15px 20px;
-                border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                font-weight: 500; max-width: 400px;
-              `;
-              successDiv.textContent = '✅ Chatbot data cleaned from reusable Firebase project!';
-              document.body.appendChild(successDiv);
-              
-              // Remove notification after 5 seconds
-              setTimeout(() => successDiv.remove(), 5000);
-              
+            if (response.ok) {
+              console.log('✅ Vector store deleted successfully');
             } else {
-              console.warn('⚠️ Reusable Firebase project cleanup had issues:', cleanupResult.message);
-              
-              alert(
-                `⚠️ Firebase Data Cleanup Warning\n\n` +
-                `Some chatbot data may not have been fully cleaned from the reusable Firebase project.\n\n` +
-                `Details: ${cleanupResult.message}\n\n` +
-                `You may need to manually clean up remaining data from the Firebase Console.`
-              );
+              console.warn('⚠️ Failed to delete vector store, but continuing with chatbot deletion');
             }
-          } catch (cleanupError: any) {
-            console.error('❌ Error calling cleanup API:', cleanupError);
-            alert(
-              `❌ Cleanup API Error\n\n` +
-              `Failed to call the cleanup service. The chatbot has been deleted from this app, but you may need to manually clean up the Firebase project data.\n\n` +
-              `Error: ${cleanupError.message}`
-            );
-          }
-          
-        } else {
-          console.log('🔥 Attempting automated Firebase project deletion for chatbot:', id);
-          
-          if (!user) {
-            console.error('❌ No authenticated user');
-            throw new Error('No authenticated user');
-          }
-
-          // Get auth token from Firebase user
-          const token = await user.getIdToken();
-          firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(id, token);
-          
-          if (firebaseDeleteResult.success) {
-            if (firebaseDeleteResult.error) {
-              // Partial success or warning - show detailed instructions
-              console.warn('⚠️ Firebase project deletion completed with warnings:', firebaseDeleteResult.error);
-              
-              // Show a notification that includes troubleshooting info
-              if (firebaseDeleteResult.error.includes('TROUBLESHOOTING AUTOMATED DELETION')) {
-                // This is an automated deletion failure - show technical details
-                const shouldShowDetails = confirm(
-                  `⚠️ AUTOMATED DELETION FAILED\n\n` +
-                  `Your chatbot has been deleted from this app, but the Firebase project deletion failed.\n\n` +
-                  `This typically happens due to authentication or permission issues.\n\n` +
-                  `Click OK to see technical troubleshooting details, or Cancel to skip.`
-                );
-                
-                if (shouldShowDetails) {
-                  // Show detailed technical information in a new window or alert
-                  const detailsWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
-                  if (detailsWindow) {
-                    detailsWindow.document.write(`
-                      <html>
-                        <head><title>Firebase Project Deletion Troubleshooting</title></head>
-                        <body style="font-family: monospace; padding: 20px; white-space: pre-wrap;">
-                          ${firebaseDeleteResult.error.replace(/\n/g, '<br>')}
-                        </body>
-                      </html>
-                    `);
-                    detailsWindow.document.close();
-                  } else {
-                    // Fallback to console log if popup blocked
-                    console.log('🔧 Troubleshooting details:', firebaseDeleteResult.error);
-                    alert('Troubleshooting details have been logged to the console (F12 → Console)');
-                  }
-                }
-              } else {
-                // Other types of warnings
-                alert(`⚠️ Firebase Project Deletion Warning\n\n${firebaseDeleteResult.error}`);
-              }
-            } else {
-              console.log('✅ Successfully deleted Firebase project automatically');
-              
-              // Show success notification
-              const successDiv = document.createElement('div');
-              successDiv.style.cssText = `
-                position: fixed; top: 20px; right: 20px; z-index: 9999;
-                background: #10b981; color: white; padding: 15px 20px;
-                border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                font-weight: 500; max-width: 400px;
-              `;
-              successDiv.textContent = '✅ Chatbot and Firebase project deleted successfully!';
-              document.body.appendChild(successDiv);
-              
-              // Remove notification after 5 seconds
-              setTimeout(() => successDiv.remove(), 5000);
-            }
-          } else {
-            console.error('❌ Failed to delete Firebase project:', firebaseDeleteResult.error);
-            
-            // Show user-friendly error with actionable steps
-            alert(
-              `❌ Automated Firebase Project Deletion Failed\n\n` +
-              `Your chatbot has been deleted from this app, but we couldn't automatically delete the Firebase project.\n\n` +
-              `Common causes:\n` +
-              `• Authentication not configured\n` +
-              `• Insufficient permissions\n` +
-              `• Project has active services\n\n` +
-              `To manually delete the project:\n` +
-              `1. Go to: https://console.firebase.google.com\n` +
-              `2. Select your project\n` +
-              `3. Go to Settings → General\n` +
-              `4. Click "Delete project"\n\n` +
-              `Technical details logged to console.`
-            );
-            
-            console.error('🔧 Full error details:', firebaseDeleteResult.error);
+          } catch (vectorError) {
+            console.warn('⚠️ Error deleting vector store:', vectorError);
           }
         }
-      } catch (firebaseError) {
-        console.error('❌ Error during Firebase operations:', firebaseError);
-        
-        alert(
-          `❌ Firebase Operation Error\n\n` +
-          `Your chatbot has been deleted from this app, but there was an error during Firebase operations.\n\n` +
-          `Please check the Firebase Console manually if needed.\n\n` +
-          `Error details have been logged to the console.`
-        );
-        
-        console.error('🔧 Firebase operation error details:', firebaseError);
-      }
+
+        // Delete AuraDB instance if requested
+        if (deleteAuraDB && hasAuraDB) {
+          setDeletionProgress('Deleting AuraDB instance...');
+          console.log('🗑️ Deleting AuraDB instance...');
+
+          try {
+            const response = await fetch('/api/chatbot-deletion', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatbotId: id,
+                userId: user?.uid,
+                deleteVectorstore: false, // We already handled this above
+                deleteAuraDB: true
+              }),
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ AuraDB instance deleted successfully:', result);
+            } else {
+              const error = await response.json();
+              console.warn('⚠️ Failed to delete AuraDB instance:', error.message);
+            }
+          } catch (auraError) {
+            console.warn('⚠️ Error deleting AuraDB instance:', auraError);
+          }
+        }
+      
+        // Delete Vercel project via backend API
+        setDeletionProgress('Deleting Vercel deployment...');
+
+        if (vercelProjectId || vercelProjectName) {
+          try {
+            console.log(`🎯 Deleting Vercel project: ${vercelProjectId || vercelProjectName}`);
+
+            const vercelDeleteResponse = await fetch('/api/vercel-delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId: vercelProjectId,
+                projectName: vercelProjectName
+              }),
+            });
+
+            if (vercelDeleteResponse.ok) {
+              console.log('✅ Vercel project deleted successfully');
+            } else {
+              const error = await vercelDeleteResponse.json();
+              console.warn('⚠️ Vercel deletion failed:', error.message);
+            }
+          } catch (vercelError) {
+            console.error('❌ Error deleting Vercel project:', vercelError);
+          }
+        } else {
+          console.log('📭 No Vercel project info - skipping Vercel deletion');
+        }
+
+        setDeletionProgress('Cleaning up storage files...');
+
+        // Delete chatbot folder from Firebase Storage (includes logos and any other files)
+        if (chatbotUserId) {
+          try {
+            console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
+            await deleteChatbotFolder(chatbotUserId, id);
+            console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
+          } catch (storageError) {
+            console.error('❌ Error deleting chatbot folder:', storageError);
+            // Continue with deletion even if storage deletion fails
+          }
+        } else {
+          console.log('ℹ️ No user ID found, skipping storage deletion');
+        }
+      
+        // Handle Firebase project deletion or cleanup
+        setDeletionProgress('Cleaning up Firebase project...');
+
+        try {
+          // Check if we're using reusable Firebase project mode
+          const useReusableFirebase = process.env.NEXT_PUBLIC_USE_REUSABLE_FIREBASE_PROJECT === 'true';
+
+          if (useReusableFirebase) {
+            console.log('🧹 Using integrated cleanup for reusable Firebase project:', id);
+
+            // Use the integrated chatbots DELETE endpoint (handles cleanup automatically)
+            try {
+              if (!user) {
+                throw new Error('No authenticated user for cleanup');
+              }
+
+              const token = await user.getIdToken();
+              const cleanupResponse = await fetch('/api/chatbots', {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  chatbotId: id,
+                  userId: chatbotUserId || user.uid,
+                  deleteVectorstore: deleteVectorstore,
+                  deleteFirebaseProject: true // This triggers automatic cleanup + project recycling
+                }),
+              });
+
+              if (!cleanupResponse.ok) {
+                throw new Error(`Cleanup API returned ${cleanupResponse.status}`);
+              }
+
+              const cleanupResult = await cleanupResponse.json();
+
+              if (cleanupResult.success) {
+                console.log('✅ Integrated cleanup completed:', cleanupResult.message);
+                firebaseDeleteResult = { success: true, automated: true };
+              } else {
+                console.warn('⚠️ Integrated cleanup had issues:', cleanupResult.message);
+                firebaseDeleteResult = { success: false, error: cleanupResult.message };
+              }
+            } catch (cleanupError: any) {
+              console.error('❌ Error calling integrated cleanup:', cleanupError);
+              firebaseDeleteResult = { success: false, error: cleanupError.message };
+            }
+
+          } else {
+            console.log('🔥 Attempting automated Firebase project deletion for chatbot:', id);
+
+            if (!user) {
+              console.error('❌ No authenticated user');
+              throw new Error('No authenticated user');
+            }
+
+            // Get auth token from Firebase user
+            const token = await user.getIdToken();
+            firebaseDeleteResult = await ClientFirebaseProjectService.deleteProjectForChatbot(id, token);
+
+            if (firebaseDeleteResult.success) {
+              if (firebaseDeleteResult.error) {
+                console.warn('⚠️ Firebase project deletion completed with warnings:', firebaseDeleteResult.error);
+              } else {
+                console.log('✅ Successfully deleted Firebase project automatically');
+              }
+            } else {
+              console.error('❌ Failed to delete Firebase project:', firebaseDeleteResult.error);
+            }
+          }
+        } catch (firebaseError: any) {
+          console.error('❌ Error with Firebase project cleanup:', firebaseError);
+          firebaseDeleteResult = { success: false, error: firebaseError.message };
+        }
       
       // Only delete from Firestore if Firebase project deletion didn't handle it
       if (!firebaseDeleteResult?.success) {
@@ -495,18 +459,31 @@ export default function ChatbotsPage() {
         console.log('✅ Chatbot document already deleted by Firebase project cleanup');
       }
       
-      // Update local state
-      setChatbots(chatbots.filter(chatbot => chatbot.id !== id));
-      
-      console.log('✅ Chatbot deleted successfully from Vercel, Storage, and Firestore');
-    } catch (err: any) {
-      console.error("Error deleting chatbot:", err);
-      setError(`Failed to delete chatbot: ${err.message}`);
-    } finally {
-      setDeletingId(null);
-      setShowDeleteDialog(false);
-      setChatbotToDelete(null);
-    }
+        // Update local state
+        setChatbots(prev => prev.filter(chatbot => chatbot.id !== id));
+
+        console.log('✅ Chatbot deleted successfully from all services');
+
+        // Success!
+        setDeletionProgress(`"${chatbotName}" deleted successfully!`);
+
+        // Hide notification and clear deleting state after showing success
+        setTimeout(() => {
+          setShowDeletionNotification(false);
+          setDeletingChatbotId(null);
+        }, 3000);
+
+      } catch (err: any) {
+        console.error("Error deleting chatbot:", err);
+        setDeletionProgress(`Failed to delete chatbot: ${err.message}`);
+
+        // Hide notification and clear deleting state after error
+        setTimeout(() => {
+          setShowDeletionNotification(false);
+          setDeletingChatbotId(null);
+        }, 5000);
+      }
+    })();
   };
   
   useEffect(() => {
@@ -717,11 +694,13 @@ export default function ChatbotsPage() {
                   const animationDelay = `${0.1 + (index * 0.05)}s`;
                   
                   return (
-                    <Card 
-                      key={chatbot.id} 
-                      variant="elevated" 
-                      hover="lift" 
-                      className="group animate-slide-up overflow-hidden"
+                    <Card
+                      key={chatbot.id}
+                      variant="elevated"
+                      hover="lift"
+                      className={`group animate-slide-up overflow-hidden transition-opacity ${
+                        deletingChatbotId === chatbot.id ? 'opacity-60' : ''
+                      }`}
                       style={{ animationDelay }}
                     >
                       <CardHeader className="pb-4">
@@ -744,10 +723,16 @@ export default function ChatbotsPage() {
                               <h3 className="font-semibold text-foreground truncate group-hover:text-purple-700 transition-colors">
                                 {chatbot.name}
                               </h3>
-                              <Badge 
+                              <Badge
                                 variant="outline"
                                 className={`mt-1 ${
-                                  chatbot.status === 'active'
+                                  deletingChatbotId === chatbot.id
+                                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50'
+                                    : chatbot.deployment?.status === 'deployed'
+                                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50'
+                                    : chatbot.deployment?.status === 'deploying'
+                                    ? 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700/50'
+                                    : chatbot.status === 'active'
                                     ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50'
                                     : chatbot.status === 'preview'
                                     ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50'
@@ -756,14 +741,33 @@ export default function ChatbotsPage() {
                                     : 'bg-gray-50 text-foreground border-border dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600'
                                 }`}
                               >
-                                <div className={`h-2 w-2 rounded-full mr-1.5 ${
-                                  chatbot.status === 'active' ? 'bg-green-500' :
-                                  chatbot.status === 'preview' ? 'bg-blue-500' :
-                                  chatbot.status === 'draft' ? 'bg-yellow-500' : 'bg-gray-500'
-                                }`} />
-                                {chatbot.status === 'active' ? 'Active' :
-                                 chatbot.status === 'preview' ? 'Preview' :
-                                 chatbot.status === 'draft' ? 'Draft' : chatbot.status}
+                                {deletingChatbotId === chatbot.id ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-2 w-2 border-t border-b border-red-500 mr-1.5" />
+                                    deleting...
+                                  </>
+                                ) : chatbot.deployment?.status === 'deployed' ? (
+                                  <>
+                                    <div className="h-2 w-2 rounded-full mr-1.5 bg-green-500" />
+                                    Deployed
+                                  </>
+                                ) : chatbot.deployment?.status === 'deploying' ? (
+                                  <>
+                                    <div className="h-2 w-2 rounded-full mr-1.5 bg-orange-500 animate-pulse" />
+                                    Deploying
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className={`h-2 w-2 rounded-full mr-1.5 ${
+                                      chatbot.status === 'active' ? 'bg-green-500' :
+                                      chatbot.status === 'preview' ? 'bg-blue-500' :
+                                      chatbot.status === 'draft' ? 'bg-yellow-500' : 'bg-gray-500'
+                                    }`} />
+                                    {chatbot.status === 'active' ? 'Active' :
+                                     chatbot.status === 'preview' ? 'Preview' :
+                                     chatbot.status === 'draft' ? 'Draft' : chatbot.status}
+                                  </>
+                                )}
                               </Badge>
                             </div>
                           </div>
@@ -797,13 +801,13 @@ export default function ChatbotsPage() {
                             <p className="text-xs text-green-700 dark:text-green-300">Success Rate</p>
                           </div>
                         </div>
-                        
-                        {/* Actions */}
+
+                        {/* Actions - Only disable the delete button for the chatbot being deleted */}
                         <div className="flex space-x-2">
-                          <Button 
+                          <Button
                             asChild
-                            variant="outline" 
-                            size="sm" 
+                            variant="outline"
+                            size="sm"
                             className="flex-1 group-hover:border-blue-300 group-hover:bg-blue-50 dark:group-hover:border-blue-600 dark:group-hover:bg-blue-900/30 transition-colors"
                           >
                             <Link href={`/dashboard/chatbots/${chatbot.id}`}>
@@ -811,10 +815,10 @@ export default function ChatbotsPage() {
                               View
                             </Link>
                           </Button>
-                          <Button 
+                          <Button
                             asChild
-                            variant="outline" 
-                            size="sm" 
+                            variant="outline"
+                            size="sm"
                             className="flex-1 group-hover:border-purple-300 group-hover:bg-purple-50 dark:group-hover:border-purple-600 dark:group-hover:bg-purple-900/30 transition-colors"
                           >
                             <Link href={`/dashboard/chatbots/${chatbot.id}/edit`}>
@@ -822,18 +826,14 @@ export default function ChatbotsPage() {
                               Edit
                             </Link>
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={deletingChatbotId === chatbot.id}
                             className="group-hover:border-red-300 group-hover:bg-red-50 dark:group-hover:border-red-600 dark:group-hover:bg-red-900/30 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                             onClick={() => showDeleteChatbotDialog(chatbot)}
-                            disabled={deletingId === chatbot.id}
                           >
-                            {deletingId === chatbot.id ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-red-500" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </CardContent>
@@ -858,8 +858,50 @@ export default function ChatbotsPage() {
           isLoadingCount={isLoadingVectorCount}
           onConfirm={handleDeleteChatbot}
           onCancel={() => setShowDeleteDialog(false)}
-          isDeleting={deletingId === chatbotToDelete.id}
+          isDeleting={false}
         />
+      )}
+
+      {/* Background Deletion Notification */}
+      {showDeletionNotification && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-6 min-w-[320px] max-w-md">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                {deletionProgress.includes('successfully') ? (
+                  <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                ) : deletionProgress.includes('Failed') ? (
+                  <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-red-500"></div>
+                )}
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                  {deletionProgress.includes('successfully') ? 'Deletion Complete' :
+                   deletionProgress.includes('Failed') ? 'Deletion Failed' :
+                   'Deleting Chatbot'}
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {deletionProgress}
+                </p>
+                {!deletionProgress.includes('successfully') && !deletionProgress.includes('Failed') && (
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                    This is happening in the background. You can continue using the app.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

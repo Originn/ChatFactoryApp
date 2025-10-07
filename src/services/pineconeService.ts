@@ -2,6 +2,7 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import { getEmbeddingDimensions } from '@/lib/embeddingModels';
 import OpenAI from 'openai';
+import { FirestoreSecretService } from './firestoreSecretService';
 
 interface DocumentMetadata {
   chatbotId: string;
@@ -37,9 +38,13 @@ class PineconeService {
     return this.pinecone;
   }
 
-  private static getOpenAIClient(): OpenAI {
+  private static async getOpenAIClient(): Promise<OpenAI> {
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+      const apiKey = await FirestoreSecretService.getOpenAIApiKey();
+      if (!apiKey) {
+        throw new Error('OpenAI API key not found in Firestore secrets');
+      }
+      this.openai = new OpenAI({ apiKey });
     }
     return this.openai;
   }
@@ -159,9 +164,9 @@ class PineconeService {
           
           // Get embedding model from tags
           const embeddingModel = indexDetails.tags?.embeddingModel || 'unknown';
-          
-          // Check compatibility based on embedding model (not just dimensions)
-          const isCompatible = requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true;
+
+          // All indexes are compatible since we now use embed-v4.0 (512D) throughout
+          const isCompatible = true;
           
           // Better vector count extraction - check multiple possible locations
           let vectorCount = 0;
@@ -221,7 +226,7 @@ class PineconeService {
             displayName: displayName,
             dimensions: index.dimension,
             embeddingModel: embeddingModel,
-            isCompatible: requiredEmbeddingModel ? embeddingModel === requiredEmbeddingModel : true,
+            isCompatible: true, // All indexes compatible with embed-v4.0
             vectorCount: vectorCount, // Use the calculated vectorCount
             stats: null
           };
@@ -341,7 +346,7 @@ class PineconeService {
   }
 
   static async generateEmbeddings(textChunks: string[]): Promise<number[][]> {
-    const openai = this.getOpenAIClient();
+    const openai = await this.getOpenAIClient();
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-small',
       input: textChunks,

@@ -44,6 +44,12 @@ export const EMBEDDING_MODEL_CONFIGS: Record<string, EmbeddingModelConfig> = {
   },
 
   // Cohere Models
+  'embed-v4.0': {
+    dimensions: 512,
+    provider: 'cohere',
+    supportsMultimodal: true,
+    description: 'Cohere embed-v4.0 (512 dimensions, multimodal, multilingual, Matryoshka)'
+  },
   'cohere-embed-english-v3.0': {
     dimensions: 1024,
     provider: 'cohere',

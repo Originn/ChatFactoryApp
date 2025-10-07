@@ -44,9 +44,18 @@ export default function UserDropdown() {
     <div className="relative ml-4" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 border border-blue-200 flex items-center justify-center hover:from-blue-200 hover:to-purple-200 transition-all duration-200"
+        className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 border border-blue-200 flex items-center justify-center hover:from-blue-200 hover:to-purple-200 transition-all duration-200 overflow-hidden"
       >
-        <span className="text-xs font-medium text-blue-700">{userInitials}</span>
+        {user?.photoURL ? (
+          <img
+            src={user.photoURL}
+            alt="Profile"
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <span className="text-xs font-medium text-blue-700">{userInitials}</span>
+        )}
       </button>
 
       {isOpen && (

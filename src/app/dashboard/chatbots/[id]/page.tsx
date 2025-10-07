@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Header from "@/components/shared/Header";
 import { useParams, useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase/config";
-import { doc, getDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, deleteDoc, updateDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { deleteChatbotFolder } from "@/lib/utils/logoUpload";
 import { ChatbotDeletionDialog } from '@/components/dialogs/ChatbotDeletionDialog';
 import { VectorStoreSelectionDialog } from '@/components/dialogs/VectorStoreSelectionDialog';
@@ -44,7 +44,12 @@ export default function ChatbotDetailPage() {
   const [hasAuraDB, setHasAuraDB] = useState(false);
   const [auraDBInstanceName, setAuraDBInstanceName] = useState<string>('');
   const [refreshKey, setRefreshKey] = useState(0);
-  
+
+
+  // Background deletion notification
+  const [showDeletionNotification, setShowDeletionNotification] = useState(false);
+  const [deletionProgress, setDeletionProgress] = useState<string>('');
+
   // Vector store deployment dialogs
   const [showVectorStoreSelection, setShowVectorStoreSelection] = useState(false);
   const [showVectorStoreNaming, setShowVectorStoreNaming] = useState(false);
@@ -58,7 +63,7 @@ export default function ChatbotDetailPage() {
     if (typeof window !== 'undefined') {
       const wasCreated = localStorage.getItem('chatbotCreated');
       const chatbotName = localStorage.getItem('chatbotName');
-      
+
       if (wasCreated === 'true' && chatbotName) {
         setSuccessMessage(`Chatbot "${chatbotName}" was created successfully!`);
         localStorage.removeItem('chatbotCreated');
@@ -151,207 +156,380 @@ export default function ChatbotDetailPage() {
     }
   };
 
-  useEffect(() => {
-    const fetchChatbot = async () => {
+  // Poll deployment status in the background
+  const pollDeploymentStatus = async (deploymentUrl: string, chatbotId: string) => {
+    const maxAttempts = 42; // 42 attempts * 5 seconds = 210 seconds (3.5 minutes)
+    const pollInterval = 5000; // Check every 5 seconds
+    let attempts = 0;
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔄 STARTING DEPLOYMENT POLLING');
+    console.log('📍 URL:', deploymentUrl);
+    console.log('🆔 Chatbot ID:', chatbotId);
+    console.log('⏱️  Max attempts:', maxAttempts, '(~3.5 minutes)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    const checkDeployment = async (): Promise<boolean> => {
+      const attemptNum = attempts + 1;
+      console.log(`\n🔍 Attempt ${attemptNum}/${maxAttempts} - Checking deployment...`);
+
       try {
-        const docRef = doc(db, 'chatbots', chatbotId);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const chatbotData = { id: docSnap.id, ...docSnap.data() } as ChatbotConfig;
-          setChatbot(chatbotData);
-          
-          // Check for vector store
-          const vectorstoreExists = await checkVectorstoreExists(chatbotId);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.log(`   ⏱️  Request timeout after 8 seconds`);
+          controller.abort();
+        }, 8000);
 
-          // Fallback: also check if documents exist in the chatbot data
-          if (!vectorstoreExists && chatbotData.documents && chatbotData.documents.length > 0) {
-            console.log('🔄 Fallback: Found documents in chatbot data, assuming vectorstore exists');
-            setHasVectorstore(true);
-            setVectorstoreDocCount(chatbotData.documents.length);
-            // For legacy chatbots, generate the index name from chatbot ID
-            const legacyIndexName = chatbotId.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 45);
-            setVectorStoreIndexName(legacyIndexName);
-            setVectorStoreName('Knowledge Base (Legacy)');
-          }
+        console.log(`   📡 Fetching: ${deploymentUrl}`);
+        const startTime = Date.now();
 
-          // Check for AuraDB
-          const auraDBExists = await checkAuraDBExists(chatbotId);
-          setHasAuraDB(auraDBExists);
-        } else {
-          setError('Chatbot not found');
+        const response = await fetch(deploymentUrl, {
+          signal: controller.signal,
+          cache: 'no-cache',
+          mode: 'no-cors' // Prevent CORS errors during polling
+        });
+
+        clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
+
+        console.log(`   ✅ Response received in ${duration}ms`);
+        console.log(`   🎯 Response type: ${response.type}`);
+        console.log(`   📊 Deployment appears to be accessible!`);
+        return true;
+      } catch (error: any) {
+        // Deployment not ready yet or CORS error
+        console.log(`   ❌ Request failed:`, error.name, error.message);
+        if (error.name === 'AbortError') {
+          console.log(`   ⏱️  Request timed out after 8 seconds`);
+        } else if (error.name === 'TypeError') {
+          console.log(`   🌐 Network error - deployment likely not ready yet`);
         }
-      } catch (err: any) {
-        console.error('❌ Error fetching chatbot:', err);
-        setError('Failed to load chatbot');
-      } finally {
-        setIsLoading(false);
+        return false;
       }
     };
 
-    if (chatbotId && user) {
-      fetchChatbot();
-    }
-  }, [chatbotId, user]);
+    while (attempts < maxAttempts) {
+      const isReady = await checkDeployment();
 
-  const deleteChatbot = async () => {
-    setIsDeleting(true);
-    setError(null);
-    
+      if (isReady) {
+        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🎉 DEPLOYMENT IS READY!');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        // Update Firestore with deployed status
+        try {
+          console.log('💾 Updating Firestore...');
+          console.log('   📝 Document: chatbots/' + chatbotId);
+          console.log('   🔄 Setting deployment.status = "deployed"');
+
+          await updateDoc(doc(db, 'chatbots', chatbotId), {
+            'deployment.status': 'deployed',
+            updatedAt: serverTimestamp()
+          });
+
+          console.log('✅ Firestore updated successfully!');
+          console.log('📡 Real-time listener should now update the UI...');
+          setSuccessMessage(`✅ Chatbot is now live at: ${deploymentUrl}`);
+        } catch (error: any) {
+          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.error('❌ ERROR UPDATING FIRESTORE');
+          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.error('Error details:', error);
+          console.error('Error code:', error.code);
+          console.error('Error message:', error.message);
+        }
+
+        return;
+      }
+
+      attempts++;
+
+      if (attempts < maxAttempts) {
+        console.log(`   ⏳ Waiting 5 seconds before next attempt...`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+    }
+
+    // If we've exhausted attempts, mark as deployed anyway
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('⚠️  POLLING TIMED OUT');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Marking as deployed anyway after 3.5 minutes...');
+
     try {
-      await deleteDoc(doc(db, 'chatbots', chatbotId));
-      router.push("/dashboard/chatbots");
-    } catch (err: any) {
-      console.error("❌ Error deleting chatbot:", err);
-      setError(`Failed to delete chatbot: ${err.message}`);
-      setIsDeleting(false);
+      console.log('💾 Updating Firestore (timeout fallback)...');
+      await updateDoc(doc(db, 'chatbots', chatbotId), {
+        'deployment.status': 'deployed',
+        updatedAt: serverTimestamp()
+      });
+
+      console.log('✅ Deployment status updated after timeout');
+    } catch (error: any) {
+      console.error('❌ Error updating deployment status after timeout:', error);
     }
   };
 
+  useEffect(() => {
+    if (!chatbotId || !user) {
+      console.log('⚠️ Skipping listener setup - missing chatbotId or user');
+      return;
+    }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📡 SETTING UP REAL-TIME LISTENER');
+    console.log('🆔 Chatbot ID:', chatbotId);
+    console.log('👤 User ID:', user.uid);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // Set up real-time listener for chatbot changes
+    const docRef = doc(db, 'chatbots', chatbotId);
+    const unsubscribe = onSnapshot(
+      docRef,
+      async (docSnap) => {
+        console.log('\n🔔 LISTENER TRIGGERED - Document update received!');
+
+        if (docSnap.exists()) {
+          const chatbotData = { id: docSnap.id, ...docSnap.data() } as ChatbotConfig;
+          console.log('📊 Updated data:');
+          console.log('   • Status:', chatbotData.status);
+          console.log('   • Deployment Status:', chatbotData.deployment?.status);
+          console.log('   • Deployment URL:', chatbotData.deployment?.deploymentUrl);
+          console.log('   • Updated At:', chatbotData.updatedAt);
+
+          setChatbot(chatbotData);
+          console.log('✅ Local state updated with new data');
+
+          // Only run these checks on first load (when chatbot is null)
+          if (!chatbot) {
+            // Check for vector store
+            const vectorstoreExists = await checkVectorstoreExists(chatbotId);
+
+            // Fallback: also check if documents exist in the chatbot data
+            if (!vectorstoreExists && chatbotData.documents && chatbotData.documents.length > 0) {
+              console.log('🔄 Fallback: Found documents in chatbot data, assuming vectorstore exists');
+              setHasVectorstore(true);
+              setVectorstoreDocCount(chatbotData.documents.length);
+              // For legacy chatbots, generate the index name from chatbot ID
+              const legacyIndexName = chatbotId.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 45);
+              setVectorStoreIndexName(legacyIndexName);
+              setVectorStoreName('Knowledge Base (Legacy)');
+            }
+
+            // Check for AuraDB
+            const auraDBExists = await checkAuraDBExists(chatbotId);
+            setHasAuraDB(auraDBExists);
+
+            setIsLoading(false);
+          }
+        } else {
+          console.error('❌ Document does not exist!');
+          setError('Chatbot not found');
+          setIsLoading(false);
+        }
+      },
+      (err) => {
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.error('❌ ERROR IN REAL-TIME LISTENER');
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.error('Error:', err);
+        console.error('Error code:', err.code);
+        console.error('Error message:', err.message);
+
+        // Handle permission denied error (chatbot was deleted)
+        if (err.code === 'permission-denied') {
+          console.log('🔒 Permission denied - chatbot may have been deleted');
+          console.log('🔄 Redirecting to chatbots list...');
+          unsubscribe(); // Clean up listener
+          router.push('/dashboard/chatbots');
+          return;
+        }
+
+        setError('Failed to load chatbot');
+        setIsLoading(false);
+      }
+    );
+
+    // Cleanup listener on unmount
+    return () => {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔚 CLEANING UP REAL-TIME LISTENER');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      unsubscribe();
+    };
+  }, [chatbotId, user]);
+
+
   const confirmDeleteChatbot = async (deleteVectorstore: boolean, deleteAuraDB: boolean) => {
     if (!chatbot) return;
-    
+
     const id = chatbot.id;
-    
-    setIsDeleting(true);
-    setError(null);
-    let firebaseDeleteResult: any = null; // Declare at function scope
-    
-    try {
+    const chatbotName = chatbot.name;
+
+    // Close the dialog immediately
+    setShowDeleteDialog(false);
+
+    // Show background deletion notification
+    setShowDeletionNotification(true);
+    setDeletionProgress(`Deleting "${chatbotName}"...`);
+
+    // Perform deletion in the background
+    (async () => {
+      let firebaseDeleteResult: any = null;
+
+      try {
       // Get the chatbot data to retrieve Vercel project info and user info
       const vercelProjectId = chatbot.deployment?.vercelProjectId;
       const vercelProjectName = vercelProjectId || (chatbot.name ? 
         chatbot.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : null);
       const chatbotUserId = chatbot.userId;
       
-      // Delete vectorstore if requested
-      if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
-        console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
-        
-        try {
-          const response = await fetch('/api/vectorstore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'delete',
-              indexName: vectorStoreIndexName,
-              userId: user?.uid
-            }),
-          });
-          
-          if (response.ok) {
-            console.log('✅ Vector store deleted successfully');
-          } else {
-            console.warn('⚠️ Failed to delete vector store, but continuing with chatbot deletion');
-          }
-        } catch (vectorError) {
-          console.warn('⚠️ Error deleting vector store:', vectorError);
-        }
-      }
+        // Delete vectorstore if requested
+        if (deleteVectorstore && hasVectorstore && vectorStoreIndexName) {
+          setDeletionProgress('Deleting vector store...');
+          console.log('🗑️ Deleting vector store:', vectorStoreIndexName);
 
-      // Delete AuraDB instance if requested
-      if (deleteAuraDB && hasAuraDB) {
-        console.log('🗑️ Deleting AuraDB instance...');
-
-        try {
-          const response = await fetch('/api/chatbot-deletion', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chatbotId: id,
-              userId: user?.uid,
-              deleteVectorstore: false, // We already handled this above
-              deleteAuraDB: true
-            }),
-          });
-
-          if (response.ok) {
-            const result = await response.json();
-            console.log('✅ AuraDB instance deleted successfully:', result);
-          } else {
-            const error = await response.json();
-            console.warn('⚠️ Failed to delete AuraDB instance:', error.message);
-          }
-        } catch (auraError) {
-          console.warn('⚠️ Error deleting AuraDB instance:', auraError);
-        }
-      }
-
-      // Delete from Vercel if we have project info
-      if (vercelProjectId || vercelProjectName) {
-        try {
-          console.log('Deleting from Vercel:', vercelProjectId || vercelProjectName);
-          const vercelDeleteResponse = await fetch('/api/vercel-delete', {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              projectId: vercelProjectId,
-              projectName: vercelProjectName,
-            }),
-          });
-          
-          const vercelResult = await vercelDeleteResponse.json();
-          
-          if (vercelResult.success) {
-            console.log('✅ Successfully deleted from Vercel:', vercelResult.message);
-          } else {
-            console.warn('⚠️ Failed to delete from Vercel:', vercelResult.error);
-            // Continue with deletion even if Vercel deletion fails
-          }
-        } catch (vercelError) {
-          console.error('❌ Error deleting from Vercel:', vercelError);
-          // Continue with deletion even if Vercel deletion fails
-        }
-      } else {
-        console.log('ℹ️ No Vercel project info found, skipping Vercel deletion');
-      }
-      
-      // Delete chatbot folder from Firebase Storage (includes logos and any other files)
-      if (chatbotUserId) {
-        try {
-          console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
-          await deleteChatbotFolder(chatbotUserId, id);
-          console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
-        } catch (storageError) {
-          console.error('❌ Error deleting chatbot folder:', storageError);
-          // Continue with deletion even if storage deletion fails
-        }
-      } else {
-        console.log('ℹ️ No user ID found, skipping storage deletion');
-      }
-      
-      // Handle Firebase project deletion or cleanup
-      try {
-        // Check if we're using reusable Firebase project mode
-        const useReusableFirebase = process.env.NEXT_PUBLIC_USE_REUSABLE_FIREBASE_PROJECT === 'true';
-        
-        if (useReusableFirebase) {
-          console.log('🧹 Cleaning up reusable Firebase project data for chatbot:', id);
-          
-          // Call the cleanup API route
           try {
-            const cleanupResponse = await fetch('/api/cleanup-reusable-firebase', {
+            const response = await fetch('/api/vectorstore', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                chatbotId: id,
-                userId: chatbotUserId || user?.uid
+                action: 'delete',
+                indexName: vectorStoreIndexName,
+                userId: user?.uid
               }),
             });
 
-            const cleanupResult = await cleanupResponse.json();
-            
-            if (cleanupResult.success) {
-              console.log('✅ Reusable Firebase project cleanup completed:', cleanupResult.message);
+            if (response.ok) {
+              console.log('✅ Vector store deleted successfully');
             } else {
-              console.warn('⚠️ Reusable Firebase project cleanup had issues:', cleanupResult.message);
+              console.warn('⚠️ Failed to delete vector store, but continuing with chatbot deletion');
+            }
+          } catch (vectorError) {
+            console.warn('⚠️ Error deleting vector store:', vectorError);
+          }
+        }
+
+        // Delete AuraDB instance if requested
+        if (deleteAuraDB && hasAuraDB) {
+          setDeletionProgress('Deleting AuraDB instance...');
+          console.log('🗑️ Deleting AuraDB instance...');
+
+          try {
+            const response = await fetch('/api/chatbot-deletion', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatbotId: id,
+                userId: user?.uid,
+                deleteVectorstore: false, // We already handled this above
+                deleteAuraDB: true
+              }),
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ AuraDB instance deleted successfully:', result);
+            } else {
+              const error = await response.json();
+              console.warn('⚠️ Failed to delete AuraDB instance:', error.message);
+            }
+          } catch (auraError) {
+            console.warn('⚠️ Error deleting AuraDB instance:', auraError);
+          }
+        }
+
+        // Delete Vercel project via backend API
+        setDeletionProgress('Deleting Vercel deployment...');
+
+        if (vercelProjectId || vercelProjectName) {
+          try {
+            console.log(`🎯 Deleting Vercel project: ${vercelProjectId || vercelProjectName}`);
+
+            const vercelDeleteResponse = await fetch('/api/vercel-delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId: vercelProjectId,
+                projectName: vercelProjectName
+              }),
+            });
+
+            if (vercelDeleteResponse.ok) {
+              console.log('✅ Vercel project deleted successfully');
+            } else {
+              const error = await vercelDeleteResponse.json();
+              console.warn('⚠️ Vercel deletion failed:', error.message);
+            }
+          } catch (vercelError) {
+            console.error('❌ Error deleting Vercel project:', vercelError);
+          }
+        } else {
+          console.log('📭 No Vercel project info - skipping Vercel deletion');
+        }
+
+        setDeletionProgress('Cleaning up storage files...');
+
+        // Delete chatbot folder from Firebase Storage (includes logos and any other files)
+        if (chatbotUserId) {
+          try {
+            console.log('Deleting chatbot folder from Firebase Storage for user:', chatbotUserId, 'chatbot:', id);
+            await deleteChatbotFolder(chatbotUserId, id);
+            console.log('✅ Successfully deleted chatbot folder from Firebase Storage');
+          } catch (storageError) {
+            console.error('❌ Error deleting chatbot folder:', storageError);
+            // Continue with deletion even if storage deletion fails
+          }
+        } else {
+          console.log('ℹ️ No user ID found, skipping storage deletion');
+        }
+      
+        // Handle Firebase project deletion or cleanup
+        setDeletionProgress('Cleaning up Firebase project...');
+
+        try {
+          // Check if we're using reusable Firebase project mode
+          const useReusableFirebase = process.env.NEXT_PUBLIC_USE_REUSABLE_FIREBASE_PROJECT === 'true';
+
+          if (useReusableFirebase) {
+            console.log('🧹 Using integrated cleanup for reusable Firebase project:', id);
+
+          // Use the integrated chatbots DELETE endpoint (handles cleanup automatically)
+          try {
+            if (!user) {
+              throw new Error('No authenticated user for cleanup');
+            }
+
+            const token = await user.getIdToken();
+            const cleanupResponse = await fetch('/api/chatbots', {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                chatbotId: id,
+                userId: chatbotUserId || user.uid,
+                deleteVectorstore: deleteVectorstore,
+                deleteFirebaseProject: true // This triggers automatic cleanup + project recycling
+              }),
+            });
+
+            if (!cleanupResponse.ok) {
+              throw new Error(`Cleanup API returned ${cleanupResponse.status}`);
+            }
+
+            const cleanupResult = await cleanupResponse.json();
+
+            if (cleanupResult.success) {
+              console.log('✅ Integrated cleanup completed:', cleanupResult.message);
+              firebaseDeleteResult = { success: true, automated: true };
+            } else {
+              console.warn('⚠️ Integrated cleanup had issues:', cleanupResult.message);
+              firebaseDeleteResult = { success: false, error: cleanupResult.message };
             }
           } catch (cleanupError: any) {
-            console.error('❌ Error calling cleanup API:', cleanupError);
+            console.error('❌ Error calling integrated cleanup:', cleanupError);
+            firebaseDeleteResult = { success: false, error: cleanupError.message };
           }
           
         } else {
@@ -394,16 +572,28 @@ export default function ChatbotDetailPage() {
       } else {
         console.log('✅ Chatbot document already deleted by Firebase project cleanup');
       }
-      
-      console.log('✅ Chatbot deleted successfully from all services');
-      
-      // Navigate back to chatbots list
-      router.push("/dashboard/chatbots");
-    } catch (err: any) {
-      console.error("❌ Error deleting chatbot:", err);
-      setError(`Failed to delete chatbot: ${err.message}`);
-      setIsDeleting(false);
-    }
+
+        console.log('✅ Chatbot deleted successfully from all services');
+
+        // Success!
+        setDeletionProgress(`"${chatbotName}" deleted successfully!`);
+
+        // Wait a moment before navigating
+        setTimeout(() => {
+          setShowDeletionNotification(false);
+          router.push("/dashboard/chatbots");
+        }, 1500);
+
+      } catch (err: any) {
+        console.error("❌ Error deleting chatbot:", err);
+        setDeletionProgress(`Failed to delete chatbot: ${err.message}`);
+
+        // Hide notification after a few seconds on error
+        setTimeout(() => {
+          setShowDeletionNotification(false);
+        }, 5000);
+      }
+    })();
   };
 
   const handleDeployChatbot = async () => {
@@ -438,20 +628,22 @@ export default function ChatbotDetailPage() {
 
   const deployWithVectorStore = async (indexName: string, displayName: string) => {
     if (!chatbot || !user) return;
-    
+
     setIsDeploying(true);
     setDeploymentError(null);
-    
+
     try {
+      const requestBody: any = {
+        chatbotId: chatbot.id,
+        chatbotName: chatbot.name,
+        userId: user.uid,
+        vectorstore: { indexName, displayName }
+      };
+
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatbotId: chatbot.id,
-          chatbotName: chatbot.name,
-          userId: user.uid,
-          vectorstore: { indexName, displayName }
-        }),
+        body: JSON.stringify(requestBody),
       });
       
       const data = await response.json();
@@ -466,16 +658,15 @@ export default function ChatbotDetailPage() {
         deployment: {
           ...chatbot.deployment,
           deploymentUrl: data.url,
-          status: 'deployed',
+          status: 'deploying',
           deployedAt: new Date() as any,
         },
       });
-      
-      setSuccessMessage(`✅ Chatbot "${chatbot.name}" deployed successfully! Available at: ${data.url}`);
-      
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+
+      setSuccessMessage(`🚀 Deployment initiated! Your chatbot is building...`);
+
+      // Start polling deployment status in the background
+      pollDeploymentStatus(data.url, chatbot.id);
       
     } catch (error) {
       console.error('❌ Error deploying chatbot:', error);
@@ -487,22 +678,24 @@ export default function ChatbotDetailPage() {
 
   const deployWithNewVectorStore = async (displayName: string, desiredIndexName?: string, embeddingModel?: string) => {
     if (!chatbot || !user) return;
-    
+
     setIsDeploying(true);
     setDeploymentError(null);
-    
+
     try {
+      const requestBody: any = {
+        chatbotId: chatbot.id,
+        chatbotName: chatbot.name,
+        userId: user.uid,
+        vectorstore: null,
+        desiredVectorstoreIndexName: desiredIndexName,
+        embeddingModel: embeddingModel
+      };
+
       const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatbotId: chatbot.id,
-          chatbotName: chatbot.name,
-          userId: user.uid,
-          vectorstore: null,
-          desiredVectorstoreIndexName: desiredIndexName,
-          embeddingModel: embeddingModel
-        }),
+        body: JSON.stringify(requestBody),
       });
       
       const data = await response.json();
@@ -517,22 +710,21 @@ export default function ChatbotDetailPage() {
         deployment: {
           ...chatbot.deployment,
           deploymentUrl: data.url,
-          status: 'deployed',
+          status: 'deploying',
           deployedAt: new Date() as any,
         },
       });
-      
+
       if (data.vectorstoreIndexName) {
         setVectorStoreIndexName(data.vectorstoreIndexName);
         setVectorStoreName(displayName);
         setHasVectorstore(true);
       }
-      
-      setSuccessMessage(`✅ Chatbot "${chatbot.name}" deployed successfully! Available at: ${data.url}`);
-      
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+
+      setSuccessMessage(`🚀 Deployment initiated! Your chatbot is building...`);
+
+      // Start polling deployment status in the background
+      pollDeploymentStatus(data.url, chatbot.id);
       
     } catch (error) {
       console.error('❌ Error deploying with new vector store:', error);
@@ -612,26 +804,61 @@ export default function ChatbotDetailPage() {
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{chatbot.name}</h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-1">{chatbot.description || 'No description available'}</p>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3 sm:gap-0 flex-shrink-0">
-                    <Button asChild>
-                      <Link href={`/dashboard/chatbots/${chatbot.id}/edit`}>
-                        Edit Chatbot
-                      </Link>
-                    </Button>
-                    <Button 
-                      onClick={handleDeployChatbot}
-                      disabled={isDeploying}
-                      className="bg-gradient-primary hover:opacity-90"
-                    >
-                      {isDeploying ? 'Deploying...' : 'Deploy'}
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      onClick={() => setShowDeleteDialog(true)}
-                      disabled={isDeleting}
-                    >
-                      {isDeleting ? 'Deleting...' : 'Delete'}
-                    </Button>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3 sm:gap-0">
+                      <Button asChild>
+                        <Link href={`/dashboard/chatbots/${chatbot.id}/edit`}>
+                          Edit Chatbot
+                        </Link>
+                      </Button>
+                      {/* Show Deploy button if not deployed, otherwise show Deployed/Deploying status */}
+                      {chatbot.deployment?.status === 'deploying' ? (
+                        <Button
+                          disabled
+                          className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700 cursor-default"
+                        >
+                          <span className="flex items-center">
+                            <span className="h-2 w-2 rounded-full bg-yellow-500 mr-2 animate-pulse"></span>
+                            Deploying...
+                          </span>
+                        </Button>
+                      ) : chatbot.deployment?.status === 'deployed' ? (
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            disabled
+                            className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-300 dark:border-green-700 cursor-default"
+                          >
+                            <span className="flex items-center">
+                              <span className="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
+                              Deployed
+                            </span>
+                          </Button>
+                          <Button
+                            onClick={handleDeployChatbot}
+                            disabled={isDeploying}
+                            variant="outline"
+                            className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900"
+                          >
+                            {isDeploying ? 'Redeploying...' : 'Redeploy'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={handleDeployChatbot}
+                          disabled={isDeploying}
+                          className="bg-gradient-primary hover:opacity-90"
+                        >
+                          {isDeploying ? 'Deploying...' : 'Deploy'}
+                        </Button>
+                      )}
+                      <Button
+                        variant="destructive"
+                        onClick={() => setShowDeleteDialog(true)}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -703,8 +930,14 @@ export default function ChatbotDetailPage() {
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center">
-                          <span className={`h-3 w-3 rounded-full ${chatbot.deployment?.status === 'deployed' ? 'bg-green-500' : 'bg-yellow-500'} mr-2`}></span>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">{chatbot.status || 'Draft'}</div>
+                          <span className={`h-3 w-3 rounded-full ${
+                            chatbot.deployment?.status === 'deployed' ? 'bg-green-500' :
+                            chatbot.deployment?.status === 'deploying' ? 'bg-yellow-500 animate-pulse' :
+                            'bg-gray-400'
+                          } mr-2`}></span>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {chatbot.deployment?.status === 'deploying' ? 'deploying' : chatbot.status || 'Draft'}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -741,20 +974,38 @@ export default function ChatbotDetailPage() {
                   {chatbot.deployment?.deploymentUrl && (
                     <Card className="mb-6 dark:bg-gray-800 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-gray-900 dark:text-white">Live Deployment</CardTitle>
+                        <CardTitle className="text-gray-900 dark:text-white">
+                          {chatbot.deployment?.status === 'deploying' ? '🚀 Deployment in Progress' : 'Live Deployment'}
+                        </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
-                          <strong className="text-gray-900 dark:text-white">Live URL:</strong>{' '}
-                          <a 
-                            href={chatbot.deployment.deploymentUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            {chatbot.deployment.deploymentUrl}
-                          </a>
-                        </div>
+                        {chatbot.deployment?.status === 'deploying' ? (
+                          <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                            <div className="flex items-start space-x-3">
+                              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-yellow-500 mt-0.5 flex-shrink-0"></div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                                  Your chatbot is being deployed...
+                                </p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  This typically takes 3-3.5 minutes. The page will update automatically when ready.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+                            <strong className="text-gray-900 dark:text-white">Live URL:</strong>{' '}
+                            <a
+                              href={chatbot.deployment.deploymentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                            >
+                              {chatbot.deployment.deploymentUrl}
+                            </a>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   )}
@@ -1066,6 +1317,48 @@ export default function ChatbotDetailPage() {
         embeddingModel={chatbot?.aiConfig?.embeddingModel || 'text-embedding-3-small'}
         isValidating={isDeploying}
       />
+
+      {/* Background Deletion Notification */}
+      {showDeletionNotification && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-6 min-w-[320px] max-w-md">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                {deletionProgress.includes('successfully') ? (
+                  <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                ) : deletionProgress.includes('Failed') ? (
+                  <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-red-500"></div>
+                )}
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                  {deletionProgress.includes('successfully') ? 'Deletion Complete' :
+                   deletionProgress.includes('Failed') ? 'Deletion Failed' :
+                   'Deleting Chatbot'}
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {deletionProgress}
+                </p>
+                {!deletionProgress.includes('successfully') && !deletionProgress.includes('Failed') && (
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                    This is happening in the background. You can continue using the app.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

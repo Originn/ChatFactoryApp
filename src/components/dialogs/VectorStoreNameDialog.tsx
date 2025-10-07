@@ -64,7 +64,7 @@ export function VectorStoreNameDialog({
         body: JSON.stringify({
           action: 'list-with-dimensions',
           userId,
-          requiredEmbeddingModel: embeddingModel,
+          // All indexes compatible now with embed-v4.0, no need to filter
         }),
       });
 

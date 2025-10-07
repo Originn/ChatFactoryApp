@@ -14,6 +14,7 @@ import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 // Import custom domain components
 import CustomDomainManager from "@/components/chatbot/CustomDomainManager";
+import SystemPromptWizard from "@/components/chatbot/SystemPromptWizard";
 
 // Define the Chatbot type
 interface Chatbot {
@@ -70,9 +71,9 @@ export default function EditChatbotPage() {
     description: '',
     domain: '',
     status: 'draft',
-    
+
     // AI Configuration
-    embeddingModel: 'text-embedding-3-small',
+    embeddingModel: 'embed-v4.0',
     llmModel: 'gpt-4.1',
     temperature: '0.7',
     contextWindow: '4096',
@@ -88,7 +89,7 @@ export default function EditChatbotPage() {
   });
   
   // UI state
-  const [activeTab, setActiveTab] = useState<'basic' | 'domain' | 'ai' | 'behavior' | 'appearance'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'domain' | 'ai' | 'behavior' | 'systemPrompt' | 'appearance'>('basic');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,8 +131,8 @@ export default function EditChatbotPage() {
             description: chatbot.description || '',
             domain: chatbot.domain || '',
             status: chatbot.status || 'draft',
-            
-            embeddingModel: chatbot.aiConfig?.embeddingModel || 'text-embedding-3-small',
+
+            embeddingModel: chatbot.aiConfig?.embeddingModel || 'embed-v4.0',
             llmModel: chatbot.aiConfig?.llmModel || 'gpt-4.1',
             temperature: String(chatbot.aiConfig?.temperature || 0.7),
             contextWindow: String(chatbot.aiConfig?.contextWindow || 4096),
@@ -348,6 +349,16 @@ export default function EditChatbotPage() {
                           Behavior
                         </button>
                         <button
+                          onClick={() => setActiveTab('systemPrompt')}
+                          className={`${
+                            activeTab === 'systemPrompt'
+                              ? 'border-blue-500 text-blue-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                        >
+                          System Prompt
+                        </button>
+                        <button
                           onClick={() => setActiveTab('appearance')}
                           className={`${
                             activeTab === 'appearance'
@@ -438,39 +449,6 @@ export default function EditChatbotPage() {
                         {/* AI Configuration Tab */}
                         {activeTab === 'ai' && (
                           <div className="space-y-6">
-                            <div className="space-y-2">
-                              <label htmlFor="embeddingModel" className="text-sm font-medium">Embedding Model *</label>
-                              <select
-                                id="embeddingModel"
-                                name="embeddingModel"
-                                value={formData.embeddingModel}
-                                onChange={handleChange}
-                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <optgroup label="OpenAI Models">
-                                  <option value="text-embedding-3-small">text-embedding-3-small (1536 dimensions)</option>
-                                  <option value="text-embedding-3-large">text-embedding-3-large (3072 dimensions)</option>
-                                  <option value="text-embedding-ada-002">text-embedding-ada-002 (Legacy)</option>
-                                </optgroup>
-                                <optgroup label="Azure OpenAI Models">
-                                  <option value="azure-text-embedding-3-small">Azure text-embedding-3-small</option>
-                                  <option value="azure-text-embedding-3-large">Azure text-embedding-3-large</option>
-                                </optgroup>
-                                <optgroup label="Cohere Models">
-                                  <option value="cohere-embed-english-v3.0">embed-english-v3.0</option>
-                                  <option value="cohere-embed-multilingual-v3.0">embed-multilingual-v3.0</option>
-                                </optgroup>
-                                <optgroup label="Hugging Face Models">
-                                  <option value="hf-all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
-                                  <option value="hf-all-mpnet-base-v2">all-mpnet-base-v2</option>
-                                  <option value="hf-bge-large-en-v1.5">bge-large-en-v1.5</option>
-                                </optgroup>
-                              </select>
-                              <p className="text-xs text-gray-500">
-                                Choose which embedding model to use for document vectorization.
-                              </p>
-                            </div>
-                            
                             <div className="space-y-2">
                               <label htmlFor="llmModel" className="text-sm font-medium">LLM Model *</label>
                               <select
@@ -601,28 +579,47 @@ export default function EditChatbotPage() {
                                 Preferred length of chatbot responses.
                               </p>
                             </div>
-                            
+                          </div>
+                        )}
+
+                        {/* System Prompt Tab */}
+                        {activeTab === 'systemPrompt' && (
+                          <div className="space-y-6">
+                            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4 mb-4">
+                              <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">About System Prompts</h3>
+                              <p className="text-sm text-gray-700 dark:text-purple-300">
+                                The system prompt defines how your chatbot behaves and responds to users.
+                                You can use our AI wizard to generate a professional prompt, or write your own custom instructions.
+                              </p>
+                            </div>
+
+                            <SystemPromptWizard
+                              currentPrompt={formData.systemPrompt}
+                              productName={formData.name}
+                              onPromptGenerated={(prompt) => {
+                                setFormData(prev => ({ ...prev, systemPrompt: prompt }));
+                              }}
+                            />
+
                             <div className="space-y-2">
-                              <label htmlFor="systemPrompt" className="text-sm font-medium">System Prompt</label>
+                              <label htmlFor="systemPrompt" className="text-sm font-medium">
+                                System Prompt (Manual Edit)
+                              </label>
                               <div className="relative">
                                 <textarea
                                   id="systemPrompt"
                                   name="systemPrompt"
                                   value={formData.systemPrompt}
                                   onChange={handleChange}
-                                  rows={6}
-                                  className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                  rows={10}
+                                  className="flex min-h-[200px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                   placeholder="Enter custom instructions for your chatbot..."
                                 />
                               </div>
-                              <p className="text-xs text-gray-500">
-                                These instructions define how your chatbot will behave. Include details about its role, 
-                                knowledge domain, tone, and any specific behavior guidance.
-                              </p>
                             </div>
                           </div>
                         )}
-                        
+
                         {/* Appearance Tab */}
                         {activeTab === 'appearance' && (
                           <div className="space-y-6">

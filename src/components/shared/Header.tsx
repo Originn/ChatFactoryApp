@@ -231,10 +231,19 @@ export default function Header({
               <div className="pt-4 pb-3 border-t border-white/20">
                 <div className="flex items-center px-4 space-x-3">
                   <div className="flex-shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                      <span className="text-white font-medium text-sm">
-                        {user?.displayName?.charAt(0) || user?.email?.charAt(0) || '?'}
-                      </span>
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center overflow-hidden">
+                      {user?.photoURL ? (
+                        <img
+                          src={user.photoURL}
+                          alt="Profile"
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-white font-medium text-sm">
+                          {user?.displayName?.charAt(0) || user?.email?.charAt(0) || '?'}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-1">

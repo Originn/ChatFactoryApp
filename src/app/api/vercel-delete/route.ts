@@ -1,72 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Vercel } from '@vercel/sdk';
 
-export async function DELETE(request: NextRequest) {
+/**
+ * DELETE Vercel Project API
+ * Handles deletion of Vercel projects securely on the server side
+ */
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { projectId, projectName } = body;
+    const { projectId, projectName } = await request.json();
 
     if (!projectId && !projectName) {
-      return NextResponse.json({ 
-        error: 'Missing required parameter: projectId or projectName' 
-      }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: 'Missing projectId or projectName' },
+        { status: 400 }
+      );
     }
 
     const VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
+
     if (!VERCEL_API_TOKEN) {
-      return NextResponse.json({ 
-        error: 'Vercel API token not configured on server'
-      }, { status: 500 });
+      console.warn('⚠️ VERCEL_API_TOKEN not configured');
+      return NextResponse.json(
+        { success: false, message: 'Vercel API token not configured' },
+        { status: 500 }
+      );
     }
 
-    // Initialize Vercel SDK
-    const vercel = new Vercel({
-      bearerToken: VERCEL_API_TOKEN,
-    });
-
-    // Use projectId if available, otherwise use projectName
+    const vercel = new Vercel({ bearerToken: VERCEL_API_TOKEN });
     const idOrName = projectId || projectName;
 
-    console.log(`Attempting to delete Vercel project: ${idOrName}`);
+    console.log(`🎯 Attempting to delete Vercel project: ${idOrName}`);
 
     try {
-      // Delete the project from Vercel
-      await vercel.projects.deleteProject({
-        idOrName: idOrName,
-      });
-
+      await vercel.projects.deleteProject({ idOrName });
       console.log(`✅ Successfully deleted Vercel project: ${idOrName}`);
 
       return NextResponse.json({
         success: true,
-        message: `Project ${idOrName} deleted successfully from Vercel`,
-        deletedProject: idOrName
+        message: `Vercel project ${idOrName} deleted successfully`
       });
-
     } catch (vercelError: any) {
-      console.error('Vercel deletion error:', vercelError);
-      
-      // If project doesn't exist, we can consider it a success
       if (vercelError.status === 404 || vercelError.message?.includes('not found')) {
-        console.log(`⚠️  Project ${idOrName} not found in Vercel (may have been already deleted)`);
+        console.log(`⚠️ Vercel project ${idOrName} not found (may have been already deleted)`);
         return NextResponse.json({
           success: true,
-          message: `Project ${idOrName} not found in Vercel (may have been already deleted)`,
-          deletedProject: idOrName
+          message: `Vercel project ${idOrName} not found (already deleted)`
         });
+      } else {
+        console.error('❌ Vercel deletion error:', vercelError);
+        return NextResponse.json(
+          { success: false, message: vercelError.message || 'Failed to delete Vercel project' },
+          { status: 500 }
+        );
       }
-      
-      // For other errors, return the error
-      return NextResponse.json({ 
-        error: `Failed to delete project from Vercel: ${vercelError.message || 'Unknown error'}`,
-        details: vercelError
-      }, { status: 500 });
     }
-
   } catch (error: any) {
-    console.error('API error:', error);
-    return NextResponse.json({ 
-      error: `Error processing delete request: ${error.message}` 
-    }, { status: 500 });
+    console.error('❌ Error in Vercel deletion API:', error);
+    return NextResponse.json(
+      { success: false, message: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

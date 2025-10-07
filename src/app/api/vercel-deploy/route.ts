@@ -3,19 +3,20 @@ import { adminDb, adminStorage } from '@/lib/firebase/admin/index';
 import { Timestamp } from 'firebase-admin/firestore';
 import { PineconeService } from '@/services/pineconeService';
 import { DatabaseService } from '@/services/databaseService';
-import { FirebaseAPIService } from '@/services/firebaseAPIService';
+import { FirestoreSecretService } from '@/services/firestoreSecretService';
+import { FirebaseProjectService } from '@/services/firebaseProjectService';
 import { FirebaseAuthorizedDomainsService } from '@/services/firebaseAuthorizedDomainsService';
 import { getEmbeddingDimensions, getEmbeddingProvider } from '@/lib/embeddingModels';
 import { generateFaviconEnvVars } from '@/lib/utils/faviconUpload';
+import { FirestoreSecretService as SecretManagerService } from '@/services/firestoreSecretService';
+import { ProjectMappingService } from '@/services/projectMappingService';
 
 // Repository information
 const REPO_OWNER = 'Originn';
 const REPO_NAME = 'ChatFactoryTemplate';  // Your chatbot template repository
 const REPO = `${REPO_OWNER}/${REPO_NAME}`;
 
-// REUSABLE FIREBASE PROJECT CONFIGURATION
-const USE_REUSABLE_FIREBASE_PROJECT = process.env.USE_REUSABLE_FIREBASE_PROJECT === 'true';
-const REUSABLE_FIREBASE_PROJECT_ID = process.env.REUSABLE_FIREBASE_PROJECT_ID || '';
+// Firebase project will be automatically allocated (pool-first with dedicated fallback)
 
 // SIMPLIFIED: Always deploy from main branch to production
 // No staging/preview workflow needed - direct to production deployment
@@ -122,11 +123,20 @@ function generateVerificationInstructions(verification: any[]): string[] {
 }
 
 export async function POST(request: NextRequest) {
+  // Declare variables outside try-catch for cleanup access
+  let projectName: string | undefined;
+  let projectId: string | undefined;
+  let chatbotId: string | undefined;
+  let dedicatedFirebaseProject: any;
+  let VERCEL_API_TOKEN: string | undefined;
+
   try {
     const body = await request.json();
-    const { chatbotId, chatbotName, userId, vectorstore, desiredVectorstoreIndexName, embeddingModel } = body;
+    const parsedBody = body as { chatbotId: string; chatbotName?: string; userId: string; vectorstore?: any; desiredVectorstoreIndexName?: string; embeddingModel?: string; preferredProjectId?: string };
+    chatbotId = parsedBody.chatbotId;
+    const { chatbotName, userId, vectorstore, desiredVectorstoreIndexName, embeddingModel, preferredProjectId } = parsedBody;
 
-    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore });
+    console.log('🚀 Starting deployment for:', { chatbotId, chatbotName, userId, vectorstore, preferredProjectId });
 
     if (!chatbotId) {
       return NextResponse.json({ error: 'Missing chatbot ID' }, { status: 400 });
@@ -136,9 +146,9 @@ export async function POST(request: NextRequest) {
     // Always deploy from 'main' branch to 'production' target
     // No staging/preview complexity - straight to production
 
-    const VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
+    VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
     if (!VERCEL_API_TOKEN) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Vercel API token not configured on server'
       }, { status: 500 });
     }
@@ -177,7 +187,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Sanitize project name for Vercel
-    const projectName = (chatbotName || chatbotData?.name || `chatbot-${chatbotId}`)
+    projectName = (chatbotName || chatbotData?.name || `chatbot-${chatbotId}`)
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-');
 
@@ -192,9 +202,9 @@ export async function POST(request: NextRequest) {
         productionBranch: 'main'
       }
     };
-    
+
     let repoId = null;
-    let projectId = null; // Store the actual project ID for API calls
+    projectId = null; // Store the actual project ID for API calls (declared outside try-catch)
     let projectExists = false;
     
     // Create project or get existing project details
@@ -245,77 +255,8 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // PHASE 1: SET BASIC ENVIRONMENT VARIABLES IMMEDIATELY
-    console.log('🔧 PHASE 1: Setting basic environment variables immediately after project creation...');
-    
-    const basicEnvVars = {
-      // Basic chatbot config (available immediately)
-      CHATBOT_ID: chatbotId,
-      NEXT_PUBLIC_CHATBOT_ID: chatbotId,
-      NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
-      
-      // API Keys (available from process.env)
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-      MISTRAL_API_KEY: process.env.MISTRAL_API_KEY || '',
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
-      COHERE_API_KEY: process.env.COHERE_API_KEY || '',
-      JINA_API_KEY: process.env.JINA_API_KEY || '',
-      HUGGINGFACEHUB_API_KEY: process.env.HUGGINGFACEHUB_API_KEY || '',
-      
-      // Pinecone config (available from process.env)
-      PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
-      PINECONE_ENVIRONMENT: 'us-east-1',
-      
-      // Static configuration
-      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
-      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small'),
-      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'text-embedding-3-small').toString(),
-      
-      // App URLs
-      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'https://chatfactory.ai',
-      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://chatfactory.ai/api',
-      
-      // Database config
-      DATABASE_URL: process.env.DATABASE_URL || '',
-      
-      // Main ChatFactory credentials (for token validation)
-      CHATFACTORY_MAIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
-      CHATFACTORY_MAIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-      CHATFACTORY_MAIN_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
-      
-      // Firebase credentials (for PDF/video/CHM services)
-      FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
-      FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-      FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
-      
-      // AI Model defaults
-      MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-5-chat-latest',
-      IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-5-mini',
-      TEMPRATURE: chatbotData?.aiConfig?.temperature?.toString() || process.env.DEFAULT_TEMPERATURE || process.env.TEMPRATURE || '0.7',
-      
-      // Embedding defaults
-      FETCH_K_EMBEDDINGS: process.env.DEFAULT_FETCH_K_EMBEDDINGS || process.env.FETCH_K_EMBEDDINGS || '12',
-      LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
-      K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
-      MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
-      
-      // Debug
-      ENABLE_DEBUG_PAGE: 'true',
-      
-      // Multimodal Configuration - Enable image embeddings if multimodal is enabled
-      NEXT_PUBLIC_ENABLE_IMAGE_EMBEDDINGS: (chatbotData?.aiConfig?.multimodal === true).toString(),
-    };
-
-    // Set Phase 1 environment variables
-    console.log('📤 Setting Phase 1 environment variables...');
-    const phase1Result = await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, basicEnvVars);
-    console.log(`✅ Phase 1 complete: ${phase1Result.success} variables set, ${phase1Result.failed} failed`);
-    
-    // Give Phase 1 vars time to propagate while we do setup work
-    console.log('⏳ Phase 1 variables propagating while setting up services...');
-
-    // DOMAIN CREATION DEPLOYMENT REMOVED - Vercel will auto-generate production domain
-    console.log('🌐 Skipping domain creation deployment - Vercel will auto-generate production domain');
+    // PARALLELIZATION OPTIMIZATION: Run service setup in parallel first, then set all environment variables in one batch
+    console.log('🚀 PARALLEL EXECUTION: Starting Firebase and Pinecone setup concurrently...');
 
     // 2. Prepare complete chatbot configuration for the template
     // Try multiple possible field names for logo URL
@@ -364,7 +305,7 @@ export async function POST(request: NextRequest) {
       id: chatbotId,
       name: chatbotName || chatbotData?.name || `Chatbot ${chatbotId}`,
       description: chatbotData?.description || 'AI-powered chatbot',
-      logoUrl: logoUrl,
+      logoUrl: logoUrl || '/wizchat-brain-logo.svg', // Default to wizchat logo if no custom logo
       primaryColor: chatbotData?.appearance?.primaryColor || '#3b82f6',
       bubbleStyle: chatbotData?.appearance?.bubbleStyle || 'rounded',
       requireAuth: chatbotData?.requireAuth || false,
@@ -383,166 +324,167 @@ export async function POST(request: NextRequest) {
       logoUrlLength: chatbotConfig.logoUrl?.length || 0
     });
 
-    // Handle Pinecone vectorstore for the chatbot
-    let vectorstoreIndexName = '';
-    
-    if (vectorstore && vectorstore.indexName) {
-      // Use provided vectorstore
-      console.log('🎯 Using provided vectorstore:', vectorstore.displayName, '(' + vectorstore.indexName + ')');
-      vectorstoreIndexName = vectorstore.indexName;
-      
-      // Verify the vectorstore exists
-      try {
-        const exists = await PineconeService.indexExists(vectorstore.indexName);
-        if (exists) {
-          console.log('✅ Vectorstore exists and is ready');
-          
-          // Update chatbot document with vectorstore info
-          await DatabaseService.updateChatbotVectorstore(chatbotId, {
-            provider: 'pinecone',
-            indexName: vectorstore.indexName,
-            displayName: vectorstore.displayName,
-            dimension: 1536,
-            metric: 'cosine',
-            region: 'us-east-1',
-            status: 'ready',
-          });
-        } else {
-          console.error('❌ Provided vectorstore does not exist:', vectorstore.indexName);
-          throw new Error(`Vectorstore "${vectorstore.displayName}" does not exist`);
+    // EXECUTION GROUP 2: Run Firebase and Pinecone setup in parallel
+    console.log('⚡ Starting parallel service provisioning...');
+
+    let vectorstoreResult;
+
+    try {
+      [dedicatedFirebaseProject, vectorstoreResult] = await Promise.all([
+      // Firebase project allocation
+      (async () => {
+        console.log('🔄 Firebase: Using intelligent project allocation (pool-first with dedicated fallback)');
+
+        try {
+          console.log('🚀 Firebase: Requesting project allocation...');
+
+          const firebaseRequest: any = {
+            chatbotId,
+            chatbotName: chatbotConfig.name,
+            creatorUserId: userId || chatbotData?.userId || 'unknown'
+          };
+
+          // Add preferred project ID if specified (either from request or from chatbot document)
+          const finalPreferredProjectId = preferredProjectId || chatbotData?.preferredProjectId;
+          if (finalPreferredProjectId) {
+            console.log(`🎯 User selected specific project: ${finalPreferredProjectId}`);
+            firebaseRequest.preferredProjectId = finalPreferredProjectId;
+          }
+
+          const firebaseResult = await FirebaseProjectService.createProjectForChatbot(firebaseRequest);
+
+          if (!firebaseResult.success) {
+            console.error('❌ Firebase: Failed to allocate project:', firebaseResult.error);
+            throw new Error(`Failed to allocate Firebase project: ${firebaseResult.error}`);
+          }
+
+          if (!firebaseResult.project) {
+            console.error('❌ Firebase: Project allocation succeeded but no project returned');
+            throw new Error('Firebase project allocation succeeded but no project data returned');
+          }
+
+          console.log('✅ Firebase: Project allocated:', firebaseResult.project.projectId);
+          return firebaseResult.project;
+        } catch (firebaseError) {
+          console.error('❌ Firebase: Project allocation failed:', firebaseError);
+          throw new Error(`Firebase project allocation failed: ${firebaseError.message}`);
         }
-      } catch (vectorstoreError) {
-        console.error('❌ Error verifying vectorstore:', vectorstoreError);
-        throw new Error(`Failed to verify vectorstore: ${vectorstoreError}`);
-      }
-    } else {
-      // Create new vectorstore (backward compatibility)
-      console.log('🗄️ Creating new Pinecone vectorstore for chatbot:', chatbotId);
-      
-      try {
-        let pineconeResult;
-        const finalEmbeddingModel = embeddingModel || 'text-embedding-3-small'; // Default fallback
-        
-        if (desiredVectorstoreIndexName) {
-          console.log('🎯 Using desired vectorstore index name:', desiredVectorstoreIndexName, 'with embedding model:', finalEmbeddingModel);
-          pineconeResult = await PineconeService.createIndex(
-            desiredVectorstoreIndexName,
-            userId || chatbotData?.userId || 'unknown',
-            finalEmbeddingModel,
-            'cosine'
-          );
+      })(),
+
+      // Pinecone vectorstore setup
+      (async () => {
+        console.log('🗄️ Pinecone: Setting up vectorstore...');
+
+        let vectorstoreIndexName = '';
+
+        if (vectorstore && vectorstore.indexName) {
+          // Use provided vectorstore
+          console.log('🎯 Pinecone: Using provided vectorstore:', vectorstore.displayName, '(' + vectorstore.indexName + ')');
+          vectorstoreIndexName = vectorstore.indexName;
+
+          try {
+            const exists = await PineconeService.indexExists(vectorstore.indexName);
+            if (exists) {
+              console.log('✅ Pinecone: Vectorstore exists and is ready');
+
+              // Update chatbot document with vectorstore info
+              await DatabaseService.updateChatbotVectorstore(chatbotId, {
+                provider: 'pinecone',
+                indexName: vectorstore.indexName,
+                displayName: vectorstore.displayName,
+                dimension: 1536,
+                metric: 'cosine',
+                region: 'us-east-1',
+                status: 'ready',
+              });
+
+              return { indexName: vectorstoreIndexName, isExisting: true };
+            } else {
+              console.error('❌ Pinecone: Provided vectorstore does not exist:', vectorstore.indexName);
+              throw new Error(`Vectorstore "${vectorstore.displayName}" does not exist`);
+            }
+          } catch (vectorstoreError) {
+            console.error('❌ Pinecone: Error verifying vectorstore:', vectorstoreError);
+            throw new Error(`Failed to verify vectorstore: ${vectorstoreError}`);
+          }
         } else {
-          console.log('🔄 Using auto-generated index name from chatbot ID with embedding model:', finalEmbeddingModel);
-          pineconeResult = await PineconeService.createIndexFromChatbotId(
-            chatbotId, 
-            userId || chatbotData?.userId || 'unknown',
-            finalEmbeddingModel,
-            'cosine'
-          );
+          // Create new vectorstore
+          console.log('🗄️ Pinecone: Creating new vectorstore for chatbot:', chatbotId);
+
+          try {
+            let pineconeResult;
+            const finalEmbeddingModel = embeddingModel || 'embed-v4.0';
+
+            if (desiredVectorstoreIndexName) {
+              console.log('🎯 Pinecone: Using desired index name:', desiredVectorstoreIndexName, 'with embedding model:', finalEmbeddingModel);
+              pineconeResult = await PineconeService.createIndex(
+                desiredVectorstoreIndexName,
+                userId || chatbotData?.userId || 'unknown',
+                finalEmbeddingModel,
+                'cosine'
+              );
+            } else {
+              console.log('🔄 Pinecone: Using auto-generated index name with embedding model:', finalEmbeddingModel);
+              pineconeResult = await PineconeService.createIndexFromChatbotId(
+                chatbotId,
+                userId || chatbotData?.userId || 'unknown',
+                finalEmbeddingModel,
+                'cosine'
+              );
+            }
+
+            if (!pineconeResult.success) {
+              console.error('❌ Pinecone: Failed to create index:', pineconeResult.error);
+              throw new Error(`Failed to create vectorstore: ${pineconeResult.error}`);
+            }
+
+            console.log('✅ Pinecone: Successfully created index:', pineconeResult.indexName, 'with embedding model:', finalEmbeddingModel);
+            vectorstoreIndexName = pineconeResult.indexName;
+
+            // Get dimensions for the embedding model
+            const dimensions = getEmbeddingDimensions(finalEmbeddingModel);
+
+            // Update chatbot document with vectorstore info
+            await DatabaseService.updateChatbotVectorstore(chatbotId, {
+              provider: 'pinecone',
+              indexName: pineconeResult.indexName,
+              dimension: dimensions,
+              metric: 'cosine',
+              region: 'us-east-1',
+              status: 'ready',
+            });
+
+            return { indexName: vectorstoreIndexName, isExisting: false };
+          } catch (pineconeError) {
+            console.error('❌ Pinecone: Service error during deployment:', pineconeError);
+            throw new Error(`Vectorstore creation failed: ${pineconeError}`);
+          }
         }
-        
-        if (!pineconeResult.success) {
-          console.error('❌ Failed to create Pinecone index:', pineconeResult.error);
-          throw new Error(`Failed to create vectorstore: ${pineconeResult.error}`);
-        } else {
-          console.log('✅ Successfully created Pinecone index:', pineconeResult.indexName, 'with embedding model:', finalEmbeddingModel);
-          vectorstoreIndexName = pineconeResult.indexName;
-          
-          // Get dimensions for the embedding model
-          const dimensions = getEmbeddingDimensions(finalEmbeddingModel);
-          
-          // Update chatbot document with vectorstore info
-          await DatabaseService.updateChatbotVectorstore(chatbotId, {
-            provider: 'pinecone',
-            indexName: pineconeResult.indexName,
-            dimension: dimensions,
-            metric: 'cosine',
-            region: 'us-east-1',
-            status: 'ready',
-          });
-        }
-      } catch (pineconeError) {
-        console.error('❌ Pinecone service error during deployment:', pineconeError);
-        throw new Error(`Vectorstore creation failed: ${pineconeError}`);
-      }
+      })()
+      ]);
+
+      console.log('🎉 Parallel service provisioning completed successfully!');
+      console.log(`✅ Firebase project: ${dedicatedFirebaseProject.projectId}`);
+      console.log(`✅ Pinecone index: ${vectorstoreResult.indexName} (${vectorstoreResult.isExisting ? 'existing' : 'new'})`);
+
+    } catch (provisioningError) {
+      console.error('❌ PARALLEL SERVICE PROVISIONING FAILED:', provisioningError);
+
+      // Cleanup: Delete the Vercel project since deployment failed
+      console.log('🧹 CLEANUP: Service provisioning failed, cleaning up...');
+
+      await Promise.allSettled([
+        deleteVercelProject(VERCEL_API_TOKEN, projectName, projectId),
+        releasePoolProject(dedicatedFirebaseProject?.projectId || '', chatbotId)
+      ]);
+
+      console.log('✅ Cleanup operations completed (Vercel project deletion + pool project release)');
+
+      // Re-throw the error to stop deployment
+      throw provisioningError;
     }
 
-    // Handle authentication setup for Firebase projects
-    console.log('🔄 Reusable Firebase project mode:', USE_REUSABLE_FIREBASE_PROJECT ? 'ENABLED' : 'DISABLED');
-    if (USE_REUSABLE_FIREBASE_PROJECT) {
-      console.log('🔥 Using reusable Firebase project:', REUSABLE_FIREBASE_PROJECT_ID);
-    }
-    
-    let dedicatedFirebaseProject = null;
-    
-    if (USE_REUSABLE_FIREBASE_PROJECT) {
-      console.log('🔧 Setting up reusable Firebase project for chatbot...');
-      
-      // Validate required configuration
-      if (!REUSABLE_FIREBASE_PROJECT_ID) {
-        throw new Error('REUSABLE_FIREBASE_PROJECT_ID is required when USE_REUSABLE_FIREBASE_PROJECT=true');
-      }
-      
-      try {
-        // Use the existing Firebase setup logic but target the existing project
-        const firebaseResult = await FirebaseAPIService.setupExistingProjectForChatbot({
-          projectId: REUSABLE_FIREBASE_PROJECT_ID,
-          chatbotId,
-          chatbotName: chatbotConfig.name,
-          creatorUserId: userId || chatbotData?.userId || 'unknown'
-        });
-
-        if (!firebaseResult.success) {
-          console.error('❌ Failed to set up existing Firebase project:', firebaseResult.error);
-          throw new Error(`Failed to set up existing Firebase project: ${firebaseResult.error}`);
-        }
-
-        if (!firebaseResult.project) {
-          console.error('❌ Firebase project setup succeeded but no project returned');
-          throw new Error('Firebase project setup succeeded but no project data returned');
-        }
-
-        dedicatedFirebaseProject = firebaseResult.project;
-        console.log('✅ Existing Firebase project configured for chatbot:', dedicatedFirebaseProject.projectId);
-        
-        console.log('ℹ️ Note: GCS bucket configuration skipped (service removed)');
-        console.log('💡 For public image access, manually configure bucket in GCP Console if needed');
-        
-        
-      } catch (firebaseError) {
-        console.error('❌ Firebase project setup failed:', firebaseError);
-        throw new Error(`Firebase project setup failed: ${firebaseError.message}`);
-      }
-      
-    } else {
-      console.log('🔥 Creating dedicated Firebase project for chatbot...');
-      
-      try {
-        // Create dedicated Firebase project for this chatbot using API
-        const firebaseResult = await FirebaseAPIService.createProjectForChatbot({
-          chatbotId,
-          chatbotName: chatbotConfig.name,
-          creatorUserId: userId || chatbotData?.userId || 'unknown'
-        });
-
-        if (!firebaseResult.success) {
-          console.error('❌ Failed to create Firebase project:', firebaseResult.error);
-          throw new Error(`Failed to create Firebase project: ${firebaseResult.error}`);
-        }
-
-        if (!firebaseResult.project) {
-          console.error('❌ Firebase project creation succeeded but no project returned');
-          throw new Error('Firebase project creation succeeded but no project data returned');
-        }
-
-        dedicatedFirebaseProject = firebaseResult.project;
-        console.log('✅ Dedicated Firebase project created:', dedicatedFirebaseProject.projectId);
-        
-      } catch (firebaseError) {
-        console.error('❌ Firebase project creation failed:', firebaseError);
-        throw new Error(`Firebase project creation failed: ${firebaseError.message}`);
-      }
-    }
+    const vectorstoreIndexName = vectorstoreResult.indexName;
 
     // Setup OAuth 2.0 for Firebase Authentication
     console.log('🔐 Firebase Authentication configured via API...');
@@ -569,15 +511,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if Firebase service account credentials are available
-    const hasValidServiceAccount = dedicatedFirebaseProject?.serviceAccount?.clientEmail && 
-                                   dedicatedFirebaseProject?.serviceAccount?.privateKey;
-    
+    // Support both camelCase and snake_case field names
+    const serviceAccount = (dedicatedFirebaseProject as any)?.serviceAccount;
+    const clientEmail = serviceAccount?.client_email || serviceAccount?.clientEmail;
+    const privateKey = serviceAccount?.private_key || serviceAccount?.privateKey;
+    const hasValidServiceAccount = clientEmail && privateKey;
+
     console.log('🔍 Firebase service account validation:', {
       hasFirebaseProject: !!dedicatedFirebaseProject,
       hasConfig: !!dedicatedFirebaseProject?.config,
-      hasServiceAccount: !!dedicatedFirebaseProject?.serviceAccount,
-      hasClientEmail: !!dedicatedFirebaseProject?.serviceAccount?.clientEmail,
-      hasPrivateKey: !!dedicatedFirebaseProject?.serviceAccount?.privateKey,
+      hasServiceAccount: !!serviceAccount,
+      hasClientEmail: !!clientEmail,
+      hasPrivateKey: !!privateKey,
       isServiceAccountValid: hasValidServiceAccount,
       projectId: dedicatedFirebaseProject?.config?.projectId || 'MISSING'
     });
@@ -585,22 +530,22 @@ export async function POST(request: NextRequest) {
     if (!hasValidServiceAccount) {
       console.error('❌ CRITICAL: Firebase service account credentials are missing or incomplete!');
       console.error('🔧 This will cause authentication failures in the deployed chatbot.');
-      console.error('📋 Expected: clientEmail and privateKey from service account creation');
+      console.error('📋 Expected: client_email and private_key from service account creation');
       console.error('🎯 Actual:', {
-        serviceAccount: dedicatedFirebaseProject?.serviceAccount || 'NULL',
-        clientEmail: dedicatedFirebaseProject?.serviceAccount?.clientEmail || 'MISSING',
-        privateKey: dedicatedFirebaseProject?.serviceAccount?.privateKey ? 'PRESENT' : 'MISSING'
+        serviceAccount: serviceAccount || 'NULL',
+        clientEmail: clientEmail || 'MISSING',
+        privateKey: privateKey ? 'PRESENT' : 'MISSING'
       });
-      
+
       // Fail the deployment if we don't have valid service account credentials
-      return NextResponse.json({ 
-        error: `Firebase service account creation failed. Cannot deploy chatbot without proper authentication credentials. Service account status: ${dedicatedFirebaseProject?.serviceAccount ? 'partial' : 'missing'}`,
+      return NextResponse.json({
+        error: `Firebase service account creation failed. Cannot deploy chatbot without proper authentication credentials. Service account status: ${serviceAccount ? 'partial' : 'missing'}`,
         details: {
           hasProject: !!dedicatedFirebaseProject,
-          hasServiceAccount: !!dedicatedFirebaseProject?.serviceAccount,
+          hasServiceAccount: !!serviceAccount,
           missingFields: [
-            ...(!dedicatedFirebaseProject?.serviceAccount?.clientEmail ? ['clientEmail'] : []),
-            ...(!dedicatedFirebaseProject?.serviceAccount?.privateKey ? ['privateKey'] : [])
+            ...(!clientEmail ? ['client_email'] : []),
+            ...(!privateKey ? ['private_key'] : [])
           ]
         }
       }, { status: 500 });
@@ -632,162 +577,174 @@ export async function POST(request: NextRequest) {
     console.log('  Chatbot Name:', chatbotData?.name);
     console.log('  Generated Namespace:', pineconeNamespace);
     
-    // PHASE 2: SET DYNAMIC ENVIRONMENT VARIABLES (Firebase + Pinecone configs)
-    console.log('🔧 PHASE 2: Setting dynamic environment variables after service setup...');
-    
-    const dynamicEnvVars = {
-      // Chatbot-specific configuration (with complete data)
+    // EXECUTION GROUP 3: Set ALL environment variables in a single optimized batch
+    console.log('🔧 UNIFIED ENV VARS: Preparing all environment variables for single batch operation...');
+
+    // Determine Firebase API key source (pool vs dedicated)
+    // Always use the API key from the project config (stored in firebaseProjects collection)
+    let firebaseApiKey = (dedicatedFirebaseProject.config.apiKey || '').trim();
+    let isPoolProject = false;
+
+    try {
+      // Check if this is a pool project for logging purposes
+      const assignedProject = await ProjectMappingService.findProjectByChatbot(chatbotId);
+      if (assignedProject && assignedProject.projectType === 'pool') {
+        console.log('🏊 Pool project detected - using API key from project config');
+        isPoolProject = true;
+      } else {
+        console.log('🏢 Dedicated project detected - using API key from project config');
+      }
+    } catch (error) {
+      console.error('❌ Error checking project type:', error);
+    }
+
+    console.log(`🔑 Using Firebase API key: ${firebaseApiKey.substring(0, 10)}...`);
+
+    // Prepare OpenAI API key (required for environment variables)
+    const openaiApiKey = await FirestoreSecretService.getOpenAIApiKey() || '';
+
+    // Comprehensive environment variables collection (combines Phase 1 + Phase 2)
+    const allEnvironmentVariables = {
+      // BASIC CHATBOT CONFIGURATION (formerly Phase 1)
+      CHATBOT_ID: chatbotId,
+      NEXT_PUBLIC_CHATBOT_ID: chatbotId,
+      NEXT_PUBLIC_CHATBOT_NAME: chatbotName || `Chatbot ${chatbotId}`,
+
+      // ADVANCED CHATBOT CONFIGURATION (formerly Phase 2)
       CHATBOT_CONFIG: JSON.stringify(chatbotConfig),
-      
-      // Updated public environment variables (with complete chatbot data)
       NEXT_PUBLIC_CHATBOT_DESCRIPTION: chatbotConfig.description,
       NEXT_PUBLIC_CHATBOT_LOGO_URL: chatbotConfig.logoUrl,
       NEXT_PUBLIC_CHATBOT_PRIMARY_COLOR: chatbotConfig.primaryColor,
       NEXT_PUBLIC_CHATBOT_BUBBLE_STYLE: chatbotConfig.bubbleStyle,
       NEXT_PUBLIC_CHATBOT_LOGIN_REQUIRED: chatbotConfig.requireAuth.toString(),
+      NEXT_PUBLIC_SYSTEM_PROMPT: chatbotConfig.behavior?.systemPrompt || '',
       NEXT_PUBLIC_CUSTOM_DOMAIN: customDomain || '',
-      
-      // Generate favicon environment variables if favicon is configured
-      ...(chatbotConfig.appearance?.favicon?.enabled ? 
-        generateFaviconEnvVars(chatbotConfig.appearance.favicon, chatbotConfig.name) : 
-        {}),
-      
-      // Dedicated Firebase client configuration (public) - AVAILABLE AFTER FIREBASE SETUP
-      NEXT_PUBLIC_FIREBASE_API_KEY: dedicatedFirebaseProject.config.apiKey,
+
+      // API KEYS
+      OPENAI_API_KEY: openaiApiKey,
+      MISTRAL_API_KEY: process.env.MISTRAL_API_KEY || '',
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+      COHERE_API_KEY: process.env.COHERE_API_KEY || '',
+      JINA_API_KEY: process.env.JINA_API_KEY || '',
+      HUGGINGFACEHUB_API_KEY: process.env.HUGGINGFACEHUB_API_KEY || '',
+
+      // FIREBASE CONFIGURATION (Client & Admin)
+      NEXT_PUBLIC_FIREBASE_API_KEY: firebaseApiKey,
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dedicatedFirebaseProject.config.authDomain,
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dedicatedFirebaseProject.config.storageBucket,
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: dedicatedFirebaseProject.config.messagingSenderId,
       NEXT_PUBLIC_FIREBASE_APP_ID: dedicatedFirebaseProject.config.appId,
       NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
-      
-      // Dedicated Firebase Admin SDK (Server-side, secure) - AVAILABLE AFTER FIREBASE SETUP  
+
       FIREBASE_PROJECT_ID: dedicatedFirebaseProject.config.projectId,
-      FIREBASE_CLIENT_EMAIL: dedicatedFirebaseProject.serviceAccount.clientEmail,
-      FIREBASE_PRIVATE_KEY: dedicatedFirebaseProject.serviceAccount.privateKey,
-      
-      // Pinecone configuration - AVAILABLE AFTER PINECONE SETUP
+      FIREBASE_CLIENT_EMAIL: (dedicatedFirebaseProject as any).serviceAccount?.client_email || (dedicatedFirebaseProject as any).serviceAccount?.clientEmail,
+      FIREBASE_PRIVATE_KEY: formatPrivateKeyForVercel((dedicatedFirebaseProject as any).serviceAccount?.private_key || (dedicatedFirebaseProject as any).serviceAccount?.privateKey),
+
+      // PINECONE CONFIGURATION
+      PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
+      PINECONE_ENVIRONMENT: 'us-east-1',
       PINECONE_INDEX_NAME: vectorstoreIndexName || PineconeService.generateIndexName(chatbotId),
       PINECONE_NAMESPACE: pineconeNamespace,
-      
-      // GCP Storage bucket names - AVAILABLE AFTER FIREBASE SETUP
+
+      // AI MODEL CONFIGURATION
+      EMBEDDING_MODEL: embeddingModel || process.env.EMBEDDING_MODEL || 'embed-v4.0',
+      EMBEDDING_PROVIDER: getEmbeddingProvider(embeddingModel || process.env.EMBEDDING_MODEL || 'embed-v4.0'),
+      EMBEDDING_DIMENSIONS: getEmbeddingDimensions(embeddingModel || process.env.EMBEDDING_MODEL || 'embed-v4.0').toString(),
+      MODEL_NAME: chatbotData?.aiConfig?.llmModel || process.env.DEFAULT_MODEL_NAME || process.env.MODEL_NAME || 'gpt-5-chat-latest',
+      IMAGE_MODEL_NAME: process.env.DEFAULT_IMAGE_MODEL_NAME || process.env.IMAGE_MODEL_NAME || 'gpt-5-mini',
+      TEMPRATURE: chatbotData?.aiConfig?.temperature?.toString() || process.env.DEFAULT_TEMPERATURE || process.env.TEMPRATURE || '0.7',
+
+      // EMBEDDING DEFAULTS
+      FETCH_K_EMBEDDINGS: process.env.DEFAULT_FETCH_K_EMBEDDINGS || process.env.FETCH_K_EMBEDDINGS || '12',
+      LAMBDA_EMBEDDINGS: process.env.DEFAULT_LAMBDA_EMBEDDINGS || process.env.LAMBDA_EMBEDDINGS || '0.2',
+      K_EMBEDDINGS: process.env.DEFAULT_K_EMBEDDINGS || process.env.K_EMBEDDINGS || '10',
+      MINSCORESOURCESTHRESHOLD: process.env.DEFAULT_MINSCORESOURCESTHRESHOLD || process.env.MINSCORESOURCESTHRESHOLD || '0.73',
+
+      // GCP STORAGE BUCKETS
       GCLOUD_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-documents`,
       GCLOUD_PRIVATE_STORAGE_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-private-images`,
       GCLOUD_DOCUMENT_IMAGES_BUCKET: `${dedicatedFirebaseProject.config.projectId}-chatbot-document-images`,
 
-      // Neo4j configuration - AVAILABLE FROM FIRESTORE CHATBOT DATA
+      // NEO4J CONFIGURATION (if configured)
       NEO4J_URI: chatbotData?.neo4j?.uri || '',
       NEO4J_USERNAME: chatbotData?.neo4j?.username || '',
       NEO4J_PASSWORD: chatbotData?.neo4j?.password || '',
       NEO4J_DATABASE: chatbotData?.neo4j?.database || 'neo4j',
+
+      // CHATFACTORY MAIN CREDENTIALS
+      CHATFACTORY_MAIN_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'docsai-chatbot-app',
+      CHATFACTORY_MAIN_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+      CHATFACTORY_MAIN_PRIVATE_KEY: formatPrivateKeyForVercel(process.env.FIREBASE_PRIVATE_KEY || ''),
+
+      // APP CONFIGURATION
+      // For chatbot deployments, don't set NEXT_PUBLIC_APP_URL - let it use VERCEL_URL at runtime
+      // Only set it if there's a custom domain
+      ...(customDomain ? {
+        NEXT_PUBLIC_APP_URL: `https://${customDomain}`,
+        NEXT_PUBLIC_API_BASE_URL: `https://${customDomain}/api`
+      } : {}),
+      DATABASE_URL: process.env.DATABASE_URL || '',
+      ENABLE_DEBUG_PAGE: 'true',
+      NEXT_PUBLIC_ENABLE_IMAGE_EMBEDDINGS: (chatbotData?.aiConfig?.multimodal === true).toString(),
+
+      // FAVICON CONFIGURATION (if enabled)
+      ...(chatbotConfig.appearance?.favicon?.enabled ?
+        generateFaviconEnvVars(chatbotConfig.appearance.favicon, chatbotConfig.name) :
+        {})
     };
-    
+
     // Filter out empty values but keep empty strings for optional fields
-    const filteredDynamicEnvVars = Object.fromEntries(
-      Object.entries(dynamicEnvVars).filter(([key, value]) => value !== undefined && value !== null)
+    const filteredEnvironmentVariables = Object.fromEntries(
+      Object.entries(allEnvironmentVariables).filter(([key, value]) => value !== undefined && value !== null)
     );
-    
-    // Debug: Log what Phase 2 environment variables we're setting
-    console.log('📤 Setting Phase 2 environment variables on Vercel project:');
-    console.log('Keys:', Object.keys(filteredDynamicEnvVars));
-    console.log('Total Phase 2 variables to set:', Object.keys(filteredDynamicEnvVars).length);
-    console.log('Chatbot Config:', {
-      id: chatbotConfig.id,
-      name: chatbotConfig.name,
-      logoUrl: chatbotConfig.logoUrl ? 'Present' : 'Missing',
-      hasFirebaseConfig: !!filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY
-    });
-    
-    // Debug: Log critical Firebase configuration
-    console.log('🔍 Critical Firebase Configuration Check:');
-    console.log('NEXT_PUBLIC_FIREBASE_API_KEY:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_API_KEY ? 'SET ✅' : 'MISSING ❌');
-    console.log('NEXT_PUBLIC_FIREBASE_PROJECT_ID:', filteredDynamicEnvVars.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'SET ✅' : 'MISSING ❌');
-    console.log('FIREBASE_CLIENT_EMAIL:', filteredDynamicEnvVars.FIREBASE_CLIENT_EMAIL ? 'SET ✅' : 'MISSING ❌');
-    console.log('FIREBASE_PRIVATE_KEY:', filteredDynamicEnvVars.FIREBASE_PRIVATE_KEY ? 'SET ✅' : 'MISSING ❌');
-    
-    // Debug: Log Pinecone configuration specifically
-    console.log('🔍 Pinecone Configuration Check:');
-    console.log('PINECONE_INDEX_NAME:', filteredDynamicEnvVars.PINECONE_INDEX_NAME ? 'SET ✅' : 'MISSING ❌');
-    console.log('PINECONE_NAMESPACE:', filteredDynamicEnvVars.PINECONE_NAMESPACE ? 'SET ✅' : 'MISSING ❌');
 
-    // Re-fetch chatbot data to get the latest Neo4j configuration
-    console.log('🔄 Re-fetching chatbot data to get latest Neo4j configuration...');
-    try {
-      const updatedChatbotSnap = await adminDb.collection("chatbots").doc(chatbotId).get();
-      if (updatedChatbotSnap.exists) {
-        const updatedChatbotData = updatedChatbotSnap.data();
+    // Debug logging
+    console.log('📊 Unified Environment Variables Summary:');
+    console.log('PROJECT_TYPE:', isPoolProject ? 'POOL 🏊' : 'DEDICATED 🏢');
+    console.log('TOTAL_VARIABLES:', Object.keys(filteredEnvironmentVariables).length);
+    console.log('FIREBASE_API_KEY_SOURCE:', isPoolProject ? 'SECRET_MANAGER' : 'PROJECT_CONFIG');
 
-        // Update Neo4j environment variables with fresh data
-        if (updatedChatbotData?.neo4j) {
-          console.log('✅ Found Neo4j configuration in updated chatbot data');
-          filteredDynamicEnvVars.NEO4J_URI = updatedChatbotData.neo4j.uri || '';
-          filteredDynamicEnvVars.NEO4J_USERNAME = updatedChatbotData.neo4j.username || '';
-          filteredDynamicEnvVars.NEO4J_PASSWORD = updatedChatbotData.neo4j.password || '';
-          filteredDynamicEnvVars.NEO4J_DATABASE = updatedChatbotData.neo4j.database || 'neo4j';
+    // Debug Firebase private key formatting
+    const rawPrivateKey = (dedicatedFirebaseProject as any).serviceAccount?.private_key || (dedicatedFirebaseProject as any).serviceAccount?.privateKey;
+    const formattedPrivateKey = filteredEnvironmentVariables.FIREBASE_PRIVATE_KEY;
+    console.log('🔍 Firebase Private Key Debug:');
+    console.log('  Raw key length:', rawPrivateKey?.length || 0);
+    console.log('  Raw key has newlines:', rawPrivateKey?.includes('\n') || false);
+    console.log('  Raw key has \\n sequences:', rawPrivateKey?.includes('\\n') || false);
+    console.log('  Formatted key length:', formattedPrivateKey?.length || 0);
+    console.log('  Formatted key preview:', formattedPrivateKey?.substring(0, 50) + '...' || 'MISSING');
+    console.log('  Client email present:', !!(filteredEnvironmentVariables.FIREBASE_CLIENT_EMAIL));
 
-          // Update chatbotData reference for consistency
-          chatbotData = updatedChatbotData;
-        } else {
-          console.log('⚠️ No Neo4j configuration found in updated chatbot data');
-        }
-      }
-    } catch (refetchError) {
-      console.error('❌ Error re-fetching chatbot data:', refetchError);
-      console.log('⚠️ Continuing with original chatbot data');
-    }
+    // Set ALL environment variables in a single optimized batch
+    console.log('🚀 Setting ALL environment variables in single optimized batch...');
+    const envVarResult = await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, filteredEnvironmentVariables);
 
-    // Debug: Log Neo4j configuration specifically
-    console.log('🔍 Neo4j Configuration Check (after re-fetch):');
-    console.log('NEO4J_URI:', filteredDynamicEnvVars.NEO4J_URI ? 'SET ✅' : 'MISSING ❌');
-    console.log('NEO4J_USERNAME:', filteredDynamicEnvVars.NEO4J_USERNAME ? 'SET ✅' : 'MISSING ❌');
-    console.log('NEO4J_PASSWORD:', filteredDynamicEnvVars.NEO4J_PASSWORD ? 'SET ✅' : 'MISSING ❌');
-    console.log('NEO4J_DATABASE:', filteredDynamicEnvVars.NEO4J_DATABASE ? 'SET ✅' : 'MISSING ❌');
-    console.log('Neo4j Source Data (after re-fetch):', {
-      hasNeo4jConfig: !!chatbotData?.neo4j,
-      uri: chatbotData?.neo4j?.uri ? 'Present' : 'Missing',
-      username: chatbotData?.neo4j?.username ? 'Present' : 'Missing',
-      password: chatbotData?.neo4j?.password ? 'Present' : 'Missing',
-      database: chatbotData?.neo4j?.database || 'Default'
-    });
-    
-    // Set Phase 2 environment variables on the project
-    console.log('📤 Setting Phase 2 environment variables on project:', projectName);
-    const phase2Result = await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, filteredDynamicEnvVars);
-    
-    console.log(`✅ Phase 2 complete: ${phase2Result.success} set, ${phase2Result.skipped} already existed, ${phase2Result.failed} failed`);
-    
-    // Combine both phases for final summary
-    const totalSuccess = phase1Result.success + phase2Result.success;
-    const totalFailed = phase1Result.failed + phase2Result.failed;
-    console.log(`📊 TOTAL Environment variables summary: ${totalSuccess} set, ${totalFailed} failed`);
-    
+    console.log(`✅ UNIFIED ENV VARS COMPLETE: ${envVarResult.success} set, ${envVarResult.skipped} skipped, ${envVarResult.failed} failed`);
+
     // Fail deployment if critical env vars couldn't be set
-    if (totalFailed > 0 && totalSuccess === 0) {
-      return NextResponse.json({ 
+    if (envVarResult.failed > 0 && envVarResult.success === 0) {
+      console.log('🧹 CLEANUP: Environment variable setup failed, cleaning up...');
+
+      await Promise.allSettled([
+        deleteVercelProject(VERCEL_API_TOKEN, projectName, projectId),
+        releasePoolProject(dedicatedFirebaseProject?.projectId || '', chatbotId)
+      ]);
+
+      return NextResponse.json({
         error: 'Failed to set required environment variables on Vercel project'
       }, { status: 500 });
     }
+
+    // OPTIMIZED: Smart polling instead of fixed 30-second wait
+    console.log('⚡ OPTIMIZED VERIFICATION: Using smart polling instead of fixed waits...');
     
-    // Wait for ALL environment variables to propagate (both phases)
-    console.log('⏳ Waiting for ALL environment variables to propagate...');
-    console.log('🔧 Phase 1 variables have been propagating during service setup');
-    console.log('🔧 Phase 2 variables need additional propagation time');
-    await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds for proper propagation
-    
-    // Verify critical environment variables are set with retry logic
-    console.log('🔍 Verifying critical environment variables from both phases...');
-    let verification = null;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    // Check critical vars from both phases
+    // OPTIMIZED: Smart polling verification with exponential backoff
     const criticalVars = [
-      // Phase 1 critical vars
       'NEXT_PUBLIC_CHATBOT_ID',
       'NEXT_PUBLIC_CHATBOT_NAME',
       'OPENAI_API_KEY',
       'PINECONE_API_KEY',
-      // Phase 2 critical vars
       'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
       'NEXT_PUBLIC_FIREBASE_API_KEY',
       'FIREBASE_CLIENT_EMAIL',
@@ -801,27 +758,38 @@ export async function POST(request: NextRequest) {
     } else {
       console.log('📋 No Neo4j configuration found - skipping Neo4j variable verification');
     }
-    
-    while (retryCount < maxRetries) {
+
+    console.log('🔍 Smart polling for critical environment variables...');
+    let verification = null;
+    let pollAttempt = 0;
+    const maxPollAttempts = 6;
+    let totalWaitTime = 0;
+
+    while (pollAttempt < maxPollAttempts) {
       verification = await verifyEnvironmentVariables(VERCEL_API_TOKEN, projectName, criticalVars);
-      
+
       if (verification.success) {
-        console.log('✅ Critical environment variables verified from both phases');
+        console.log(`✅ Critical environment variables verified successfully after ${totalWaitTime / 1000}s`);
         break;
       } else {
-        retryCount++;
-        console.warn(`⚠️ Retry ${retryCount}/${maxRetries}: Some critical environment variables missing:`, verification.missing);
-        
-        if (retryCount < maxRetries) {
-          console.log('⏳ Waiting additional 15 seconds before retry...');
-          await new Promise(resolve => setTimeout(resolve, 15000));
+        pollAttempt++;
+        console.warn(`⚠️ Poll attempt ${pollAttempt}/${maxPollAttempts}: Missing variables:`, verification.missing);
+
+        if (pollAttempt < maxPollAttempts) {
+          // Exponential backoff: 2s, 4s, 6s, 8s, 10s (max 30s total vs original 45s+ with retries)
+          const waitTime = Math.min(2000 * pollAttempt, 10000);
+          totalWaitTime += waitTime;
+          console.log(`⏳ Smart polling: waiting ${waitTime / 1000}s before next check...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
     }
-    
+
     if (!verification.success) {
-      console.error('❌ Failed to verify critical environment variables after retries');
+      console.error('❌ Failed to verify critical environment variables after smart polling');
       console.warn('⚠️ Proceeding with deployment but Firebase may fail to initialize');
+    } else {
+      console.log(`🎉 OPTIMIZATION SUCCESS: Environment variable verification completed in ${totalWaitTime / 1000}s (vs 30-45s previously)`);
     }
 
     // Handle custom domain configuration if provided
@@ -998,7 +966,7 @@ export async function POST(request: NextRequest) {
           const deploymentRecord = {
             chatbotId: chatbotId,
             userId: userId || chatbotData?.userId,
-            status: 'deployed',
+            status: 'deploying',
             subdomain: projectName,
             deploymentUrl: finalFallbackUrl,
             
@@ -1053,7 +1021,7 @@ export async function POST(request: NextRequest) {
             deployment: {
               deploymentId: deploymentRef.id,
               deploymentUrl: finalFallbackUrl,
-              status: 'deployed',
+              status: 'deploying',
               deployedAt: Timestamp.now(),
               vercelProjectId: projectName,
               vercelDeploymentId: deploymentData.id,
@@ -1082,215 +1050,265 @@ export async function POST(request: NextRequest) {
     
     // Deployment created - no need to wait for promotion!
     console.log('✅ Deployment created and will be live shortly:', deploymentData.id);
-    
-    // Get production domain immediately using correct API endpoint - NO WAITING!
-    console.log('🌐 Getting production domain immediately using correct domains API...');
-    let finalDeploymentUrl = null;
-    
+
+    // Step 1: Get the Vercel-assigned domain name (with random suffix)
+    console.log('🌐 Getting Vercel-assigned domain name...');
+    let vercelSubdomain = null;
+    let vercelDomainUrl = null;
+
     try {
-      // Use the correct domains endpoint: /v9/projects/{id}/domains
       const domainsResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}/domains`, {
         headers: {
           'Authorization': `Bearer ${VERCEL_API_TOKEN}`
         }
       });
-      
+
       if (domainsResponse.ok) {
         const domainsData = await domainsResponse.json();
         console.log('🔍 Domains API response:', {
           domainsCount: domainsData.domains?.length || 0,
           domains: domainsData.domains?.map((d: any) => d.name) || []
         });
-        
-        // Print ALL domains to see which position we want
+
         if (domainsData.domains && domainsData.domains.length > 0) {
-          console.log('🔍 ALL DOMAINS FOUND:');
-          domainsData.domains.forEach((domain: any, index: number) => {
-            console.log(`  ${index}: ${domain.name} (verified: ${domain.verified})`);
-          });
-          
-          // For now, let's just use the first .vercel.app domain that's not a git branch
-          // We'll adjust the index based on what we see in the logs
+          // Find the clean production Vercel domain (e.g., testbot-one-indol.vercel.app)
           const nonGitDomains = domainsData.domains.filter((domain: any) => {
-            return domain.name && 
-                   domain.name.endsWith('.vercel.app') && 
+            return domain.name &&
+                   domain.name.endsWith('.vercel.app') &&
                    !domain.name.includes('-git-');
           });
-          
-          console.log('🎯 NON-GIT VERCEL DOMAINS:');
-          nonGitDomains.forEach((domain: any, index: number) => {
-            console.log(`  ${index}: ${domain.name}`);
-          });
-          
+
           if (nonGitDomains.length > 0) {
-            // Use index 1 for the clean production domain (like testbot-gray.vercel.app)
-            // Index 0 is usually the deployment-specific domain (like testbot-rdfele.vercel.app)
-            const domainIndex = nonGitDomains.length > 1 ? 1 : 0; // Use index 1 if available, fallback to 0
+            const domainIndex = nonGitDomains.length > 1 ? 1 : 0;
             const selectedDomain = nonGitDomains[domainIndex];
-            finalDeploymentUrl = `https://${selectedDomain.name}`;
-            console.log(`✅ Selected domain at index ${domainIndex}: ${finalDeploymentUrl}`);
-            console.log('🎯 This should be the clean production domain with animal/color name!');
+            vercelDomainUrl = `https://${selectedDomain.name}`;
+            // Extract subdomain (e.g., "testbot-one-indol" from "testbot-one-indol.vercel.app")
+            vercelSubdomain = selectedDomain.name.replace('.vercel.app', '');
+            console.log(`✅ Found Vercel domain: ${vercelDomainUrl}`);
+            console.log(`📝 Extracted subdomain: ${vercelSubdomain}`);
           }
         }
       }
     } catch (error) {
-      console.error('❌ Error getting production domain:', error);
+      console.error('❌ Error getting Vercel domain:', error);
     }
-    
-    // Fallback to default format if domains not found
-    if (!finalDeploymentUrl) {
-      finalDeploymentUrl = deploymentData.url ? 
-        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) : 
+
+    // Fallback if we couldn't get the domain
+    if (!vercelDomainUrl || !vercelSubdomain) {
+      vercelDomainUrl = deploymentData.url ?
+        (deploymentData.url.startsWith('http') ? deploymentData.url : `https://${deploymentData.url}`) :
         `https://${projectName}.vercel.app`;
-      console.log(`⚠️ Using fallback URL: ${finalDeploymentUrl}`);
+      vercelSubdomain = projectName;
+      console.log(`⚠️ Using fallback Vercel URL: ${vercelDomainUrl}`);
     }
-    
-    console.log('🎯 Final deployment URL ready immediately:', finalDeploymentUrl);
-    
-    // CREATE DEPLOYMENT RECORD IN DATABASE
-    try {
-      console.log('📋 Creating deployment record in database...');
-      
-      const deploymentRecord = {
-        chatbotId: chatbotId,
-        userId: userId || chatbotData?.userId,
-        status: 'deployed',
-        subdomain: projectName,
-        deploymentUrl: finalDeploymentUrl,
-        
-        // Firebase project information (if dedicated project was created)
-        firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
-        firebaseConfig: dedicatedFirebaseProject?.config || {},
-        
-        // Vercel deployment info
-        vercelProjectId: projectName,
-        vercelDeploymentId: deploymentData.id,
-        
-        branding: {
-          show: true,
-          text: 'Powered by ChatFactory',
-          link: 'https://chatfactory.ai'
-        },
-        
-        planLimitations: {
-          monthlyQueryLimit: 1000, // Default for free plan
-          analyticsRetention: 30,
-          customDomain: false,
-          branding: true
-        },
-        
-        usage: {
-          totalQueries: 0,
-          monthlyQueries: 0,
-          lastResetAt: Timestamp.now()
-        },
-        
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        deployedAt: Timestamp.now(),
-        
-        environmentVariables: {
-          CHATBOT_ID: chatbotId,
-          CHATBOT_NAME: chatbotConfig.name,
-          NEXT_PUBLIC_CHATBOT_ID: chatbotId,
-          NEXT_PUBLIC_CHATBOT_NAME: chatbotConfig.name,
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
+
+    // Step 2: Create matching wizchat.app subdomain with the same random name
+    const wizchatDomain = `${vercelSubdomain}.wizchat.app`;
+    console.log(`🌐 Creating matching wizchat.app subdomain: ${wizchatDomain}`);
+
+    let wizchatDomainResult = await addCustomDomainToProject(
+      VERCEL_API_TOKEN,
+      projectName,
+      wizchatDomain
+    );
+
+    if (!wizchatDomainResult.success) {
+      console.error(`❌ Failed to set up wizchat.app subdomain: ${wizchatDomainResult.error}`);
+      console.warn('⚠️ Will use Vercel domain as primary');
+    } else {
+      console.log(`✅ wizchat.app subdomain configured: ${wizchatDomain}`);
+    }
+
+    // Step 3: Determine primary deployment URL
+    // Priority 1: User's custom domain (if configured and verified)
+    // Priority 2: wizchat.app subdomain (automatic branding)
+    // Priority 3: Vercel domain (fallback)
+    let finalDeploymentUrl = null;
+
+    if (customDomain && domainResult?.success && domainResult.data?.verified) {
+      finalDeploymentUrl = `https://${customDomain}`;
+      console.log(`🎯 PRIMARY URL: Custom domain - ${finalDeploymentUrl}`);
+    } else if (wizchatDomainResult?.success) {
+      finalDeploymentUrl = `https://${wizchatDomain}`;
+      console.log(`🎯 PRIMARY URL: wizchat.app subdomain - ${finalDeploymentUrl}`);
+    } else {
+      finalDeploymentUrl = vercelDomainUrl;
+      console.log(`🎯 PRIMARY URL: Vercel domain (fallback) - ${finalDeploymentUrl}`);
+    }
+
+    // Update environment variables with the actual deployment URLs
+    if (!customDomain && finalDeploymentUrl) {
+      console.log('🔧 Updating environment variables with final deployment URLs...');
+      try {
+        const envUpdates: Record<string, string> = {
+          NEXT_PUBLIC_APP_URL: finalDeploymentUrl,
+          NEXT_PUBLIC_API_BASE_URL: `${finalDeploymentUrl}/api`
+        };
+
+        // Also set NEXT_PUBLIC_CUSTOM_DOMAIN to wizchat domain if configured
+        if (wizchatDomainResult?.success) {
+          envUpdates.NEXT_PUBLIC_CUSTOM_DOMAIN = wizchatDomain;
         }
-      };
 
-      // Save deployment record to database
-      const deploymentRef = await adminDb.collection('deployments').add(deploymentRecord);
-      console.log('✅ Deployment record created with ID:', deploymentRef.id);
-
-      // Update chatbot document with deployment info
-      await adminDb.collection('chatbots').doc(chatbotId).update({
-        status: 'active',
-        firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
-        deployment: {
-          deploymentId: deploymentRef.id,
-          deploymentUrl: finalDeploymentUrl,
-          status: 'deployed',
-          deployedAt: Timestamp.now(),
-          vercelProjectId: projectName,
-          vercelDeploymentId: deploymentData.id,
-          firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
-        },
-        updatedAt: Timestamp.now()
-      });
-      console.log('✅ Chatbot document updated with deployment info');
-
-    } catch (dbError) {
-      console.error('❌ Failed to create deployment record:', dbError);
-      // Continue with deployment - don't fail the deployment because of DB issues
+        await setEnvironmentVariables(VERCEL_API_TOKEN, projectName, envUpdates);
+        console.log('✅ Environment variables updated with final URLs');
+      } catch (error) {
+        console.warn('⚠️ Failed to update environment variables:', error);
+      }
     }
-    
-    // Firebase Authentication is configured automatically - no OAuth redirect URIs to update
-    console.log('ℹ️  Firebase Authentication configured via API - no redirect URIs to update');
-    
-    // Update database with deployment information
+
+    // EXECUTION GROUP 4: Parallel database operations for deployment records
+    console.log('⚡ PARALLEL DATABASE OPERATIONS: Creating all deployment records concurrently...');
+
+    const userIdForUpdate = userId || chatbotData?.userId;
+
+    // Prepare deployment record data
+    const deploymentRecord = {
+      chatbotId: chatbotId,
+      userId: userIdForUpdate,
+      status: 'deploying',
+      subdomain: projectName,
+      deploymentUrl: finalDeploymentUrl,
+      wizchatDomain: wizchatDomain, // Store the assigned wizchat.app subdomain
+      wizchatDomainConfigured: wizchatDomainResult?.success || false,
+
+      // Firebase project information
+      firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId || 'main-project',
+      firebaseConfig: dedicatedFirebaseProject?.config || {},
+
+      // Vercel deployment info
+      vercelProjectId: projectName,
+      vercelDeploymentId: deploymentData.id,
+
+      branding: {
+        show: true,
+        text: 'Powered by ChatFactory',
+        link: 'https://chatfactory.ai'
+      },
+
+      planLimitations: {
+        monthlyQueryLimit: 1000,
+        analyticsRetention: 30,
+        customDomain: false,
+        branding: true
+      },
+
+      usage: {
+        totalQueries: 0,
+        monthlyQueries: 0,
+        lastResetAt: Timestamp.now()
+      },
+
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      deployedAt: Timestamp.now(),
+
+      environmentVariables: {
+        CHATBOT_ID: chatbotId,
+        CHATBOT_NAME: chatbotConfig.name,
+        NEXT_PUBLIC_CHATBOT_ID: chatbotId,
+        NEXT_PUBLIC_CHATBOT_NAME: chatbotConfig.name,
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: dedicatedFirebaseProject?.config.projectId || '',
+      }
+    };
+
+    // Prepare deployment info for chatbot updates
+    const deploymentInfo: any = {
+      vercelProjectId: projectName,
+      deploymentUrl: finalDeploymentUrl,
+      deploymentId: deploymentData.id,
+      status: 'live',
+      target: 'production',
+      gitRef: 'main',
+      isStaged: false,
+      firebaseProjectId: dedicatedFirebaseProject?.projectId,
+      firebaseConfig: dedicatedFirebaseProject?.config,
+      wizchatDomain: wizchatDomain,
+      wizchatDomainConfigured: wizchatDomainResult?.success || false,
+    };
+
+    // Add custom domain information if configured
+    if (domainResult?.success && customDomain) {
+      deploymentInfo.customDomain = customDomain;
+      deploymentInfo.domainVerified = domainResult.data?.verified || false;
+      deploymentInfo.domainStatus = domainResult.data?.verified ? 'active' : 'pending_verification';
+    }
+
     try {
-      // Get userId - try from request body first, then from chatbot data
-      const userIdForUpdate = userId || chatbotData?.userId;
-      
-      if (userIdForUpdate) {
+      // CRITICAL DATABASE OPERATIONS: Must succeed
+      const criticalDbOperations = await Promise.all([
+        // Create deployment record
+        adminDb.collection('deployments').add(deploymentRecord),
+        // Update chatbot deployment info
+        DatabaseService.updateChatbotDeployment(chatbotId, deploymentInfo),
+      ]);
+
+      const deploymentRef = criticalDbOperations[0];
+      console.log('✅ Critical database operations completed successfully');
+      console.log(`✅ Deployment record created with ID: ${deploymentRef.id}`);
+
+      // NON-CRITICAL DATABASE OPERATIONS: Can fail without breaking deployment
+      const nonCriticalDbResults = await Promise.allSettled([
         // Update user deployment count
-        console.log('📊 Updating user deployment count for user:', userIdForUpdate);
-        await DatabaseService.updateUserDeploymentCount(userIdForUpdate);
-      } else {
-        console.warn('⚠️ No userId available for updating deployment count');
-      }
-      
-      // Update chatbot with deployment info
-      console.log('📝 Updating chatbot deployment info...');
-        
-      const deploymentInfo: any = {
-        vercelProjectId: projectName,
-        deploymentUrl: finalDeploymentUrl,
-        deploymentId: deploymentData.id,
-        status: 'live',
-        target: 'production',
-        gitRef: 'main',
-        isStaged: false,
-        // Dedicated Firebase project information
-        firebaseProjectId: dedicatedFirebaseProject?.projectId,
-        firebaseConfig: dedicatedFirebaseProject?.config,
-      };
-      
-      // Add custom domain information if configured
-      if (domainResult?.success && customDomain) {
-        deploymentInfo.customDomain = customDomain;
-        deploymentInfo.domainVerified = domainResult.data?.verified || false;
-        deploymentInfo.domainStatus = domainResult.data?.verified ? 'active' : 'pending_verification';
-      }
-      
-      await DatabaseService.updateChatbotDeployment(chatbotId, deploymentInfo);
-      
-      // Update Firebase project details to indicate hosting is now active
-      if (dedicatedFirebaseProject?.projectId) {
-        try {
-          await adminDb.collection('chatbots').doc(chatbotId).update({
+        userIdForUpdate ?
+          DatabaseService.updateUserDeploymentCount(userIdForUpdate) :
+          Promise.resolve(null),
+
+        // Update chatbot document with deployment details
+        adminDb.collection('chatbots').doc(chatbotId).update({
+          status: 'active',
+          firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
+          deployment: {
+            deploymentId: deploymentRef.id,
+            deploymentUrl: finalDeploymentUrl,
+            status: 'deploying',
+            deployedAt: Timestamp.now(),
+            vercelProjectId: projectName,
+            vercelDeploymentId: deploymentData.id,
+            firebaseProjectId: dedicatedFirebaseProject?.projectId || chatbotData?.firebaseProjectId,
+          },
+          updatedAt: Timestamp.now()
+        }),
+
+        // Update Firebase project deployment status
+        dedicatedFirebaseProject?.projectId ?
+          adminDb.collection('chatbots').doc(chatbotId).update({
             firebaseProjectId: dedicatedFirebaseProject.projectId,
             'firebaseProject.services.hosting': true,
             'firebaseProject.urls.hosting': finalDeploymentUrl,
             'firebaseProject.deployment': {
-              status: 'deployed',
+              status: 'deploying',
               url: finalDeploymentUrl,
               vercelProjectId: projectName,
               deployedAt: Timestamp.now()
             },
             updatedAt: Timestamp.now()
-          });
-          console.log('✅ Updated Firebase project deployment status');
-        } catch (updateError) {
-          console.error('❌ Failed to update Firebase project deployment status:', updateError);
-          // Don't fail the entire deployment for this
+          }) : Promise.resolve(null)
+      ]);
+
+      // Log results of non-critical operations
+      let successCount = 0;
+      let failureCount = 0;
+
+      nonCriticalDbResults.forEach((result, index) => {
+        const operationNames = ['User deployment count update', 'Chatbot document update', 'Firebase project status update'];
+
+        if (result.status === 'fulfilled') {
+          console.log(`✅ ${operationNames[index]} completed successfully`);
+          successCount++;
+        } else {
+          console.warn(`⚠️ ${operationNames[index]} failed:`, result.reason);
+          failureCount++;
         }
-      }
-      
-      console.log('✅ Database updates completed successfully');
-    } catch (dbError) {
-      console.error('❌ Failed to update database after deployment:', dbError);
-      // Don't fail the entire deployment for database update issues
+      });
+
+      console.log(`🎉 PARALLEL DATABASE OPTIMIZATION COMPLETE: ${successCount + 2} successful, ${failureCount} non-critical failures`);
+      console.log('ℹ️ Firebase Authentication configured via API - no redirect URIs to update');
+
+    } catch (criticalDbError) {
+      console.error('❌ Critical database operations failed:', criticalDbError);
+      console.error('⚠️ This may cause issues with deployment tracking');
+      // Continue with deployment - deployment itself succeeded even if DB updates failed
     }
     
     // STEP 7: Add authorized domains to Firebase project
@@ -1302,14 +1320,35 @@ export async function POST(request: NextRequest) {
         
       console.log('🔧 Adding domains to Firebase authorized domains...');
       console.log(`🎯 Using final deployment URL: ${deploymentUrl}`);
-      
+
       // Collect all domains that need to be authorized
       const domainsToAuthorize = [];
-      
-      // Always add the Vercel deployment domain
+
+      // CRITICAL: Add base domains that should ALWAYS be present for OAuth to work
+      // These were included in the old reusable project setup and are essential
+      const baseDomains = [
+        `https://${dedicatedFirebaseProject.projectId}.firebaseapp.com`,
+        `https://${dedicatedFirebaseProject.projectId}.web.app`,
+        'https://localhost',
+        'https://chatfactory.ai',
+        'https://app.chatfactory.ai',
+        'https://www.chatfactory.ai',
+        'https://deploy.chatfactory.ai'
+      ];
+
+      domainsToAuthorize.push(...baseDomains);
+      console.log(`📝 Will authorize base domains for OAuth: ${baseDomains.length} domains`);
+
+      // Always add the wizchat.app subdomain (automatic branding)
+      if (wizchatDomainResult?.success) {
+        domainsToAuthorize.push(`https://${wizchatDomain}`);
+        console.log(`📝 Will authorize wizchat.app subdomain: https://${wizchatDomain}`);
+      }
+
+      // Always add the primary deployment domain
       domainsToAuthorize.push(deploymentUrl);
-      console.log(`📝 Will authorize Vercel domain: ${deploymentUrl}`);
-      
+      console.log(`📝 Will authorize primary deployment domain: ${deploymentUrl}`);
+
       // Add custom domain if configured and domain setup was successful
       if (customDomain && domainResult?.success) {
         const customDomainUrl = `https://${customDomain}`;
@@ -1452,12 +1491,117 @@ export async function POST(request: NextRequest) {
       console.error('❌ Error sending invitation emails after deployment:', emailError);
       // Don't fail the entire deployment because of email issues
     }
-    
+
+    // STEP 9: Start background polling to update deployment status when ready
+    // This runs asynchronously without blocking the response
+    (async () => {
+      try {
+        console.log('🔄 Starting background deployment status polling...');
+        console.log('🆔 Deployment ID:', deploymentData.id);
+        console.log('📍 Deployment URL:', finalDeploymentUrl);
+
+        const maxAttempts = 42; // 42 * 5s = 210s (3.5 minutes)
+        const pollInterval = 5000; // 5 seconds
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+          try {
+            // Check deployment status via Vercel API
+            const checkResponse = await fetch(
+              `https://api.vercel.com/v13/deployments/${deploymentData.id}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
+
+            if (checkResponse.ok) {
+              const deploymentStatus = await checkResponse.json();
+
+              // Check if deployment is ready (state: READY or READY_CONFIRMED)
+              if (deploymentStatus.readyState === 'READY' || deploymentStatus.state === 'READY') {
+                console.log(`✅ [Attempt ${attempt}/${maxAttempts}] Deployment is ready!`);
+
+                // Update Firestore
+                await adminDb.collection('chatbots').doc(chatbotId).update({
+                  'deployment.status': 'deployed',
+                  updatedAt: Timestamp.now()
+                });
+
+                console.log('✅ Updated Firestore: deployment.status = deployed');
+                return; // Exit polling
+              } else {
+                console.log(`⏳ [Attempt ${attempt}/${maxAttempts}] Deployment state: ${deploymentStatus.readyState || deploymentStatus.state}`);
+              }
+            }
+          } catch (pollError) {
+            console.warn(`⚠️ [Attempt ${attempt}/${maxAttempts}] Polling error:`, pollError);
+          }
+        }
+
+        // If we reach here, deployment took too long - mark as deployed anyway
+        console.log('⏱️ Polling timeout - marking as deployed after 3.5 minutes');
+        await adminDb.collection('chatbots').doc(chatbotId).update({
+          'deployment.status': 'deployed',
+          updatedAt: Timestamp.now()
+        });
+        console.log('✅ Marked as deployed (timeout fallback)');
+
+      } catch (bgError) {
+        console.error('❌ Background polling error:', bgError);
+      }
+    })();
+
     return createSuccessResponse(deploymentData, projectName, chatbotConfig, false, false, dedicatedFirebaseProject, domainResult, finalDeploymentUrl, vectorstoreIndexName);
   } catch (error: any) {
     console.error('Deployment error:', error);
-    return NextResponse.json({ 
-      error: `Error deploying chatbot: ${error.message}` 
+
+    // FINAL CLEANUP: If deployment fails for any reason, clean up resources
+    if (typeof projectName !== 'undefined' && typeof VERCEL_API_TOKEN !== 'undefined') {
+      console.log('🧹 FINAL CLEANUP: Deployment failed, cleaning up all resources...');
+      try {
+        // Get Firebase project ID if available from any previous assignment
+        let firebaseProjectId = '';
+        try {
+          if (typeof dedicatedFirebaseProject !== 'undefined' && dedicatedFirebaseProject?.projectId) {
+            firebaseProjectId = dedicatedFirebaseProject.projectId;
+          }
+        } catch {
+          // Ignore errors getting Firebase project ID
+        }
+
+        // Perform cleanup operations in parallel
+        const cleanupResults = await Promise.allSettled([
+          deleteVercelProject(VERCEL_API_TOKEN, projectName, projectId),
+          releasePoolProject(firebaseProjectId, chatbotId)
+        ]);
+
+        const [vercelCleanup, poolCleanup] = cleanupResults;
+
+        if (vercelCleanup.status === 'fulfilled' && vercelCleanup.value) {
+          console.log('✅ Final cleanup: Vercel project deleted successfully');
+        } else {
+          console.warn('⚠️ Final cleanup: Failed to delete Vercel project - manual cleanup may be required');
+          console.warn(`⚠️ Manual cleanup: Delete project '${projectName}' from Vercel dashboard`);
+        }
+
+        if (poolCleanup.status === 'fulfilled') {
+          console.log('✅ Final cleanup: Pool project release attempted');
+        } else {
+          console.warn('⚠️ Final cleanup: Pool project release failed');
+        }
+
+      } catch (cleanupError) {
+        console.error('❌ Final cleanup failed:', cleanupError);
+        console.warn(`⚠️ Manual cleanup required: Delete project '${projectName}' from Vercel dashboard`);
+      }
+    }
+
+    return NextResponse.json({
+      error: `Error deploying chatbot: ${error.message}`
     }, { status: 500 });
   }
 }
@@ -1511,82 +1655,278 @@ async function findLogoInStorage(userId: string, chatbotId: string): Promise<str
   }
 }
 
-// Helper function to set environment variables with retry logic
+// Optimized batch environment variable setting with parallel processing
 async function setEnvironmentVariables(
-  token: string, 
-  projectName: string, 
+  token: string,
+  projectName: string,
   envVars: Record<string, string>
 ): Promise<{ success: number; skipped: number; failed: number }> {
-  let successCount = 0;
-  let skipCount = 0;
-  let failedCount = 0;
+  const BATCH_SIZE = 12; // Reduced batch size for better API stability
+  const MAX_CONCURRENT_BATCHES = 2; // Reduced concurrent batches to avoid envs_ongoing_update errors
 
-  for (const [key, value] of Object.entries(envVars)) {
-    let retries = 2;
-    let success = false;
+  console.log(`📦 Setting ${Object.keys(envVars).length} environment variables in parallel batches...`);
 
-    while (retries > 0 && !success) {
-      try {
-        const envResponse = await fetch(`https://api.vercel.com/v9/projects/${projectName}/env`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            key: key,
-            value: value,
-            type: key.startsWith('NEXT_PUBLIC_') ? 'plain' : 'encrypted',
-            target: ['production', 'preview', 'development']
-          })
-        });
-        
-        if (!envResponse.ok) {
-          const envError = await envResponse.json();
-          
-          if (envError.error?.code === 'ENV_ALREADY_EXISTS') {
-            console.log(`⚠️  Environment variable already exists: ${key}`);
-            
-            // Try to update the existing environment variable
-            const updateResponse = await updateEnvironmentVariable(token, projectName, key, value);
-            if (updateResponse) {
-              console.log(`✅ Updated existing environment variable: ${key}`);
-              successCount++;
-            } else {
-              console.log(`ℹ️  Kept existing value for: ${key}`);
-              skipCount++;
-            }
-            success = true;
-          } else {
-            console.error(`❌ Failed to set env var ${key} (attempt ${3 - retries}):`, envError);
-            retries--;
-            if (retries > 0) {
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-            }
-          }
-        } else {
-          console.log(`✅ Set environment variable: ${key}`);
-          successCount++;
-          success = true;
-        }
-      } catch (error) {
-        console.error(`❌ Error setting env var ${key} (attempt ${3 - retries}):`, error);
-        retries--;
-        if (retries > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-        }
-      }
-    }
+  const entries = Object.entries(envVars);
+  const batches = [];
 
-    if (!success) {
-      failedCount++;
-    }
-
-    // Small delay between requests to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 100));
+  // Split variables into batches
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+    const batch = entries.slice(i, i + BATCH_SIZE);
+    batches.push(batch);
   }
 
-  return { success: successCount, skipped: skipCount, failed: failedCount };
+  console.log(`📦 Created ${batches.length} batches for parallel processing`);
+
+  let totalSuccess = 0;
+  let totalSkipped = 0;
+  let totalFailed = 0;
+
+  // Process batches in parallel groups
+  for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
+    const batchGroup = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
+
+    console.log(`🚀 Processing batch group ${Math.floor(i / MAX_CONCURRENT_BATCHES) + 1}/${Math.ceil(batches.length / MAX_CONCURRENT_BATCHES)} (${batchGroup.length} batches)`);
+
+    // Process current batch group in parallel
+    const batchResults = await Promise.allSettled(
+      batchGroup.map(batch => processBatch(token, projectName, batch))
+    );
+
+    // Aggregate results
+    batchResults.forEach((result, batchIndex) => {
+      if (result.status === 'fulfilled') {
+        const { success, skipped, failed } = result.value;
+        totalSuccess += success;
+        totalSkipped += skipped;
+        totalFailed += failed;
+        console.log(`✅ Batch ${i + batchIndex + 1}: ${success} success, ${skipped} skipped, ${failed} failed`);
+      } else {
+        console.error(`❌ Batch ${i + batchIndex + 1} failed entirely:`, result.reason);
+        totalFailed += batchGroup[batchIndex].length;
+      }
+    });
+
+    // Increased delay between batch groups to prevent envs_ongoing_update errors
+    if (i + MAX_CONCURRENT_BATCHES < batches.length) {
+      console.log('⏳ Waiting between batch groups to prevent API conflicts...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Increased from 200ms to 1000ms
+    }
+  }
+
+  console.log(`📊 Total environment variable results: ${totalSuccess} success, ${totalSkipped} skipped, ${totalFailed} failed`);
+
+  return { success: totalSuccess, skipped: totalSkipped, failed: totalFailed };
+}
+
+// Process a single batch of environment variables in parallel
+async function processBatch(
+  token: string,
+  projectName: string,
+  batch: [string, string][]
+): Promise<{ success: number; skipped: number; failed: number }> {
+
+  // Process all variables in the batch concurrently
+  const results = await Promise.allSettled(
+    batch.map(([key, value]) =>
+      setEnvironmentVariableWithRetry(token, projectName, key, value)
+    )
+  );
+
+  let success = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      const { success: isSuccess, skipped: isSkipped } = result.value;
+      if (isSuccess) success++;
+      else if (isSkipped) skipped++;
+      else failed++;
+    } else {
+      console.error(`❌ Variable ${batch[index][0]} failed:`, result.reason);
+      failed++;
+    }
+  });
+
+  return { success, skipped, failed };
+}
+
+// Set individual environment variable with retry logic
+async function setEnvironmentVariableWithRetry(
+  token: string,
+  projectName: string,
+  key: string,
+  value: string
+): Promise<{ success: boolean; skipped: boolean }> {
+  const MAX_RETRIES = 4; // Increased retries for envs_ongoing_update errors
+  let retries = MAX_RETRIES;
+
+  while (retries > 0) {
+    try {
+      const envResponse = await fetch(`https://api.vercel.com/v9/projects/${projectName}/env`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          key: key,
+          value: value,
+          type: key.startsWith('NEXT_PUBLIC_') ? 'plain' : 'encrypted',
+          target: ['production', 'preview', 'development']
+        })
+      });
+
+      if (!envResponse.ok) {
+        const envError = await envResponse.json();
+
+        if (envError.error?.code === 'ENV_ALREADY_EXISTS') {
+          // Try to update the existing environment variable
+          const updateResponse = await updateEnvironmentVariable(token, projectName, key, value);
+          if (updateResponse) {
+            return { success: true, skipped: false };
+          } else {
+            return { success: false, skipped: true };
+          }
+        } else if (envError.error?.code === 'envs_ongoing_update') {
+          // Handle ongoing update conflicts with exponential backoff
+          const backoffTime = Math.min(1000 * Math.pow(2, MAX_RETRIES - retries), 8000); // Up to 8 seconds
+          console.warn(`⏳ Ongoing env update conflict for ${key}, waiting ${backoffTime}ms... (attempt ${MAX_RETRIES - retries + 1})`);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+          retries--;
+          continue;
+        } else if (envError.error?.code === 'RATE_LIMITED' || envResponse.status === 429) {
+          // Handle rate limiting with exponential backoff
+          const backoffTime = (MAX_RETRIES - retries + 1) * 1000; // 1s, 2s, 3s, 4s
+          console.warn(`⏳ Rate limited for ${key}, waiting ${backoffTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+          retries--;
+          continue;
+        } else {
+          console.error(`❌ Failed to set env var ${key} (attempt ${MAX_RETRIES - retries + 1}):`, envError);
+          retries--;
+          if (retries > 0) {
+            // Exponential backoff for retries
+            const backoffTime = Math.min(1000 * Math.pow(2, MAX_RETRIES - retries), 6000);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          }
+        }
+      } else {
+        return { success: true, skipped: false };
+      }
+    } catch (error) {
+      console.error(`❌ Error setting env var ${key} (attempt ${MAX_RETRIES - retries + 1}):`, error);
+      retries--;
+      if (retries > 0) {
+        const backoffTime = Math.min(1000 * Math.pow(2, MAX_RETRIES - retries), 6000);
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+      }
+    }
+  }
+
+  return { success: false, skipped: false };
+}
+
+// Helper function to release pool project back to available status
+async function releasePoolProject(projectId: string, chatbotId: string): Promise<void> {
+  try {
+    if (projectId && projectId.includes('pool')) {
+      console.log(`🔄 Releasing pool project ${projectId} back to available status...`);
+
+      // Update the project mapping to mark it as available
+      await adminDb.collection('firebaseProjectMappings').doc(projectId).update({
+        inUse: false,
+        chatbotId: null,
+        assignedAt: null,
+        updatedAt: new Date()
+      });
+
+      console.log(`✅ Pool project ${projectId} released back to available pool`);
+    }
+  } catch (error) {
+    console.error(`❌ Failed to release pool project ${projectId}:`, error);
+  }
+}
+
+// Helper function to delete Vercel project on deployment failure
+async function deleteVercelProject(token: string, projectName: string, projectId: string | null = null): Promise<boolean> {
+  try {
+    console.log(`🗑️ Attempting to delete Vercel project: ${projectName}`);
+
+    // Use projectId if available, otherwise use projectName
+    const identifier = projectId || projectName;
+
+    const deleteResponse = await fetch(`https://api.vercel.com/v9/projects/${identifier}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (deleteResponse.ok) {
+      console.log(`✅ Successfully deleted Vercel project: ${projectName}`);
+      return true;
+    } else {
+      const errorData = await deleteResponse.json();
+      console.warn(`⚠️ Failed to delete Vercel project ${projectName}:`, errorData);
+
+      // If project doesn't exist, consider it successfully "deleted"
+      if (errorData.error?.code === 'not_found') {
+        console.log(`ℹ️ Project ${projectName} not found - may have been already deleted`);
+        return true;
+      }
+
+      return false;
+    }
+  } catch (error) {
+    console.error(`❌ Error deleting Vercel project ${projectName}:`, error);
+    return false;
+  }
+}
+
+// Helper function to format Firebase private key for Vercel environment variables
+function formatPrivateKeyForVercel(privateKey: string | undefined): string {
+  if (!privateKey) {
+    return '';
+  }
+
+  // Clean the private key first
+  let cleanKey = privateKey.trim();
+
+  // If the private key already has \n sequences, return as-is
+  if (cleanKey.includes('\\n')) {
+    return cleanKey;
+  }
+
+  // If the private key has actual newlines, convert them to \n sequences
+  // First normalize Windows-style \r\n to Unix-style \n
+  if (cleanKey.includes('\r\n')) {
+    cleanKey = cleanKey.replace(/\r\n/g, '\n');
+  }
+
+  if (cleanKey.includes('\n')) {
+    return cleanKey.replace(/\n/g, '\\n');
+  }
+
+  // If it's a single line key, try to detect if it should have line breaks
+  // Firebase private keys should start with -----BEGIN PRIVATE KEY-----
+  if (cleanKey.includes('-----BEGIN PRIVATE KEY-----') && !cleanKey.includes('\\n')) {
+    // This is likely a malformed key - try to add proper line breaks
+    cleanKey = cleanKey.replace(/-----BEGIN PRIVATE KEY-----/, '-----BEGIN PRIVATE KEY-----\\n');
+    cleanKey = cleanKey.replace(/-----END PRIVATE KEY-----/, '\\n-----END PRIVATE KEY-----');
+
+    // Add line breaks every 64 characters in the middle content
+    const parts = cleanKey.split('\\n');
+    if (parts.length >= 2) {
+      const middleContent = parts[1];
+      if (middleContent && middleContent.length > 64) {
+        const formattedMiddle = middleContent.match(/.{1,64}/g)?.join('\\n') || middleContent;
+        cleanKey = parts[0] + '\\n' + formattedMiddle + '\\n' + parts[2];
+      }
+    }
+  }
+
+  return cleanKey;
 }
 
 // Helper function to update existing environment variable

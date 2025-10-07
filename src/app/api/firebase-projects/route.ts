@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase/admin/index';
+import { adminAuth, adminDb } from '@/lib/firebase/admin/index';
 import { FirebaseProjectService } from '@/services/firebaseProjectService';
+
+export async function GET(request: NextRequest) {
+  try {
+    console.log('🔍 Fetching all Firebase projects...');
+
+    // Get all Firebase projects from Firestore
+    const projectsSnapshot = await adminDb.collection('firebaseProjects').get();
+
+    const projects = projectsSnapshot.docs.map(doc => ({
+      projectId: doc.id,
+      ...doc.data()
+    }));
+
+    console.log(`✅ Found ${projects.length} Firebase projects`);
+
+    return NextResponse.json({
+      success: true,
+      projects
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error fetching Firebase projects:', error);
+    return NextResponse.json({
+      error: `Failed to fetch projects: ${error.message}`
+    }, { status: 500 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
