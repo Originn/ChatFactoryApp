@@ -55,26 +55,52 @@ function LandingPageContent() {
       {/* How It Works */}
       <section id="features" className="py-16 bg-muted/30 px-6">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-semibold mb-12 text-center text-foreground">How It Works</h2>
+          <h2 className="text-3xl font-semibold mb-12 text-center text-foreground">
+            How It Works
+          </h2>
+
+          {/* 3 Steps Grid */}
           <div className="grid md:grid-cols-3 gap-12">
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 text-2xl font-bold mb-4">1</div>
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 text-2xl font-bold mb-4">
+                1
+              </div>
               <h3 className="text-xl font-medium mb-2 text-foreground">Upload Your Docs</h3>
-              <p className="text-muted-foreground">Upload your existing documentation in PDF, Markdown, Word, or HTML formats.</p>
+              <p className="text-muted-foreground">
+                Upload your existing documentation in PDF, Markdown, Word, or HTML formats.
+              </p>
             </div>
+
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 text-2xl font-bold mb-4">2</div>
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 text-2xl font-bold mb-4">
+                2
+              </div>
               <h3 className="text-xl font-medium mb-2 text-foreground">AI Processing</h3>
-              <p className="text-muted-foreground">Our AI analyzes your content, creates embeddings, and builds a knowledge base.</p>
+              <p className="text-muted-foreground">
+                Our AI analyzes your content, creates embeddings, and builds a knowledge base.
+              </p>
             </div>
+
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400 text-2xl font-bold mb-4">3</div>
+              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400 text-2xl font-bold mb-4">
+                3
+              </div>
               <h3 className="text-xl font-medium mb-2 text-foreground">Deploy Chatbot</h3>
-              <p className="text-muted-foreground">Integrate your new AI assistant into your website, app, or internal tools.</p>
+              <p className="text-muted-foreground">
+                Integrate your new AI assistant into your website, app, or internal tools.
+              </p>
+            </div>
+          </div>
+
+          {/* Video Tutorial */}
+          <div className="mt-16 flex justify-center">
+            <div className="w-full max-w-3xl aspect-video">
+              <iframe className="w-full h-full rounded-xl shadow-lg" src="https://www.youtube.com/embed/gmUHEvrpYoU?si=t0mFavGvb4TEFzsn" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen></iframe>
             </div>
           </div>
         </div>
       </section>
+
 
       {/* Key Benefits */}
       <section className="py-16 px-6">
